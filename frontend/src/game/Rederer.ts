@@ -42,5 +42,6 @@ export default class Renderer{
         this.ctx.font = "20px Arial";
         this.ctx.fillStyle = "white";;
         this.ctx.fillText(`Mouse X: ${this.input.mouseX}, Mouse Y: ${this.input.mouseY}`, 10, 30);
+        
     }
 }

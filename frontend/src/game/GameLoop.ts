@@ -25,8 +25,7 @@ export default class GameLoop{
         requestAnimationFrame(this.loop);
     }
     private update(){
-        console.clear();
-        console.log(`Mouse X: ${this.input.mouseX}, Mouse Y: ${this.input.mouseY}`);
+        this.bat.update(this.input.mouseX, this.input.mouseY);
     }
 
     private render(){
