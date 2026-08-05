@@ -15,3 +15,6 @@ export const CANVAS_WIDTH = 1200;
 export const CANVAS_HEIGHT = 700;
 
 export const GROUND_HEIGHT = 120;
+
+export const BAT_CENTER_OF_MASS_RATIO = 0.6;
+

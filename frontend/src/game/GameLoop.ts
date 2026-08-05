@@ -25,7 +25,12 @@ export default class GameLoop{
         requestAnimationFrame(this.loop);
     }
     private update(){
-        this.bat.update(this.input.mouseX, this.input.mouseY);
+        const currentCommand = this.input.getHistory().peek();
+        if(currentCommand === null){
+            return;
+        }
+        console.log(`Mouse Position: (${currentCommand.x}, ${currentCommand.y})`);
+        this.bat.update(currentCommand.x,currentCommand.y);
     }
 
     private render(){

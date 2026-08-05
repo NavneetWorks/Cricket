@@ -1,10 +1,18 @@
+import { BAT_CENTER_OF_MASS_RATIO } from "../game/constants";
+
 export default class Bat{
     
-
     private armLength = 120;
     private batLength = 150;
     private handOffsetAngle = 20;
     private handAngle = 0;
+    private shoulderAngle = 0;
+    private shoulderAngularVelocity = 0;
+    private shoulderAngularAcceleration = 0;
+    private wristAngle = 0;
+    private wristAngularVelocity = 0;
+    private wristAngularAcceleration = 0;
+
 
     private shoulder = {
         x:500,
@@ -14,6 +22,11 @@ export default class Bat{
     private hand = {
         x:500,
         y:350 + this.armLength,
+    };
+
+    private centerOfMass = {
+        x: 0,
+        y: 0,
     };
 
     private k = {
@@ -26,35 +39,36 @@ export default class Bat{
         y: 0,
     };
 
-    update(mouseX:number, mouseY:number){
+    update(mouseX: number, mouseY: number) {
 
         this.mouse.x = mouseX;
         this.mouse.y = mouseY;
 
-
         const dx = mouseX - this.shoulder.x;
         const dy = mouseY - this.shoulder.y;
 
-        const mouseAngle = Math.atan2(dy, dx);
-        const offset = this.handOffsetAngle * Math.PI / 180;
+        const targetAngle = Math.atan2(dy, dx);
+
+        this.shoulderAngle = targetAngle;
+        this.wristAngle = this.shoulderAngle - this.handOffsetAngle * Math.PI / 180;
+
+        const handAngle = this.wristAngle;
 
         const batOffset = 80 * Math.PI / 180;
-        const handAngle = mouseAngle - offset;
 
-        this.handAngle = handAngle+batOffset;
+        const comDistance = this.batLength * BAT_CENTER_OF_MASS_RATIO;
+        this.centerOfMass.x = this.hand.x + Math.cos(this.handAngle) * comDistance;
+        this.centerOfMass.y = this.hand.y + Math.sin(this.handAngle) * comDistance;
 
+        this.handAngle = this.wristAngle + batOffset;
 
         this.hand.x =
-        this.shoulder.x +
-        this.armLength *
-        Math.cos(handAngle);
+            this.shoulder.x +
+            this.armLength * Math.cos(handAngle);
 
         this.hand.y =
-        this.shoulder.y +
-        this.armLength *
-        Math.sin(handAngle);
-
-
+            this.shoulder.y +
+            this.armLength * Math.sin(handAngle);
     }
     draw(ctx: CanvasRenderingContext2D) {
 
@@ -117,6 +131,12 @@ export default class Bat{
         ctx.beginPath();
         ctx.arc(this.k.x,this.k.y,5,0,Math.PI * 2);
         ctx.fillStyle = "lime";
+        ctx.fill();
+
+        // Center of Mass Debug Circle
+        ctx.beginPath();
+        ctx.arc(this.centerOfMass.x,this.centerOfMass.y,5,0,Math.PI * 2);
+        ctx.fillStyle = "magenta";
         ctx.fill();
     }
 
