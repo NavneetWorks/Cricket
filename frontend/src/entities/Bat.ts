@@ -4,7 +4,7 @@ export default class Bat{
     private armLength = 120;
     private batLength = 150;
     private handOffsetAngle = 20;
-    private handAngle = 20;
+    private handAngle = 0;
 
     private shoulder = {
         x:500,
@@ -37,27 +37,12 @@ export default class Bat{
 
         const mouseAngle = Math.atan2(dy, dx);
         const offset = this.handOffsetAngle * Math.PI / 180;
+
+        const batOffset = 80 * Math.PI / 180;
         const handAngle = mouseAngle - offset;
 
-        this.handAngle = handAngle;
+        this.handAngle = handAngle+batOffset;
 
-
-        const distance = Math.sqrt(dx*dx + dy*dy);
-
-        if (distance === 0) {
-            return;
-        }
-
-        const unitX = dx / distance;
-        const unitY = dy / distance;
-
-        this.k.x =
-        this.shoulder.x +
-        unitX * this.armLength;
-
-        this.k.y =
-        this.shoulder.y +
-        unitY * this.armLength;
 
         this.hand.x =
         this.shoulder.x +
