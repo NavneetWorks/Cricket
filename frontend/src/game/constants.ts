@@ -18,3 +18,5 @@ export const GROUND_HEIGHT = 120;
 
 export const BAT_CENTER_OF_MASS_RATIO = 0.6;
 
+export const GRAVITY = 9.81;
+

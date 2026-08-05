@@ -1,4 +1,4 @@
-import { BAT_CENTER_OF_MASS_RATIO } from "../game/constants";
+import { BAT_CENTER_OF_MASS_RATIO ,GRAVITY} from "../game/constants";
 
 export default class Bat{
     
@@ -12,6 +12,7 @@ export default class Bat{
     private wristAngle = 0;
     private wristAngularVelocity = 0;
     private wristAngularAcceleration = 0;
+    private gravityTorque = 0;
 
 
     private shoulder = {
@@ -39,36 +40,83 @@ export default class Bat{
         y: 0,
     };
 
-    update(mouseX: number, mouseY: number) {
+   update(mouseX: number, mouseY: number): void {
+
+        this.updateMouse(mouseX, mouseY);
+
+        this.updateAngles();
+
+        this.updateHandPosition();
+
+        this.updateCenterOfMass();
+
+        this.calculateGravityTorque();
+    }
+    private updateMouse(mouseX: number, mouseY: number): void {
 
         this.mouse.x = mouseX;
         this.mouse.y = mouseY;
+    }
+    private updateAngles(): void {
 
-        const dx = mouseX - this.shoulder.x;
-        const dy = mouseY - this.shoulder.y;
+        const dx = this.mouse.x - this.shoulder.x;
+        const dy = this.mouse.y - this.shoulder.y;
 
         const targetAngle = Math.atan2(dy, dx);
 
+        // Temporary
         this.shoulderAngle = targetAngle;
-        this.wristAngle = this.shoulderAngle - this.handOffsetAngle * Math.PI / 180;
 
-        const handAngle = this.wristAngle;
+        this.wristAngle =
+            this.shoulderAngle -
+            this.handOffsetAngle * Math.PI / 180;
 
         const batOffset = 80 * Math.PI / 180;
 
-        const comDistance = this.batLength * BAT_CENTER_OF_MASS_RATIO;
-        this.centerOfMass.x = this.hand.x + Math.cos(this.handAngle) * comDistance;
-        this.centerOfMass.y = this.hand.y + Math.sin(this.handAngle) * comDistance;
-
-        this.handAngle = this.wristAngle + batOffset;
+        this.handAngle =
+            this.wristAngle +
+            batOffset;
+    }
+    private updateHandPosition(): void {
 
         this.hand.x =
             this.shoulder.x +
-            this.armLength * Math.cos(handAngle);
+            this.armLength *
+            Math.cos(this.wristAngle);
 
         this.hand.y =
             this.shoulder.y +
-            this.armLength * Math.sin(handAngle);
+            this.armLength *
+            Math.sin(this.wristAngle);
+    }
+    private updateCenterOfMass(): void {
+
+        const comDistance =
+            this.batLength *
+            BAT_CENTER_OF_MASS_RATIO;
+
+        this.centerOfMass.x =
+            this.hand.x +
+            Math.cos(this.handAngle) * comDistance;
+
+        this.centerOfMass.y =
+            this.hand.y +
+            Math.sin(this.handAngle) * comDistance;
+    }
+    private calculateGravityTorque(): void {
+
+        const comDistance =
+            this.batLength *
+            BAT_CENTER_OF_MASS_RATIO;
+
+        const gravityAngle =
+            this.handAngle -
+            Math.PI / 2;
+
+        this.gravityTorque =
+            comDistance *
+            GRAVITY *
+            Math.sin(gravityAngle);
     }
     draw(ctx: CanvasRenderingContext2D) {
 
