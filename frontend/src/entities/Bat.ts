@@ -111,6 +111,7 @@ export default class Bat {
             y: (this.FRONT_SHOULDER.y + this.BACK_SHOULDER.y) / 2,
         };
         const FRONT_MAX = this.FRONT_UPPER_ARM + this.FRONT_LOWER_ARM;
+        const BACK_MAX = this.BACK_UPPER_ARM + this.BACK_LOWER_ARM;
         const comOffsetFromTop = this.TOTAL_LENGTH * BAT_CENTER_OF_MASS_RATIO;
         
         // 1. Mouse Target Clamping (Safe Zone)
@@ -121,7 +122,10 @@ export default class Bat {
         const dyMouse = rawMouseY - shoulderMid.y;
         const mouseDist = Math.hypot(dxMouse, dyMouse);
         
-        const maxSafeRadius = FRONT_MAX + comOffsetFromTop;
+        const maxSafeRadius = Math.max(
+            FRONT_MAX + comOffsetFromTop - (this.HANDLE_LENGTH * 0.5), 
+            BACK_MAX + comOffsetFromTop
+        );
         
         if (mouseDist > maxSafeRadius) {
             this.comTarget = {
@@ -145,7 +149,6 @@ export default class Bat {
         this.handleActual.y += (handleIdealTarget.y - this.handleActual.y) * this.HANDLE_STIFFNESS_Y * dtClamp;
 
         // 3. Iterative Constraint Solver (Arm Limits & Rigid Body Length)
-        const BACK_MAX = this.BACK_UPPER_ARM + this.BACK_LOWER_ARM;
         
         const fAngleRad = this.FRONT_ARM_MIN_ELBOW_ANGLE * (Math.PI / 180);
         const fMin = Math.sqrt(this.FRONT_UPPER_ARM**2 + this.FRONT_LOWER_ARM**2 - 2 * this.FRONT_UPPER_ARM * this.FRONT_LOWER_ARM * Math.cos(fAngleRad));
@@ -153,17 +156,36 @@ export default class Bat {
         const bAngleRad = this.BACK_ARM_MIN_ELBOW_ANGLE * (Math.PI / 180);
         const bMin = Math.sqrt(this.BACK_UPPER_ARM**2 + this.BACK_LOWER_ARM**2 - 2 * this.BACK_UPPER_ARM * this.BACK_LOWER_ARM * Math.cos(bAngleRad));
 
+        const frontHandPosition = 0.5;
+        const frontWristDistFromTop = this.HANDLE_LENGTH * frontHandPosition;
+
         for (let i = 0; i < 5; i++) {
             // A. Arm Constraints on Handle
-            // (Front Arm)
-            const fDist = Math.hypot(this.handleActual.x - this.FRONT_SHOULDER.x, this.handleActual.y - this.FRONT_SHOULDER.y);
+            
+            // We need the direction from handle to COM to find the wrist positions on the handle
+            let hdx = this.comActual.x - this.handleActual.x;
+            let hdy = this.comActual.y - this.handleActual.y;
+            let hDist = Math.hypot(hdx, hdy);
+            if (hDist < 0.01) { hdx = 0; hdy = 1; hDist = 1; }
+            const dirX = hdx / hDist;
+            const dirY = hdy / hDist;
+
+            // (Front Arm - attached to middle of handle)
+            const fwX = this.handleActual.x + dirX * frontWristDistFromTop;
+            const fwY = this.handleActual.y + dirY * frontWristDistFromTop;
+            const fDist = Math.hypot(fwX - this.FRONT_SHOULDER.x, fwY - this.FRONT_SHOULDER.y);
+            
             if (fDist < fMin && fDist > 0.01) {
-                this.handleActual.x = this.FRONT_SHOULDER.x + (this.handleActual.x - this.FRONT_SHOULDER.x) / fDist * fMin;
-                this.handleActual.y = this.FRONT_SHOULDER.y + (this.handleActual.y - this.FRONT_SHOULDER.y) / fDist * fMin;
+                const targetX = this.FRONT_SHOULDER.x + (fwX - this.FRONT_SHOULDER.x) / fDist * fMin;
+                const targetY = this.FRONT_SHOULDER.y + (fwY - this.FRONT_SHOULDER.y) / fDist * fMin;
+                this.handleActual.x += (targetX - fwX);
+                this.handleActual.y += (targetY - fwY);
             }
             if (fDist > FRONT_MAX && fDist > 0.01) {
-                this.handleActual.x = this.FRONT_SHOULDER.x + (this.handleActual.x - this.FRONT_SHOULDER.x) / fDist * FRONT_MAX;
-                this.handleActual.y = this.FRONT_SHOULDER.y + (this.handleActual.y - this.FRONT_SHOULDER.y) / fDist * FRONT_MAX;
+                const targetX = this.FRONT_SHOULDER.x + (fwX - this.FRONT_SHOULDER.x) / fDist * FRONT_MAX;
+                const targetY = this.FRONT_SHOULDER.y + (fwY - this.FRONT_SHOULDER.y) / fDist * FRONT_MAX;
+                this.handleActual.x += (targetX - fwX);
+                this.handleActual.y += (targetY - fwY);
             }
             
             // (Back Arm)
@@ -208,8 +230,7 @@ export default class Bat {
         };
 
         const backHandPosition = 0.0;
-        const frontHandPosition = 0.5;
-
+        
         this.backWristTarget = {
             x: this.handleTop.x + dir.x * (this.HANDLE_LENGTH * backHandPosition),
             y: this.handleTop.y + dir.y * (this.HANDLE_LENGTH * backHandPosition),
