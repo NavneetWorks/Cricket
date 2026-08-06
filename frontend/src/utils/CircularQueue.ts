@@ -42,4 +42,15 @@ export default class CircularQueue<T>{
         }
         return this.data[this.front];
     }
+    peekNext(): T | null {
+
+        if (this.size < 2) {
+            return null;
+        }
+
+        const nextIndex =
+            (this.front + 1) % this.capacity;
+
+        return this.data[nextIndex];
+    }
 }
