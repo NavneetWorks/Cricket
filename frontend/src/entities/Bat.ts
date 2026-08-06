@@ -106,13 +106,31 @@ export default class Bat {
     // STEP 1: bat orientation + COM + wrist targets, driven by mouse
     // ---------------------------------------------------------------
     private updateBatPose(dt: number): void {
+        const shoulderMid = {
+            x: (this.FRONT_SHOULDER.x + this.BACK_SHOULDER.x) / 2,
+            y: (this.FRONT_SHOULDER.y + this.BACK_SHOULDER.y) / 2,
+        };
+        const FRONT_MAX = this.FRONT_UPPER_ARM + this.FRONT_LOWER_ARM;
         const comOffsetFromTop = this.TOTAL_LENGTH * BAT_CENTER_OF_MASS_RATIO;
         
-        // 1. COM strictly follows the mouse
-        this.comTarget = {
-            x: this.mouse.x + this.GRIP_OFFSET_FROM_CURSOR,
-            y: this.mouse.y
-        };
+        // 1. Mouse Target Clamping (Safe Zone)
+        const rawMouseX = this.mouse.x + this.GRIP_OFFSET_FROM_CURSOR;
+        const rawMouseY = this.mouse.y;
+        
+        const dxMouse = rawMouseX - shoulderMid.x;
+        const dyMouse = rawMouseY - shoulderMid.y;
+        const mouseDist = Math.hypot(dxMouse, dyMouse);
+        
+        const maxSafeRadius = FRONT_MAX + comOffsetFromTop;
+        
+        if (mouseDist > maxSafeRadius) {
+            this.comTarget = {
+                x: shoulderMid.x + (dxMouse / mouseDist) * maxSafeRadius,
+                y: shoulderMid.y + (dyMouse / mouseDist) * maxSafeRadius
+            };
+        } else {
+            this.comTarget = { x: rawMouseX, y: rawMouseY };
+        }
 
         this.simulateComPhysics(dt);
 
@@ -127,7 +145,6 @@ export default class Bat {
         this.handleActual.y += (handleIdealTarget.y - this.handleActual.y) * this.HANDLE_STIFFNESS_Y * dtClamp;
 
         // 3. Iterative Constraint Solver (Arm Limits & Rigid Body Length)
-        const FRONT_MAX = this.FRONT_UPPER_ARM + this.FRONT_LOWER_ARM;
         const BACK_MAX = this.BACK_UPPER_ARM + this.BACK_LOWER_ARM;
         
         const fAngleRad = this.FRONT_ARM_MIN_ELBOW_ANGLE * (Math.PI / 180);
