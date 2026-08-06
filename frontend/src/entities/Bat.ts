@@ -40,8 +40,8 @@ export default class Bat {
     // increase it if the bat should trail further from the actual cursor.
     private readonly GRIP_OFFSET_FROM_CURSOR = 20;
 
-    // The maximum radius the bat is allowed to travel away from the shoulders
-    private readonly MAX_REACH = 130;
+    // The closest the bat is allowed to travel toward the shoulders (prevents folded elbows)
+    private readonly MIN_REACH = 40;
 
     // Bend-side flags. Both -1 makes the elbows bend naturally in parallel (fixes the diamond shape).
     private readonly BACK_ARM_BEND: 1 | -1 = -1;   // must bend to the right
@@ -150,15 +150,27 @@ export default class Bat {
             const frontOver = frontDist - FRONT_MAX;
             const backOver = backDist - BACK_MAX;
             
-            // If neither hand is slipping, we are perfectly safe!
-            if (frontOver <= 0.1 && backOver <= 0.1) {
+            const frontUnder = this.MIN_REACH - frontDist; // > 0 if it's too close
+            const backUnder = this.MIN_REACH - backDist;   // > 0 if it's too close
+            
+            // If neither hand is over-stretched OR under-stretched, we are perfectly safe!
+            if (frontOver <= 0.1 && backOver <= 0.1 && frontUnder <= 0.1 && backUnder <= 0.1) {
                 break; 
             }
             
-            // Find which hand is slipping the most, and pull the mouse back by that exact amount
+            // Find which hand is violating the limits the most
             const worstOver = Math.max(frontOver, backOver);
-            clampedMouse.x -= Math.cos(targetAngle) * worstOver;
-            clampedMouse.y -= Math.sin(targetAngle) * worstOver;
+            const worstUnder = Math.max(frontUnder, backUnder);
+            
+            if (worstOver > worstUnder) {
+                // Too far away: pull the mouse back
+                clampedMouse.x -= Math.cos(targetAngle) * worstOver;
+                clampedMouse.y -= Math.sin(targetAngle) * worstOver;
+            } else {
+                // Too close: push the mouse away
+                clampedMouse.x += Math.cos(targetAngle) * worstUnder;
+                clampedMouse.y += Math.sin(targetAngle) * worstUnder;
+            }
         }
 
         this.comTarget = finalComTarget;
