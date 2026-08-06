@@ -115,8 +115,8 @@ export default class Bat {
         let finalComTarget = { x: 0, y: 0 };
         
         // --- Dynamic Kinematic Leash (Iterative Solver) ---
-        // We check if the mouse position forces either wrist past its absolute max stretch.
-        // If it does, we pull the mouse backward slightly and check again, until both elbows are safe!
+        // We check if the mouse position forces either wrist past its absolute max stretch,
+        // OR if it forces the front elbow (green line) to point higher than allowed.
         for (let i = 0; i < 10; i++) {
             targetAngle = Math.atan2(clampedMouse.y - shoulderMid.y, clampedMouse.x - shoulderMid.x);
             const targetDir = { x: Math.cos(targetAngle), y: Math.sin(targetAngle) };
@@ -152,22 +152,53 @@ export default class Bat {
             
             const frontUnder = this.MIN_REACH - frontDist; // > 0 if it's too close
             const backUnder = this.MIN_REACH - backDist;   // > 0 if it's too close
+
+            // --- Front Arm Upper-Ceiling Check ---
+            // Calculate the theoretical elbow to check if the green line violates the -175 degree rule
+            const fdx = theoreticalFrontWrist.x - this.FRONT_SHOULDER.x;
+            const fdy = theoreticalFrontWrist.y - this.FRONT_SHOULDER.y;
+            const fDistSafe = Math.max(0.1, Math.min(Math.hypot(fdx, fdy), FRONT_MAX - 0.01));
             
-            // If neither hand is over-stretched OR under-stretched, we are perfectly safe!
-            if (frontOver <= 0.1 && backOver <= 0.1 && frontUnder <= 0.1 && backUnder <= 0.1) {
+            const fBaseAngle = Math.atan2(fdy, fdx);
+            const fCosAngle = (this.FRONT_UPPER_ARM**2 + fDistSafe**2 - this.FRONT_LOWER_ARM**2) / (2 * this.FRONT_UPPER_ARM * fDistSafe);
+            const fShoulderAngle = Math.acos(Math.max(-1, Math.min(1, fCosAngle)));
+            
+            const fCandA = this.pointOnCircle(this.FRONT_SHOULDER, this.FRONT_UPPER_ARM, fBaseAngle + fShoulderAngle);
+            const fCandB = this.pointOnCircle(this.FRONT_SHOULDER, this.FRONT_UPPER_ARM, fBaseAngle - fShoulderAngle);
+            const fElbow = this.sideOfLine(this.FRONT_SHOULDER, theoreticalFrontWrist, fCandA) === this.FRONT_ARM_BEND ? fCandA : fCandB;
+            
+            const fElbowAngle = Math.atan2(fElbow.y - this.FRONT_SHOULDER.y, fElbow.x - this.FRONT_SHOULDER.x);
+            
+            // --- Front Arm Upper-Ceiling Check (Y-Axis) ---
+            // The elbow can NEVER go higher than 5 degrees above horizontal, regardless of direction.
+            // In Canvas, smaller Y is higher.
+            const elbowCeilingAngle = -175 * (Math.PI / 180);
+            const minElbowY = this.FRONT_SHOULDER.y + this.FRONT_UPPER_ARM * Math.sin(elbowCeilingAngle);
+            
+            let elbowPenalty = 0;
+            if (fElbow.y < minElbowY) {
+                // Elbow is too high! 
+                elbowPenalty = minElbowY - fElbow.y; // Difference in pixels
+            }
+            
+            // If nothing is violated, we are safe!
+            if (frontOver <= 0.1 && backOver <= 0.1 && frontUnder <= 0.1 && backUnder <= 0.1 && elbowPenalty <= 0.1) {
                 break; 
             }
             
-            // Find which hand is violating the limits the most
+            // Apply corrections
+            if (elbowPenalty > 0.1) {
+                // If elbow is too high, push the mouse directly DOWN
+                clampedMouse.y += elbowPenalty;
+            }
+            
             const worstOver = Math.max(frontOver, backOver);
             const worstUnder = Math.max(frontUnder, backUnder);
             
-            if (worstOver > worstUnder) {
-                // Too far away: pull the mouse back
+            if (worstOver > 0.1 && worstOver >= worstUnder) {
                 clampedMouse.x -= Math.cos(targetAngle) * worstOver;
                 clampedMouse.y -= Math.sin(targetAngle) * worstOver;
-            } else {
-                // Too close: push the mouse away
+            } else if (worstUnder > 0.1) {
                 clampedMouse.x += Math.cos(targetAngle) * worstUnder;
                 clampedMouse.y += Math.sin(targetAngle) * worstUnder;
             }
