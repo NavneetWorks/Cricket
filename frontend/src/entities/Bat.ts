@@ -12,9 +12,11 @@ export default class Bat {
     private comActual: Vec2 = { x: 700, y: 350 }; // where it PHYSICALLY is (start near shoulder)
     private comVelocity: Vec2 = { x: 0, y: 0 };
 
-      // batAngle now also needs to lag — see below
     private batAngleActual = 0;
-    private batAngleVelocity = 0;
+    private handleActual: Vec2 = { x: 700, y: 350 };
+    private handleVelocity: Vec2 = { x: 0, y: 0 };
+    private readonly HANDLE_STIFFNESS_X = 15; // Fast
+    private readonly HANDLE_STIFFNESS_Y = 3;  // Slow, fixed for now
     // --- BAT BREAKDOWN ---
     private readonly HANDLE_LENGTH = 56;  // 33% of the bat
     private readonly BLADE_LENGTH = 112;  // 67% of the bat
@@ -40,8 +42,9 @@ export default class Bat {
     // increase it if the bat should trail further from the actual cursor.
     private readonly GRIP_OFFSET_FROM_CURSOR = 20;
 
-    // The closest the bat is allowed to travel toward the shoulders (prevents folded elbows)
-    private readonly MIN_REACH = 40;
+    // Minimum elbow bend angles (degrees). 0 means completely folded, 180 means completely straight.
+    private readonly FRONT_ARM_MIN_ELBOW_ANGLE = 45;
+    private readonly BACK_ARM_MIN_ELBOW_ANGLE = 80;
 
     // Bend-side flags. Both -1 makes the elbows bend naturally in parallel (fixes the diamond shape).
     private readonly BACK_ARM_BEND: 1 | -1 = -1;   // must bend to the right
@@ -84,6 +87,7 @@ export default class Bat {
             this.frontWristTarget,
             this.FRONT_UPPER_ARM,
             this.FRONT_LOWER_ARM,
+            this.FRONT_ARM_MIN_ELBOW_ANGLE,
             this.FRONT_ARM_BEND,
             "front"
         );
@@ -92,6 +96,7 @@ export default class Bat {
             this.backWristTarget,
             this.BACK_UPPER_ARM,
             this.BACK_LOWER_ARM,
+            this.BACK_ARM_MIN_ELBOW_ANGLE,
             this.BACK_ARM_BEND,
             "back"
         );
@@ -101,127 +106,90 @@ export default class Bat {
     // STEP 1: bat orientation + COM + wrist targets, driven by mouse
     // ---------------------------------------------------------------
     private updateBatPose(dt: number): void {
-        const shoulderMid = {
-            x: (this.FRONT_SHOULDER.x + this.BACK_SHOULDER.x) / 2,
-            y: (this.FRONT_SHOULDER.y + this.BACK_SHOULDER.y) / 2,
-        };
-
-        const FRONT_MAX = this.FRONT_UPPER_ARM + this.FRONT_LOWER_ARM;
-        const BACK_MAX = this.BACK_UPPER_ARM + this.BACK_LOWER_ARM;
         const comOffsetFromTop = this.TOTAL_LENGTH * BAT_CENTER_OF_MASS_RATIO;
         
-        let clampedMouse = { x: this.mouse.x, y: this.mouse.y };
-        let targetAngle = 0;
-        let finalComTarget = { x: 0, y: 0 };
+        // 1. COM strictly follows the mouse
+        this.comTarget = {
+            x: this.mouse.x + this.GRIP_OFFSET_FROM_CURSOR,
+            y: this.mouse.y
+        };
+
+        this.simulateComPhysics(dt);
+
+        // 2. Handle moves towards ideal position (straight above COM)
+        const handleIdealTarget = {
+            x: this.comActual.x,
+            y: this.comActual.y - comOffsetFromTop
+        };
+
+        const dtClamp = Math.min(dt, 0.05);
+        this.handleActual.x += (handleIdealTarget.x - this.handleActual.x) * this.HANDLE_STIFFNESS_X * dtClamp;
+        this.handleActual.y += (handleIdealTarget.y - this.handleActual.y) * this.HANDLE_STIFFNESS_Y * dtClamp;
+
+        // 3. Iterative Constraint Solver (Arm Limits & Rigid Body Length)
+        const FRONT_MAX = this.FRONT_UPPER_ARM + this.FRONT_LOWER_ARM;
+        const BACK_MAX = this.BACK_UPPER_ARM + this.BACK_LOWER_ARM;
         
-        // --- Dynamic Kinematic Leash (Iterative Solver) ---
-        // We check if the mouse position forces either wrist past its absolute max stretch,
-        // OR if it forces the front elbow (green line) to point higher than allowed.
-        for (let i = 0; i < 10; i++) {
-            targetAngle = Math.atan2(clampedMouse.y - shoulderMid.y, clampedMouse.x - shoulderMid.x);
-            const targetDir = { x: Math.cos(targetAngle), y: Math.sin(targetAngle) };
-            
-            let perp = { x: -targetDir.y, y: targetDir.x };
-            if (perp.x < 0) { perp.x *= -1; perp.y *= -1; }
+        const fAngleRad = this.FRONT_ARM_MIN_ELBOW_ANGLE * (Math.PI / 180);
+        const fMin = Math.sqrt(this.FRONT_UPPER_ARM**2 + this.FRONT_LOWER_ARM**2 - 2 * this.FRONT_UPPER_ARM * this.FRONT_LOWER_ARM * Math.cos(fAngleRad));
+        
+        const bAngleRad = this.BACK_ARM_MIN_ELBOW_ANGLE * (Math.PI / 180);
+        const bMin = Math.sqrt(this.BACK_UPPER_ARM**2 + this.BACK_LOWER_ARM**2 - 2 * this.BACK_UPPER_ARM * this.BACK_LOWER_ARM * Math.cos(bAngleRad));
 
-            finalComTarget = {
-                x: clampedMouse.x + perp.x * this.GRIP_OFFSET_FROM_CURSOR,
-                y: clampedMouse.y + perp.y * this.GRIP_OFFSET_FROM_CURSOR,
-            };
+        for (let i = 0; i < 5; i++) {
+            // A. Arm Constraints on Handle
+            // (Front Arm)
+            const fDist = Math.hypot(this.handleActual.x - this.FRONT_SHOULDER.x, this.handleActual.y - this.FRONT_SHOULDER.y);
+            if (fDist < fMin && fDist > 0.01) {
+                this.handleActual.x = this.FRONT_SHOULDER.x + (this.handleActual.x - this.FRONT_SHOULDER.x) / fDist * fMin;
+                this.handleActual.y = this.FRONT_SHOULDER.y + (this.handleActual.y - this.FRONT_SHOULDER.y) / fDist * fMin;
+            }
+            if (fDist > FRONT_MAX && fDist > 0.01) {
+                this.handleActual.x = this.FRONT_SHOULDER.x + (this.handleActual.x - this.FRONT_SHOULDER.x) / fDist * FRONT_MAX;
+                this.handleActual.y = this.FRONT_SHOULDER.y + (this.handleActual.y - this.FRONT_SHOULDER.y) / fDist * FRONT_MAX;
+            }
             
-            // Calculate where the wrists WOULD be if the bat followed this mouse
-            const theoreticalHandleTop = {
-                x: finalComTarget.x - targetDir.x * comOffsetFromTop,
-                y: finalComTarget.y - targetDir.y * comOffsetFromTop,
-            };
-            
-            const theoreticalFrontWrist = {
-                x: theoreticalHandleTop.x + targetDir.x * (this.HANDLE_LENGTH * 0.5),
-                y: theoreticalHandleTop.y + targetDir.y * (this.HANDLE_LENGTH * 0.5),
-            };
-            const theoreticalBackWrist = {
-                x: theoreticalHandleTop.x + targetDir.x * (this.HANDLE_LENGTH * 0.0),
-                y: theoreticalHandleTop.y + targetDir.y * (this.HANDLE_LENGTH * 0.0),
-            };
-            
-            const frontDist = Math.hypot(theoreticalFrontWrist.x - this.FRONT_SHOULDER.x, theoreticalFrontWrist.y - this.FRONT_SHOULDER.y);
-            const backDist = Math.hypot(theoreticalBackWrist.x - this.BACK_SHOULDER.x, theoreticalBackWrist.y - this.BACK_SHOULDER.y);
-            
-            const frontOver = frontDist - FRONT_MAX;
-            const backOver = backDist - BACK_MAX;
-            
-            const frontUnder = this.MIN_REACH - frontDist; // > 0 if it's too close
-            const backUnder = this.MIN_REACH - backDist;   // > 0 if it's too close
+            // (Back Arm)
+            const bDist = Math.hypot(this.handleActual.x - this.BACK_SHOULDER.x, this.handleActual.y - this.BACK_SHOULDER.y);
+            if (bDist < bMin && bDist > 0.01) {
+                this.handleActual.x = this.BACK_SHOULDER.x + (this.handleActual.x - this.BACK_SHOULDER.x) / bDist * bMin;
+                this.handleActual.y = this.BACK_SHOULDER.y + (this.handleActual.y - this.BACK_SHOULDER.y) / bDist * bMin;
+            }
+            if (bDist > BACK_MAX && bDist > 0.01) {
+                this.handleActual.x = this.BACK_SHOULDER.x + (this.handleActual.x - this.BACK_SHOULDER.x) / bDist * BACK_MAX;
+                this.handleActual.y = this.BACK_SHOULDER.y + (this.handleActual.y - this.BACK_SHOULDER.y) / bDist * BACK_MAX;
+            }
 
-            // --- Front Arm Upper-Ceiling Check ---
-            // Calculate the theoretical elbow to check if the green line violates the -175 degree rule
-            const fdx = theoreticalFrontWrist.x - this.FRONT_SHOULDER.x;
-            const fdy = theoreticalFrontWrist.y - this.FRONT_SHOULDER.y;
-            const fDistSafe = Math.max(0.1, Math.min(Math.hypot(fdx, fdy), FRONT_MAX - 0.01));
-            
-            const fBaseAngle = Math.atan2(fdy, fdx);
-            const fCosAngle = (this.FRONT_UPPER_ARM**2 + fDistSafe**2 - this.FRONT_LOWER_ARM**2) / (2 * this.FRONT_UPPER_ARM * fDistSafe);
-            const fShoulderAngle = Math.acos(Math.max(-1, Math.min(1, fCosAngle)));
-            
-            const fCandA = this.pointOnCircle(this.FRONT_SHOULDER, this.FRONT_UPPER_ARM, fBaseAngle + fShoulderAngle);
-            const fCandB = this.pointOnCircle(this.FRONT_SHOULDER, this.FRONT_UPPER_ARM, fBaseAngle - fShoulderAngle);
-            const fElbow = this.sideOfLine(this.FRONT_SHOULDER, theoreticalFrontWrist, fCandA) === this.FRONT_ARM_BEND ? fCandA : fCandB;
-            
-            const fElbowAngle = Math.atan2(fElbow.y - this.FRONT_SHOULDER.y, fElbow.x - this.FRONT_SHOULDER.x);
-            
-            // --- Front Arm Upper-Ceiling Check (Y-Axis) ---
-            // The elbow can NEVER go higher than 5 degrees above horizontal, regardless of direction.
-            // In Canvas, smaller Y is higher.
-            const elbowCeilingAngle = -175 * (Math.PI / 180);
-            const minElbowY = this.FRONT_SHOULDER.y + this.FRONT_UPPER_ARM * Math.sin(elbowCeilingAngle);
-            
-            let elbowPenalty = 0;
-            if (fElbow.y < minElbowY) {
-                // Elbow is too high! 
-                elbowPenalty = minElbowY - fElbow.y; // Difference in pixels
+            // (Handle Ceiling on Follow-Through - Right side of shoulder)
+            if (this.handleActual.x > this.FRONT_SHOULDER.x && this.handleActual.y < this.FRONT_SHOULDER.y) {
+                this.handleActual.y = this.FRONT_SHOULDER.y;
             }
-            
-            // If nothing is violated, we are safe!
-            if (frontOver <= 0.1 && backOver <= 0.1 && frontUnder <= 0.1 && backUnder <= 0.1 && elbowPenalty <= 0.1) {
-                break; 
-            }
-            
-            // Apply corrections
-            if (elbowPenalty > 0.1) {
-                // If elbow is too high, push the mouse directly DOWN
-                clampedMouse.y += elbowPenalty;
-            }
-            
-            const worstOver = Math.max(frontOver, backOver);
-            const worstUnder = Math.max(frontUnder, backUnder);
-            
-            if (worstOver > 0.1 && worstOver >= worstUnder) {
-                clampedMouse.x -= Math.cos(targetAngle) * worstOver;
-                clampedMouse.y -= Math.sin(targetAngle) * worstOver;
-            } else if (worstUnder > 0.1) {
-                clampedMouse.x += Math.cos(targetAngle) * worstUnder;
-                clampedMouse.y += Math.sin(targetAngle) * worstUnder;
+
+            // B. Rigid Body Projection (Handle must be exactly `comOffsetFromTop` away from COM)
+            const dx = this.handleActual.x - this.comActual.x;
+            const dy = this.handleActual.y - this.comActual.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > 0.01) {
+                this.handleActual.x = this.comActual.x + (dx / dist) * comOffsetFromTop;
+                this.handleActual.y = this.comActual.y + (dy / dist) * comOffsetFromTop;
             }
         }
 
-        this.comTarget = finalComTarget;
-
-        this.simulateComPhysics(dt);
-        this.simulateAngle(targetAngle, dt);
-
-        const dir: Vec2 = { x: Math.cos(this.batAngleActual), y: Math.sin(this.batAngleActual) };
+        // 4. Calculate Final Angle (Vector from Handle to COM)
+        const dirX = this.comActual.x - this.handleActual.x;
+        const dirY = this.comActual.y - this.handleActual.y;
+        this.batAngleActual = Math.atan2(dirY, dirX);
         this.batAngle = this.batAngleActual;
 
-        this.handleTop = {
-            x: this.comActual.x - dir.x * comOffsetFromTop,
-            y: this.comActual.y - dir.y * comOffsetFromTop,
-        };
+        // 5. Update derived positions
+        const dir = { x: Math.cos(this.batAngleActual), y: Math.sin(this.batAngleActual) };
+        
+        this.handleTop = { x: this.handleActual.x, y: this.handleActual.y };
         this.bladeTip = {
             x: this.handleTop.x + dir.x * this.TOTAL_LENGTH,
             y: this.handleTop.y + dir.y * this.TOTAL_LENGTH,
         };
 
-        // Fixed wrist positions: Back hand at top, Front hand at middle
         const backHandPosition = 0.0;
         const frontHandPosition = 0.5;
 
@@ -265,18 +233,7 @@ export default class Bat {
         this.comActual.y += this.comVelocity.y * dt;
     }
 
-    private simulateAngle(targetAngle: number, dt: number): void {
-        let diff = targetAngle - this.batAngleActual;
-        while (diff > Math.PI) diff -= 2 * Math.PI;
-        while (diff < -Math.PI) diff += 2 * Math.PI;
 
-        const springTorque = diff * this.SPRING_STIFFNESS;
-        const dampingTorque = -this.batAngleVelocity * this.DAMPING;
-        const angularAccel = (springTorque + dampingTorque) / this.BAT_MASS;
-
-        this.batAngleVelocity += angularAccel * dt;
-        this.batAngleActual += this.batAngleVelocity * dt;
-    }
 
     // ---------------------------------------------------------------
     // STEP 2: 2-bone IK per arm — shoulder is fixed, wrist is the target
@@ -286,6 +243,7 @@ export default class Bat {
         target: Vec2,
         upperLen: number,
         lowerLen: number,
+        minAngleDeg: number,
         bendSide: 1 | -1,
         which: "front" | "back"
     ): void {
@@ -293,7 +251,9 @@ export default class Bat {
         const dy = target.y - shoulder.y;
         const rawDist = Math.hypot(dx, dy);
 
-        const minReach = Math.abs(upperLen - lowerLen) + this.EPS;
+        const minAngleRad = minAngleDeg * (Math.PI / 180);
+        const minReachMath = Math.sqrt(upperLen**2 + lowerLen**2 - 2 * upperLen * lowerLen * Math.cos(minAngleRad));
+        const minReach = Math.max(Math.abs(upperLen - lowerLen) + this.EPS, minReachMath);
         const maxReach = upperLen + lowerLen - this.EPS;
         const dist = Math.min(Math.max(rawDist, minReach), maxReach);
 
