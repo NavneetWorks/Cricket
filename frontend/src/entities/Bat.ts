@@ -40,6 +40,9 @@ export default class Bat {
     // increase it if the bat should trail further from the actual cursor.
     private readonly GRIP_OFFSET_FROM_CURSOR = 20;
 
+    // The maximum radius the bat is allowed to travel away from the shoulders
+    private readonly MAX_REACH = 130;
+
     // Bend-side flags. Both -1 makes the elbows bend naturally in parallel (fixes the diamond shape).
     private readonly BACK_ARM_BEND: 1 | -1 = -1;   // must bend to the right
     private readonly FRONT_ARM_BEND: 1 | -1 = 1; // must bend to the right
@@ -103,19 +106,62 @@ export default class Bat {
             y: (this.FRONT_SHOULDER.y + this.BACK_SHOULDER.y) / 2,
         };
 
-        const targetAngle = Math.atan2(
-            this.mouse.y - shoulderMid.y,
-            this.mouse.x - shoulderMid.x
-        );
+        const FRONT_MAX = this.FRONT_UPPER_ARM + this.FRONT_LOWER_ARM;
+        const BACK_MAX = this.BACK_UPPER_ARM + this.BACK_LOWER_ARM;
+        const comOffsetFromTop = this.TOTAL_LENGTH * BAT_CENTER_OF_MASS_RATIO;
+        
+        let clampedMouse = { x: this.mouse.x, y: this.mouse.y };
+        let targetAngle = 0;
+        let finalComTarget = { x: 0, y: 0 };
+        
+        // --- Dynamic Kinematic Leash (Iterative Solver) ---
+        // We check if the mouse position forces either wrist past its absolute max stretch.
+        // If it does, we pull the mouse backward slightly and check again, until both elbows are safe!
+        for (let i = 0; i < 10; i++) {
+            targetAngle = Math.atan2(clampedMouse.y - shoulderMid.y, clampedMouse.x - shoulderMid.x);
+            const targetDir = { x: Math.cos(targetAngle), y: Math.sin(targetAngle) };
+            
+            let perp = { x: -targetDir.y, y: targetDir.x };
+            if (perp.x < 0) { perp.x *= -1; perp.y *= -1; }
 
-        const targetDir: Vec2 = { x: Math.cos(targetAngle), y: Math.sin(targetAngle) };
-        let perp: Vec2 = { x: -targetDir.y, y: targetDir.x };
-        if (perp.x < 0) { perp.x *= -1; perp.y *= -1; }
+            finalComTarget = {
+                x: clampedMouse.x + perp.x * this.GRIP_OFFSET_FROM_CURSOR,
+                y: clampedMouse.y + perp.y * this.GRIP_OFFSET_FROM_CURSOR,
+            };
+            
+            // Calculate where the wrists WOULD be if the bat followed this mouse
+            const theoreticalHandleTop = {
+                x: finalComTarget.x - targetDir.x * comOffsetFromTop,
+                y: finalComTarget.y - targetDir.y * comOffsetFromTop,
+            };
+            
+            const theoreticalFrontWrist = {
+                x: theoreticalHandleTop.x + targetDir.x * (this.HANDLE_LENGTH * 0.5),
+                y: theoreticalHandleTop.y + targetDir.y * (this.HANDLE_LENGTH * 0.5),
+            };
+            const theoreticalBackWrist = {
+                x: theoreticalHandleTop.x + targetDir.x * (this.HANDLE_LENGTH * 0.0),
+                y: theoreticalHandleTop.y + targetDir.y * (this.HANDLE_LENGTH * 0.0),
+            };
+            
+            const frontDist = Math.hypot(theoreticalFrontWrist.x - this.FRONT_SHOULDER.x, theoreticalFrontWrist.y - this.FRONT_SHOULDER.y);
+            const backDist = Math.hypot(theoreticalBackWrist.x - this.BACK_SHOULDER.x, theoreticalBackWrist.y - this.BACK_SHOULDER.y);
+            
+            const frontOver = frontDist - FRONT_MAX;
+            const backOver = backDist - BACK_MAX;
+            
+            // If neither hand is slipping, we are perfectly safe!
+            if (frontOver <= 0.1 && backOver <= 0.1) {
+                break; 
+            }
+            
+            // Find which hand is slipping the most, and pull the mouse back by that exact amount
+            const worstOver = Math.max(frontOver, backOver);
+            clampedMouse.x -= Math.cos(targetAngle) * worstOver;
+            clampedMouse.y -= Math.sin(targetAngle) * worstOver;
+        }
 
-        this.comTarget = {
-            x: this.mouse.x + perp.x * this.GRIP_OFFSET_FROM_CURSOR,
-            y: this.mouse.y + perp.y * this.GRIP_OFFSET_FROM_CURSOR,
-        };
+        this.comTarget = finalComTarget;
 
         this.simulateComPhysics(dt);
         this.simulateAngle(targetAngle, dt);
@@ -123,7 +169,6 @@ export default class Bat {
         const dir: Vec2 = { x: Math.cos(this.batAngleActual), y: Math.sin(this.batAngleActual) };
         this.batAngle = this.batAngleActual;
 
-        const comOffsetFromTop = this.TOTAL_LENGTH * BAT_CENTER_OF_MASS_RATIO;
         this.handleTop = {
             x: this.comActual.x - dir.x * comOffsetFromTop,
             y: this.comActual.y - dir.y * comOffsetFromTop,
