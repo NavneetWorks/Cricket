@@ -1,10 +1,13 @@
 import Bat from "../entities/Bat";
+import Ball from "../entities/Ball";
 import Renderer from "./Rederer";
 import Input from "./Input";
+import { CANVAS_HEIGHT, CANVAS_WIDTH, GROUND_HEIGHT } from "./constants";
 
 export default class GameLoop{
     private ctx:CanvasRenderingContext2D;
     private bat:Bat;
+    private ball: Ball;
     private renderer:Renderer;
     private input: Input;
     private lastFrameTime = 0;
@@ -12,12 +15,34 @@ export default class GameLoop{
     constructor(ctx:CanvasRenderingContext2D,bat:Bat,input:Input){
         this.ctx = ctx;
         this.bat = bat;
-        this.renderer = new Renderer(ctx, bat, input);
+        this.ball = new Ball();
+        this.renderer = new Renderer(ctx, bat, input,this.ball);
         this.input = input;
     }
     public start(){
         this.lastFrameTime = performance.now();
-        //this.bat.initializePhysics(this.input.getHistory());
+        window.addEventListener("mousedown", () => {
+            
+            const minSpeed = 900;
+            const maxSpeed = 1300;
+            const randomSpeed = minSpeed + Math.random() * (maxSpeed - minSpeed);
+            
+            const minAngle = 10;
+            const maxAngle = 20;
+            
+            // RIGHT se LEFT fenkne ke liye changes:
+            
+            // 1. Bowler screen ke Right side (jaise X = 1200) se fenkega
+            const startX = CANVAS_WIDTH;
+            const startY = (CANVAS_HEIGHT - GROUND_HEIGHT) - 350;
+            
+            // 2. Angle ko Left ki taraf modne ke liye (180 degree mein se minus karna)
+            // Isse ball right ki jagah left ki taraf travel karegi
+            const randomAngle = 180 - (minAngle + Math.random() * (maxAngle - minAngle));
+            
+            // Ball ko naye X aur naye Angle ke sath release karein
+            this.ball.throwBall(startX, startY, randomSpeed, randomAngle); 
+        });
         this.render();
         requestAnimationFrame(this.loop);
     }
@@ -38,6 +63,8 @@ export default class GameLoop{
         }
         //console.log(`Mouse Position: (${currentCommand.x}, ${currentCommand.y})`);
         this.bat.update(this.input.mouseX, this.input.mouseY, dt);
+        this.ball.update(dt);
+        this.bat.checkHit(this.ball)
     }
 
     private render(){

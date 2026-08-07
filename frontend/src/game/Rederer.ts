@@ -1,4 +1,5 @@
 import Bat from "../entities/Bat";
+import Ball from "../entities/Ball";
 import Input from "./Input";
 import {
     CANVAS_WIDTH,
@@ -11,11 +12,13 @@ export default class Renderer{
     private ctx:CanvasRenderingContext2D;
     private input: Input;
     private bat:Bat;
-    
-    constructor(ctx:CanvasRenderingContext2D,bat:Bat,input:Input){
+    private ball: Ball;
+
+    constructor(ctx:CanvasRenderingContext2D,bat:Bat,input:Input,ball: Ball){
         this.ctx = ctx;
         this.bat = bat;
         this.input = input;
+        this.ball = ball;
     }
     public render(){
         this.ctx.clearRect(
@@ -25,6 +28,7 @@ export default class Renderer{
         this.drawSky();
         this.drawGround();
         this.drawBat();
+        this.ball.draw(this.ctx);
         this.drawDebug();
     }
     private drawSky(){

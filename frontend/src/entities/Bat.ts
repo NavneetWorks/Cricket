@@ -1,6 +1,10 @@
 import { BAT_CENTER_OF_MASS_RATIO } from "../game/constants";
 import outerArcJson from "../config/outer_handle_arc.json";
 import innerArcJson from "../config/inner_handle_arc.json";
+import {
+    CANVAS_HEIGHT,
+    GROUND_HEIGHT
+} from "../game/constants";
 
 type Vec2 = { x: number; y: number };
 
@@ -41,7 +45,6 @@ export default class Bat {
     // --- WIDTHS ---
 
     private readonly HANDLE_WIDTH = this.TOTAL_BAT_LENGTH*.0388888888;
-    private readonly BLADE_WIDTH = 22;
 
     // --- FRONT ARM ---
     private readonly FRONT_UPPER_ARM = this.TOTAL_LEFT_ARM_LENGTH*.3619;
@@ -74,10 +77,12 @@ export default class Bat {
 
     private readonly EPS = 0.01;
 
+    private readonly SHOULDER_HEIGHT = CANVAS_HEIGHT-GROUND_HEIGHT-this.TOTAL_BAT_LENGTH*1.555; // Y position of the shoulder joints
+
 
 
     // Joint Positions
-    private FRONT_SHOULDER: Vec2 = { x: 700, y: 350 };
+    private FRONT_SHOULDER: Vec2 = { x: 400, y: this.SHOULDER_HEIGHT };
     private BACK_SHOULDER: Vec2 = {
         x: this.FRONT_SHOULDER.x + this.BACK_SHOULDER_OFFSET.x,
         y: this.FRONT_SHOULDER.y + this.BACK_SHOULDER_OFFSET.y,
@@ -295,7 +300,49 @@ export default class Bat {
         }
         this.prevHandlePos = { x: this.handleActual.x, y: this.handleActual.y };
     }
+    // Check karega ki ball Bat se takrai ya nahi
+    public checkHit(ball: any): void {
+        if (!ball.isActive) return;
 
+        // 1. Bat ki Tip (Neeche ka hissa) ki exact position nikalna
+        const px = this.handleTop.x;
+        const py = this.handleTop.y;
+        const tipX = px + Math.cos(this.batAngle) * this.TOTAL_BAT_LENGTH;
+        const tipY = py + Math.sin(this.batAngle) * this.TOTAL_BAT_LENGTH;
+
+        // 2. Line Segment (Bat) aur Point (Ball) ke beech ka Math
+        const dx = tipX - px;
+        const dy = tipY - py;
+        const bx = ball.pos.x;
+        const by = ball.pos.y;
+
+        // Ball bat ke kitne hisse (percentage) par takrai
+        let t = ((bx - px) * dx + (by - py) * dy) / (dx * dx + dy * dy);
+        t = Math.max(0, Math.min(1, t)); // 0 (Handle) se 1 (Tip) ke beech clamp karna
+
+        // Bat ke upar wo point jo ball ke sabse kareeb hai
+        const closestX = px + t * dx;
+        const closestY = py + t * dy;
+
+        // 3. Exact Doori (Distance) calculate karna
+        const distX = bx - closestX;
+        const distY = by - closestY;
+        const distance = Math.sqrt(distX * distX + distY * distY);
+
+        // 4. Hit Detection! (Agar doori Ball ke radius + Bat ki half motaai se kam hai)
+        if (distance <= ball.radius + (this.HANDLE_WIDTH / 2)) {
+            
+            // -- PHYSICS SHOT (Temporary simple shot for testing) --
+            // Ball ko naya Momentum aur direction dena
+            ball.vel.x = Math.abs(ball.vel.x) * 1.5; // X speed tez karke wapas bhejna
+            ball.vel.y = -Math.abs(ball.vel.y) - 300; // Upar hawa mein uthana
+            
+            // Glitch se bachne ke liye ball ko bat se thoda bahar dhakel dena
+            ball.pos.x += 10; 
+            
+            console.log("CRACK! The ball was Hit!");
+        }
+    }
     private simulateComPhysics(dt: number): void {
         const dx = this.comTarget.x - this.comActual.x;
         const dy = this.comTarget.y - this.comActual.y;
