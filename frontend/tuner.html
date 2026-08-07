@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Arc Tuner Tool</title>
+    <style>
+      body { margin: 0; display: flex; height: 100vh; overflow: hidden; font-family: sans-serif; background: #1a1a1a; color: #fff; }
+      #canvas-container { flex: 1; position: relative; }
+      #canvas { width: 100%; height: 100%; display: block; }
+      #ui-panel { width: 350px; background: #2a2a2a; padding: 20px; box-sizing: border-box; border-left: 1px solid #444; display: flex; flex-direction: column; overflow-y: auto;}
+      textarea { width: 100%; flex: 1; background: #111; color: #0f0; font-family: monospace; border: none; padding: 10px; resize: none; margin-top: 10px; box-sizing: border-box;}
+      h2 { margin-top: 0; font-size: 1.2rem; }
+      .instructions { font-size: 0.9rem; color: #aaa; margin-bottom: 15px; }
+      select { width: 100%; padding: 8px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; margin-bottom: 10px;}
+      .btn-add { background: #4CAF50; color: white; border: none; padding: 8px; cursor: pointer; border-radius: 4px; margin-bottom: 10px; }
+      .btn-add:hover { background: #45a049; }
+    </style>
+  </head>
+  <body>
+    <div id="canvas-container">
+      <canvas id="canvas"></canvas>
+    </div>
+    <div id="ui-panel">
+      <h2>Arc Tuner Tool</h2>
+      <p class="instructions">
+        Drag the control circles to adjust the curve radius at specific angles.<br/><br/>
+        - Green circle: Shoulder Center<br/>
+        - The curve is drawn using linear interpolation between angles.
+      </p>
+      
+      <label>Active Arc:</label>
+      <select id="arc-selector">
+          <option value="outer">Outer Handle Arc</option>
+          <option value="inner">Inner Handle Arc</option>
+          <option value="com">COM Limit Arc</option>
+      </select>
+      
+      <button id="add-point" class="btn-add" style="display:none;">+ Add Control Point</button>
+
+      <label>Global Adjustments:</label>
+      <div style="display: flex; gap: 5px; margin-bottom: 15px;">
+          <button id="add-10" class="btn-add" style="flex:1" title="Add 10px to all">+10</button>
+          <button id="sub-10" class="btn-add" style="flex:1" title="Subtract 10px from all">-10</button>
+          <button id="mul-11" class="btn-add" style="flex:1" title="Scale up by 10%">x1.1</button>
+          <button id="mul-09" class="btn-add" style="flex:1" title="Scale down by 10%">x0.9</button>
+      </div>
+
+      <label>JSON Output (Copy this):</label>
+      <textarea id="json-output" readonly></textarea>
+    </div>
+    <script type="module" src="/src/tuner/main.ts"></script>
+  </body>
+</html>
