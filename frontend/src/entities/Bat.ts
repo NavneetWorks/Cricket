@@ -401,74 +401,137 @@ export default class Bat {
         this.drawDebug(ctx);
     }
 
+    // private drawBat(ctx: CanvasRenderingContext2D): void {
+    //     ctx.save();
+        
+    //     // Transform to bat's local space. 
+    //     // In local space, (0,0) is handleTop, X-axis points down the length of the bat.
+    //     ctx.translate(this.handleTop.x, this.handleTop.y);
+    //     ctx.rotate(this.batAngle);
+
+    //     const hl = this.HANDLE_LENGTH;
+    //     const tl = this.TOTAL_BAT_LENGTH;
+    //     const bl = tl - hl; // Blade length
+
+    //     // Positive local Y points LEFT (back of the bat). Negative local Y points RIGHT (front hitting face).
+    //     const hr = this.HANDLE_WIDTH / 2; 
+    //     const frontY = -hr; // Perfectly flat front face matching the handle
+    //     const toeBackY = hr * 0.5; // Toe tapers to be a bit thin at the very bottom
+    //     const maxSpineY = this.BLADE_WIDTH * 0.9; // Max thickness of the sweet spot
+    //     const swellX = hl + bl * 0.65; // Position of the sweet spot along the length
+
+    //     // 1. Draw Bat Body (Wood Blade)
+    //     ctx.beginPath();
+    //     ctx.moveTo(hl, frontY); // Start at handle junction (front)
+    //     ctx.lineTo(tl - 3, frontY); // Flat front face all the way down
+        
+    //     // Rounded Toe
+    //     ctx.quadraticCurveTo(tl, frontY, tl, 0); 
+    //     ctx.lineTo(tl, toeBackY); 
+
+    //     // Curved Spine (Back of the bat)
+    //     ctx.bezierCurveTo(
+    //         swellX, maxSpineY + 5,          // CP1: Pulls the curve out to form the sweet spot
+    //         hl + bl * 0.2, maxSpineY * 0.4, // CP2: Tapers back in towards the handle
+    //         hl, hr                          // End at handle junction (back)
+    //     );
+    //     ctx.closePath();
+
+    //     // Fill wood color
+    //     ctx.fillStyle = "#e6cba8"; // Light English Willow
+    //     ctx.fill();
+    //     ctx.strokeStyle = "#8a5a2b"; // Darker wood outline
+    //     ctx.lineWidth = 1.5;
+    //     ctx.stroke();
+
+    //     // 2. Draw Handle / Grip
+    //     ctx.beginPath();
+    //     ctx.moveTo(0, -hr);
+    //     ctx.lineTo(hl, -hr);
+    //     ctx.lineTo(hl, hr);
+    //     ctx.lineTo(0, hr);
+    //     ctx.closePath();
+        
+    //     ctx.fillStyle = "#d32f2f"; // MRF Red Grip
+    //     ctx.fill();
+    //     ctx.stroke();
+
+    //     // 3. Draw Details (MRF Sticker)
+    //     ctx.save();
+    //     ctx.fillStyle = "#d32f2f"; // Red sticker
+    //     ctx.font = "bold 16px Arial";
+    //     ctx.textAlign = "center";
+    //     ctx.textBaseline = "middle";
+    //     // Place sticker halfway down the blade, centered vertically
+    //     ctx.translate(hl + bl * 0.45, 0);
+    //     ctx.fillText("MRF", 0, 0);
+    //     ctx.restore();
+
+    //     ctx.restore();
+    // }
     private drawBat(ctx: CanvasRenderingContext2D): void {
-        ctx.save();
-        
-        // Transform to bat's local space. 
-        // In local space, (0,0) is handleTop, X-axis points down the length of the bat.
-        ctx.translate(this.handleTop.x, this.handleTop.y);
-        ctx.rotate(this.batAngle);
+    ctx.save();
 
-        const hl = this.HANDLE_LENGTH;
-        const tl = this.TOTAL_BAT_LENGTH;
-        const bl = tl - hl; // Blade length
+    ctx.translate(this.handleTop.x, this.handleTop.y);
+    ctx.rotate(this.batAngle);
 
-        // Positive local Y points LEFT (back of the bat). Negative local Y points RIGHT (front hitting face).
-        const hr = this.HANDLE_WIDTH / 2; 
-        const frontY = -hr; // Perfectly flat front face matching the handle
-        const toeBackY = hr * 0.5; // Toe tapers to be a bit thin at the very bottom
-        const maxSpineY = this.BLADE_WIDTH * 0.9; // Max thickness of the sweet spot
-        const swellX = hl + bl * 0.65; // Position of the sweet spot along the length
+    const hl = this.HANDLE_LENGTH;
+    const tl = this.TOTAL_BAT_LENGTH;
+    const bl = tl - hl; // Blade length
 
-        // 1. Draw Bat Body (Wood Blade)
-        ctx.beginPath();
-        ctx.moveTo(hl, frontY); // Start at handle junction (front)
-        ctx.lineTo(tl - 3, frontY); // Flat front face all the way down
-        
-        // Rounded Toe
-        ctx.quadraticCurveTo(tl, frontY, tl, 0); 
-        ctx.lineTo(tl, toeBackY); 
+    const hr = this.HANDLE_WIDTH / 2;
+    const frontY = -hr; // Flat front face, same as handle
+    const toeBackY = hr * 0.5; // Toe tapers thin near bottom
 
-        // Curved Spine (Back of the bat)
-        ctx.bezierCurveTo(
-            swellX, maxSpineY + 5,          // CP1: Pulls the curve out to form the sweet spot
-            hl + bl * 0.2, maxSpineY * 0.4, // CP2: Tapers back in towards the handle
-            hl, hr                          // End at handle junction (back)
-        );
-        ctx.closePath();
+    // Sweet spot position: 75% down the bat (real bat measurement: 345/460 px)
+    const swellX = hl + bl * 0.6;
+    // Sweet spot width scaled from real bat ratio: 32px width / 460px length
+    const maxSpineY = tl * (32 / 460);
 
-        // Fill wood color
-        ctx.fillStyle = "#e6cba8"; // Light English Willow
-        ctx.fill();
-        ctx.strokeStyle = "#8a5a2b"; // Darker wood outline
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+    // 1. Draw Bat Body (Wood Blade)
+    ctx.beginPath();
+    ctx.moveTo(hl, frontY); // Handle junction (front)
+    ctx.lineTo(tl - 3, frontY); // Flat front face all the way down
 
-        // 2. Draw Handle / Grip
-        ctx.beginPath();
-        ctx.moveTo(0, -hr);
-        ctx.lineTo(hl, -hr);
-        ctx.lineTo(hl, hr);
-        ctx.lineTo(0, hr);
-        ctx.closePath();
-        
-        ctx.fillStyle = "#d32f2f"; // MRF Red Grip
-        ctx.fill();
-        ctx.stroke();
+    // Rounded Toe
+    ctx.quadraticCurveTo(tl, frontY, tl, 0);
+    ctx.lineTo(tl, toeBackY);
 
-        // 3. Draw Details (MRF Sticker)
-        ctx.save();
-        ctx.fillStyle = "#d32f2f"; // Red sticker
-        ctx.font = "bold 16px Arial";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        // Place sticker halfway down the blade, centered vertically
-        ctx.translate(hl + bl * 0.45, 0);
-        ctx.fillText("MRF", 0, 0);
-        ctx.restore();
+    // Segment A: toe -> sweet spot (curve builds up)
+    ctx.quadraticCurveTo(
+        (tl + swellX) / 2, maxSpineY,   // control point pulls curve out to max width
+        swellX, maxSpineY                // sweet spot peak
+    );
 
-        ctx.restore();
-    }
+    // Segment B: sweet spot -> handle junction (gradual taper back in)
+    ctx.quadraticCurveTo(
+        hl + (swellX - hl) * 0.35, maxSpineY * 0.5,  // control point, slow taper
+        hl, hr                                        // handle junction (back)
+    );
+
+    ctx.closePath();
+
+    ctx.fillStyle = "#e6cba8"; // Light English Willow
+    ctx.fill();
+    ctx.strokeStyle = "#8a5a2b";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // 2. Draw Handle / Grip
+    ctx.beginPath();
+    ctx.moveTo(0, -hr);
+    ctx.lineTo(hl, -hr);
+    ctx.lineTo(hl, hr);
+    ctx.lineTo(0, hr);
+    ctx.closePath();
+
+    ctx.fillStyle = "#f2f0e8"; // White/off-white grip
+    ctx.fill();
+    ctx.strokeStyle = "#c9c6ba";
+    ctx.stroke();
+
+    ctx.restore();
+}
 
     private drawArms(ctx: CanvasRenderingContext2D): void {
         this.drawLimb(ctx, this.FRONT_SHOULDER, this.frontElbow, this.frontWrist, "green");

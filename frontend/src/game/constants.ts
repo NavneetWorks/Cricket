@@ -16,7 +16,7 @@ export const CANVAS_HEIGHT = 825;
 
 export const GROUND_HEIGHT = 120;
 
-export const BAT_CENTER_OF_MASS_RATIO = 0.8;
+export const BAT_CENTER_OF_MASS_RATIO = 0.75;
 
 export const GRAVITY = 9.81;
 
