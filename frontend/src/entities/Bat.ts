@@ -10,8 +10,7 @@ export default class Bat {
     private readonly SPRING_STIFFNESS = 260;
     private readonly DAMPING = 22;
     // --- Wrist Rotation Physics ---
-    private readonly MAX_HANDLE_SPEED_UP: number = 100; // Force it to be very slow for testing
-    private readonly HANDLE_COM_SPEED_SCALE: number = 0.1; // Make it extremely restricted
+    private readonly WRIST_TILT_SPEED_SCALE: number = 0.005; // How much the bat tilts based on UP speed
 
     // Debug vars
     private debug_comUpSpeed = 0;
@@ -32,8 +31,7 @@ export default class Bat {
     private batAngleActual = 0;
     private handleActual: Vec2 = { x: 700, y: 350 };
     private handleVelocity: Vec2 = { x: 0, y: 0 };
-    private readonly HANDLE_STIFFNESS_X = 15; // Fast
-    private readonly HANDLE_STIFFNESS_Y = 3;  // Slow, fixed for now
+    private readonly HANDLE_STIFFNESS_Y = 30; // Increased so it hits speed limit!for now
     // --- BAT BREAKDOWN ---
     private readonly HANDLE_LENGTH = 56;  // 33% of the bat
     private readonly BLADE_LENGTH = 112;  // 67% of the bat
@@ -179,39 +177,28 @@ export default class Bat {
 
         this.simulateComPhysics(dt);
 
-        // 2. Handle moves towards ideal position (straight above COM)
-        const handleIdealTarget = {
-            x: this.comActual.x,
-            y: this.comActual.y - comOffsetFromTop
-        };
-
         const dtClamp = Math.min(dt, 0.05);
-        let desiredHandleX = this.handleActual.x + (handleIdealTarget.x - this.handleActual.x) * this.HANDLE_STIFFNESS_X * dtClamp;
-        let desiredHandleY = this.handleActual.y + (handleIdealTarget.y - this.handleActual.y) * this.HANDLE_STIFFNESS_Y * dtClamp;
 
-        // Apply UP speed limit (Wrist Rotation mechanics)
-        const comUpSpeed = -this.comVelocity.y; // Positive if COM is moving UP
-        let maxHandleUpSpeed = Infinity;
+        // Calculate COM movement
+        let comUpSpeed = -this.comVelocity.y;
+
+        // Current relative vector between Handle and COM
+        let dxAngle = this.handleActual.x - this.comActual.x;
+        let dyAngle = this.handleActual.y - this.comActual.y;
         
+        // Find current angle
+        let currentAngle = Math.atan2(dyAngle, dxAngle); 
+        
+        // 1. Upward Swing -> Tilt Linearly
         if (comUpSpeed > 0) {
-            maxHandleUpSpeed = Math.min(comUpSpeed * this.HANDLE_COM_SPEED_SCALE, this.MAX_HANDLE_SPEED_UP);
-        }
+            let tiltSpeed = comUpSpeed * this.WRIST_TILT_SPEED_SCALE;
+            // Straight up is -PI/2. Tilting right means angle increases towards 0.
+            currentAngle += tiltSpeed * dtClamp; 
+        } 
         
-        const maxHandleDeltaY = maxHandleUpSpeed * dtClamp;
-        const actualDeltaY = this.handleActual.y - desiredHandleY; // Positive if Handle is trying to move UP
-        
-        let handleHitSpeedLimit = false;
-
-        if (actualDeltaY > maxHandleDeltaY) {
-            // Handle is trying to go UP faster than allowed. Clamp it!
-            desiredHandleY = this.handleActual.y - maxHandleDeltaY;
-            handleHitSpeedLimit = true;
-        }
-
-        this.debug_comUpSpeed = comUpSpeed;
-        this.debug_actualDeltaY = actualDeltaY;
-        this.debug_maxDeltaY = maxHandleDeltaY;
-        this.debug_isHit = handleHitSpeedLimit;
+        // 2. Set desired handle position using the angle (Locks the angle if not moving UP)
+        let desiredHandleX = this.comActual.x + Math.cos(currentAngle) * comOffsetFromTop;
+        let desiredHandleY = this.comActual.y + Math.sin(currentAngle) * comOffsetFromTop;
 
         this.handleActual.x = desiredHandleX;
         this.handleActual.y = desiredHandleY;
@@ -252,15 +239,18 @@ export default class Bat {
             if (hDist > 0.01) {
                 let angleDeg = Math.atan2(hdy, hdx) * 180 / Math.PI;
                 let maxRadius = this.getInterpolatedRadius(outerArcJson, angleDeg, 200);
-                let minRadius = this.getInterpolatedRadius(innerArcJson, angleDeg, 400);
+                // let minRadius = this.getInterpolatedRadius(innerArcJson, angleDeg, 400);
 
                 if (hDist > maxRadius) {
                     this.handleActual.x = shoulderMid.x + (hdx / hDist) * maxRadius;
                     this.handleActual.y = shoulderMid.y + (hdy / hDist) * maxRadius;
-                } else if (hDist < minRadius) {
-                    this.handleActual.x = shoulderMid.x + (hdx / hDist) * minRadius;
-                    this.handleActual.y = shoulderMid.y + (hdy / hDist) * minRadius;
-                }
+                } 
+                // else if (hDist < minRadius) {
+                //     if (!handleHitSpeedLimit) { // BYPASS MIN ARC IF TILTING
+                //         this.handleActual.x = shoulderMid.x + (hdx / hDist) * minRadius;
+                //         this.handleActual.y = shoulderMid.y + (hdy / hDist) * minRadius;
+                //     }
+                // }
             }
         }
 
@@ -400,34 +390,77 @@ export default class Bat {
 
     draw(ctx: CanvasRenderingContext2D): void {
         this.drawBat(ctx);
-        //this.drawArms(ctx);
+        this.drawArms(ctx);
         this.drawDebug(ctx);
     }
 
     private drawBat(ctx: CanvasRenderingContext2D): void {
-        const dir: Vec2 = { x: Math.cos(this.batAngle), y: Math.sin(this.batAngle) };
-        const handleBladeJunction: Vec2 = {
-            x: this.handleTop.x + dir.x * this.HANDLE_LENGTH,
-            y: this.handleTop.y + dir.y * this.HANDLE_LENGTH,
-        };
+        ctx.save();
+        
+        // Transform to bat's local space. 
+        // In local space, (0,0) is handleTop, X-axis points down the length of the bat.
+        ctx.translate(this.handleTop.x, this.handleTop.y);
+        ctx.rotate(this.batAngle);
 
-        // Handle — thin
+        const hl = this.HANDLE_LENGTH;
+        const tl = this.TOTAL_LENGTH;
+        const bl = tl - hl; // Blade length
+
+        // Positive local Y points LEFT (back of the bat). Negative local Y points RIGHT (front hitting face).
+        const hr = this.HANDLE_WIDTH / 2; 
+        const frontY = -hr; // Perfectly flat front face matching the handle
+        const toeBackY = hr * 0.5; // Toe tapers to be a bit thin at the very bottom
+        const maxSpineY = this.BLADE_WIDTH * 0.9; // Max thickness of the sweet spot
+        const swellX = hl + bl * 0.65; // Position of the sweet spot along the length
+
+        // 1. Draw Bat Body (Wood Blade)
         ctx.beginPath();
-        ctx.moveTo(this.handleTop.x, this.handleTop.y);
-        ctx.lineTo(handleBladeJunction.x, handleBladeJunction.y);
-        ctx.strokeStyle = "#4a2c1a";
-        ctx.lineWidth = this.HANDLE_WIDTH;
-        ctx.lineCap = "round";
+        ctx.moveTo(hl, frontY); // Start at handle junction (front)
+        ctx.lineTo(tl - 3, frontY); // Flat front face all the way down
+        
+        // Rounded Toe
+        ctx.quadraticCurveTo(tl, frontY, tl, 0); 
+        ctx.lineTo(tl, toeBackY); 
+
+        // Curved Spine (Back of the bat)
+        ctx.bezierCurveTo(
+            swellX, maxSpineY + 5,          // CP1: Pulls the curve out to form the sweet spot
+            hl + bl * 0.2, maxSpineY * 0.4, // CP2: Tapers back in towards the handle
+            hl, hr                          // End at handle junction (back)
+        );
+        ctx.closePath();
+
+        // Fill wood color
+        ctx.fillStyle = "#e6cba8"; // Light English Willow
+        ctx.fill();
+        ctx.strokeStyle = "#8a5a2b"; // Darker wood outline
+        ctx.lineWidth = 1.5;
         ctx.stroke();
 
-        // Blade — thick
+        // 2. Draw Handle / Grip
         ctx.beginPath();
-        ctx.moveTo(handleBladeJunction.x, handleBladeJunction.y);
-        ctx.lineTo(this.bladeTip.x, this.bladeTip.y);
-        ctx.strokeStyle = "#d9a066";
-        ctx.lineWidth = this.BLADE_WIDTH;
-        ctx.lineCap = "round";
+        ctx.moveTo(0, -hr);
+        ctx.lineTo(hl, -hr);
+        ctx.lineTo(hl, hr);
+        ctx.lineTo(0, hr);
+        ctx.closePath();
+        
+        ctx.fillStyle = "#d32f2f"; // MRF Red Grip
+        ctx.fill();
         ctx.stroke();
+
+        // 3. Draw Details (MRF Sticker)
+        ctx.save();
+        ctx.fillStyle = "#d32f2f"; // Red sticker
+        ctx.font = "bold 16px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        // Place sticker halfway down the blade, centered vertically
+        ctx.translate(hl + bl * 0.45, 0);
+        ctx.fillText("MRF", 0, 0);
+        ctx.restore();
+
+        ctx.restore();
     }
 
     private drawArms(ctx: CanvasRenderingContext2D): void {
