@@ -34,23 +34,30 @@ export default class Bat {
     private readonly HANDLE_STIFFNESS_Y = 30; // Increased so it hits speed limit!for now
     // --- BAT BREAKDOWN ---
     private readonly HANDLE_LENGTH = 56;  // 33% of the bat
-    private readonly BLADE_LENGTH = 112;  // 67% of the bat
-    private readonly TOTAL_LENGTH = this.HANDLE_LENGTH + this.BLADE_LENGTH;
+    private readonly BLADE_LENGTH = 2*this.HANDLE_LENGTH; // 67% of the bat
+    private readonly TOTAL_BAT_LENGTH = this.HANDLE_LENGTH + this.BLADE_LENGTH;
+    private readonly TOTAL_RIGHT_ARM_LENGTH  =  this.TOTAL_BAT_LENGTH*0.7777;
+    private readonly TOTAL_LEFT_ARM_LENGTH = this.TOTAL_BAT_LENGTH*0.58333;
     // --- WIDTHS ---
-    private readonly HANDLE_WIDTH = 10;
+
+    private readonly HANDLE_WIDTH = this.TOTAL_BAT_LENGTH*.0388888888;
     private readonly BLADE_WIDTH = 22;
 
     // --- FRONT ARM ---
-    private readonly FRONT_UPPER_ARM = 76;
-    private readonly FRONT_LOWER_ARM = 74;
+    private readonly FRONT_UPPER_ARM = this.TOTAL_LEFT_ARM_LENGTH*.3619;
+    private readonly FRONT_LOWER_ARM = this.TOTAL_LEFT_ARM_LENGTH-this.FRONT_UPPER_ARM;
 
     // --- BACK ARM ---
-    private readonly BACK_UPPER_ARM = 64;
-    private readonly BACK_LOWER_ARM = 62;
+    private readonly BACK_UPPER_ARM = this.TOTAL_RIGHT_ARM_LENGTH*.4366;
+    private readonly BACK_LOWER_ARM = this.TOTAL_RIGHT_ARM_LENGTH-this.BACK_UPPER_ARM;
+
+    private readonly SHOULDER_JOINT_OFFSET =   (this.FRONT_UPPER_ARM + this.FRONT_LOWER_ARM)/5;
+
+
 
     // --- SHOULDER ANCHORS ---
     private readonly FRONT_SHOULDER_OFFSET = { x: 0, y: 0 };
-    private readonly BACK_SHOULDER_OFFSET = { x: 30, y: -4 };
+    private readonly BACK_SHOULDER_OFFSET = { x: this.SHOULDER_JOINT_OFFSET, y: 0 };
 
     // How far the bat's center of mass sits from the raw cursor point,
     // perpendicular to the bat's own axis. Purely a feel/tuning constant —
@@ -151,7 +158,7 @@ export default class Bat {
         };
         const FRONT_MAX = this.FRONT_UPPER_ARM + this.FRONT_LOWER_ARM;
         const BACK_MAX = this.BACK_UPPER_ARM + this.BACK_LOWER_ARM;
-        const comOffsetFromTop = this.TOTAL_LENGTH * BAT_CENTER_OF_MASS_RATIO;
+        const comOffsetFromTop = this.TOTAL_BAT_LENGTH * BAT_CENTER_OF_MASS_RATIO;
         
         // 1. Mouse Target Clamping (Safe Zone)
         const rawMouseX = this.mouse.x + this.GRIP_OFFSET_FROM_CURSOR;
@@ -265,8 +272,8 @@ export default class Bat {
         
         this.handleTop = { x: this.handleActual.x, y: this.handleActual.y };
         this.bladeTip = {
-            x: this.handleTop.x + dir.x * this.TOTAL_LENGTH,
-            y: this.handleTop.y + dir.y * this.TOTAL_LENGTH,
+            x: this.handleTop.x + dir.x * this.TOTAL_BAT_LENGTH,
+            y: this.handleTop.y + dir.y * this.TOTAL_BAT_LENGTH,
         };
 
         const backHandPosition = 0.0;
@@ -403,7 +410,7 @@ export default class Bat {
         ctx.rotate(this.batAngle);
 
         const hl = this.HANDLE_LENGTH;
-        const tl = this.TOTAL_LENGTH;
+        const tl = this.TOTAL_BAT_LENGTH;
         const bl = tl - hl; // Blade length
 
         // Positive local Y points LEFT (back of the bat). Negative local Y points RIGHT (front hitting face).
