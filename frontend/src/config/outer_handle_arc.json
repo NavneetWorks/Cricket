@@ -1,0 +1,21 @@
+[
+  { "angle": 0, "radius": 155 },
+  { "angle": 10, "radius": 158 },
+  { "angle": 20, "radius": 161 },
+  { "angle": 30, "radius": 163 },
+  { "angle": 40, "radius": 166 },
+  { "angle": 50, "radius": 169 },
+  { "angle": 60, "radius": 172 },
+  { "angle": 70, "radius": 175 },
+  { "angle": 80, "radius": 178 },
+  { "angle": 90, "radius": 180 },
+  { "angle": 100, "radius": 176 },
+  { "angle": 110, "radius": 156 },
+  { "angle": 120, "radius": 130 },
+  { "angle": 130, "radius": 111 },
+  { "angle": 140, "radius": 96 },
+  { "angle": 150, "radius": 85 },
+  { "angle": 160, "radius": 77 },
+  { "angle": 170, "radius": 73 },
+  { "angle": 180, "radius": 70 }
+]

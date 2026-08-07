@@ -1,4 +1,6 @@
 import { BAT_CENTER_OF_MASS_RATIO } from "../game/constants";
+import outerArcJson from "../config/outer_handle_arc.json";
+import innerArcJson from "../config/inner_handle_arc.json";
 
 type Vec2 = { x: number; y: number };
 
@@ -7,8 +9,23 @@ export default class Bat {
     private readonly BAT_MASS = 1.0;
     private readonly SPRING_STIFFNESS = 260;
     private readonly DAMPING = 22;
+    // --- Wrist Rotation Physics ---
+    private readonly MAX_HANDLE_SPEED_UP: number = 100; // Force it to be very slow for testing
+    private readonly HANDLE_COM_SPEED_SCALE: number = 0.1; // Make it extremely restricted
+
+    // Debug vars
+    private debug_comUpSpeed = 0;
+    private debug_handleUpSpeed = 0;
+    private debug_handleRightSpeed = 0;
+    private debug_actualDeltaY = 0;
+    private debug_maxDeltaY = 0;
+    private debug_isHit = false;
+    private debug_dx = 0;
+    private debug_dy = 0;
+    private prevHandlePos: Vec2 | null = null;
+    
     private readonly GRAVITY = 600;
-    private comTarget: Vec2 = { x: 0, y: 0 };   // where mouse wants it
+    private comTarget: Vec2 = { x: 300, y: 550 };   // where mouse wants it
     private comActual: Vec2 = { x: 700, y: 350 }; // where it PHYSICALLY is (start near shoulder)
     private comVelocity: Vec2 = { x: 0, y: 0 };
 
@@ -77,6 +94,32 @@ export default class Bat {
 
     private mouse: Vec2 = { x: 0, y: 0 };
 
+    private getInterpolatedRadius(pts: { angle: number, radius: number }[], targetAngle: number, scaleDivisor: number = 200): number {
+        if (pts.length === 0) return 100;
+        
+        // Clamp the angle to the bounds of the JSON array so it doesn't extrapolate
+        const minAngle = pts[0].angle;
+        const maxAngle = pts[pts.length - 1].angle;
+        let clampedAngle = Math.max(minAngle, Math.min(maxAngle, targetAngle));
+
+        let p1 = pts[0];
+        let p2 = pts[pts.length - 1];
+
+        for (let i = 0; i < pts.length - 1; i++) {
+            if (clampedAngle >= pts[i].angle && clampedAngle <= pts[i + 1].angle) {
+                p1 = pts[i];
+                p2 = pts[i + 1];
+                break;
+            }
+        }
+
+        const t = (clampedAngle - p1.angle) / ((p2.angle - p1.angle) || 1);
+        const interpolatedRadius = p1.radius + t * (p2.radius - p1.radius);
+        
+        const frontMax = this.FRONT_UPPER_ARM + this.FRONT_LOWER_ARM;
+        return interpolatedRadius * (frontMax / scaleDivisor);
+    }
+
     update(mouseX: number, mouseY: number, dt: number): void {
         this.mouse.x = mouseX;
         this.mouse.y = mouseY;
@@ -87,7 +130,6 @@ export default class Bat {
             this.frontWristTarget,
             this.FRONT_UPPER_ARM,
             this.FRONT_LOWER_ARM,
-            this.FRONT_ARM_MIN_ELBOW_ANGLE,
             this.FRONT_ARM_BEND,
             "front"
         );
@@ -96,7 +138,6 @@ export default class Bat {
             this.backWristTarget,
             this.BACK_UPPER_ARM,
             this.BACK_LOWER_ARM,
-            this.BACK_ARM_MIN_ELBOW_ANGLE,
             this.BACK_ARM_BEND,
             "back"
         );
@@ -145,72 +186,81 @@ export default class Bat {
         };
 
         const dtClamp = Math.min(dt, 0.05);
-        this.handleActual.x += (handleIdealTarget.x - this.handleActual.x) * this.HANDLE_STIFFNESS_X * dtClamp;
-        this.handleActual.y += (handleIdealTarget.y - this.handleActual.y) * this.HANDLE_STIFFNESS_Y * dtClamp;
+        let desiredHandleX = this.handleActual.x + (handleIdealTarget.x - this.handleActual.x) * this.HANDLE_STIFFNESS_X * dtClamp;
+        let desiredHandleY = this.handleActual.y + (handleIdealTarget.y - this.handleActual.y) * this.HANDLE_STIFFNESS_Y * dtClamp;
 
-        // 3. Iterative Constraint Solver (Arm Limits & Rigid Body Length)
+        // Apply UP speed limit (Wrist Rotation mechanics)
+        const comUpSpeed = -this.comVelocity.y; // Positive if COM is moving UP
+        let maxHandleUpSpeed = Infinity;
         
-        const fAngleRad = this.FRONT_ARM_MIN_ELBOW_ANGLE * (Math.PI / 180);
-        const fMin = Math.sqrt(this.FRONT_UPPER_ARM**2 + this.FRONT_LOWER_ARM**2 - 2 * this.FRONT_UPPER_ARM * this.FRONT_LOWER_ARM * Math.cos(fAngleRad));
+        if (comUpSpeed > 0) {
+            maxHandleUpSpeed = Math.min(comUpSpeed * this.HANDLE_COM_SPEED_SCALE, this.MAX_HANDLE_SPEED_UP);
+        }
         
-        const bAngleRad = this.BACK_ARM_MIN_ELBOW_ANGLE * (Math.PI / 180);
-        const bMin = Math.sqrt(this.BACK_UPPER_ARM**2 + this.BACK_LOWER_ARM**2 - 2 * this.BACK_UPPER_ARM * this.BACK_LOWER_ARM * Math.cos(bAngleRad));
+        const maxHandleDeltaY = maxHandleUpSpeed * dtClamp;
+        const actualDeltaY = this.handleActual.y - desiredHandleY; // Positive if Handle is trying to move UP
+        
+        let handleHitSpeedLimit = false;
+
+        if (actualDeltaY > maxHandleDeltaY) {
+            // Handle is trying to go UP faster than allowed. Clamp it!
+            desiredHandleY = this.handleActual.y - maxHandleDeltaY;
+            handleHitSpeedLimit = true;
+        }
+
+        this.debug_comUpSpeed = comUpSpeed;
+        this.debug_actualDeltaY = actualDeltaY;
+        this.debug_maxDeltaY = maxHandleDeltaY;
+        this.debug_isHit = handleHitSpeedLimit;
+
+        this.handleActual.x = desiredHandleX;
+        this.handleActual.y = desiredHandleY;
 
         const frontHandPosition = 0.5;
         const frontWristDistFromTop = this.HANDLE_LENGTH * frontHandPosition;
 
         for (let i = 0; i < 5; i++) {
-            // A. Arm Constraints on Handle
-            
-            // We need the direction from handle to COM to find the wrist positions on the handle
-            let hdx = this.comActual.x - this.handleActual.x;
-            let hdy = this.comActual.y - this.handleActual.y;
-            let hDist = Math.hypot(hdx, hdy);
-            if (hDist < 0.01) { hdx = 0; hdy = 1; hDist = 1; }
-            const dirX = hdx / hDist;
-            const dirY = hdy / hDist;
-
-            // (Front Arm - attached to middle of handle)
-            const fwX = this.handleActual.x + dirX * frontWristDistFromTop;
-            const fwY = this.handleActual.y + dirY * frontWristDistFromTop;
-            const fDist = Math.hypot(fwX - this.FRONT_SHOULDER.x, fwY - this.FRONT_SHOULDER.y);
-            
-            if (fDist < fMin && fDist > 0.01) {
-                const targetX = this.FRONT_SHOULDER.x + (fwX - this.FRONT_SHOULDER.x) / fDist * fMin;
-                const targetY = this.FRONT_SHOULDER.y + (fwY - this.FRONT_SHOULDER.y) / fDist * fMin;
-                this.handleActual.x += (targetX - fwX);
-                this.handleActual.y += (targetY - fwY);
-            }
-            if (fDist > FRONT_MAX && fDist > 0.01) {
-                const targetX = this.FRONT_SHOULDER.x + (fwX - this.FRONT_SHOULDER.x) / fDist * FRONT_MAX;
-                const targetY = this.FRONT_SHOULDER.y + (fwY - this.FRONT_SHOULDER.y) / fDist * FRONT_MAX;
-                this.handleActual.x += (targetX - fwX);
-                this.handleActual.y += (targetY - fwY);
-            }
-            
-            // (Back Arm)
-            const bDist = Math.hypot(this.handleActual.x - this.BACK_SHOULDER.x, this.handleActual.y - this.BACK_SHOULDER.y);
-            if (bDist < bMin && bDist > 0.01) {
-                this.handleActual.x = this.BACK_SHOULDER.x + (this.handleActual.x - this.BACK_SHOULDER.x) / bDist * bMin;
-                this.handleActual.y = this.BACK_SHOULDER.y + (this.handleActual.y - this.BACK_SHOULDER.y) / bDist * bMin;
-            }
-            if (bDist > BACK_MAX && bDist > 0.01) {
-                this.handleActual.x = this.BACK_SHOULDER.x + (this.handleActual.x - this.BACK_SHOULDER.x) / bDist * BACK_MAX;
-                this.handleActual.y = this.BACK_SHOULDER.y + (this.handleActual.y - this.BACK_SHOULDER.y) / bDist * BACK_MAX;
-            }
-
-            // (Handle Ceiling on Follow-Through - Right side of shoulder)
-            if (this.handleActual.x > this.FRONT_SHOULDER.x && this.handleActual.y < this.FRONT_SHOULDER.y) {
-                this.handleActual.y = this.FRONT_SHOULDER.y;
-            }
-
-            // B. Rigid Body Projection (Handle must be exactly `comOffsetFromTop` away from COM)
+            // A. Rigid Body Projection (Handle and COM must be `comOffsetFromTop` apart)
             const dx = this.handleActual.x - this.comActual.x;
             const dy = this.handleActual.y - this.comActual.y;
-            const dist = Math.hypot(dx, dy);
-            if (dist > 0.01) {
-                this.handleActual.x = this.comActual.x + (dx / dist) * comOffsetFromTop;
-                this.handleActual.y = this.comActual.y + (dy / dist) * comOffsetFromTop;
+            const bDist = Math.hypot(dx, dy);
+            if (bDist > 0.01) {
+                const diff = bDist - comOffsetFromTop;
+                
+                // Move both equally towards/away from each other to satisfy the length
+                const offsetX = (dx / bDist) * diff * 0.5;
+                const offsetY = (dy / bDist) * diff * 0.5;
+                
+                this.handleActual.x -= offsetX;
+                this.handleActual.y -= offsetY;
+                this.comActual.x += offsetX;
+                this.comActual.y += offsetY;
+            }
+
+            // B. Arc Constraints on Handle
+            
+            // 1. Strict Ceiling (Handle cannot go into the negative Y area above shoulder)
+            if (this.handleActual.y < shoulderMid.y) {
+                this.handleActual.y = shoulderMid.y;
+            }
+
+            // 2. Radial Arc Constraints
+            let hdx = this.handleActual.x - shoulderMid.x;
+            let hdy = this.handleActual.y - shoulderMid.y;
+            let hDist = Math.hypot(hdx, hdy);
+
+            if (hDist > 0.01) {
+                let angleDeg = Math.atan2(hdy, hdx) * 180 / Math.PI;
+                let maxRadius = this.getInterpolatedRadius(outerArcJson, angleDeg, 200);
+                let minRadius = this.getInterpolatedRadius(innerArcJson, angleDeg, 400);
+
+                if (hDist > maxRadius) {
+                    this.handleActual.x = shoulderMid.x + (hdx / hDist) * maxRadius;
+                    this.handleActual.y = shoulderMid.y + (hdy / hDist) * maxRadius;
+                } else if (hDist < minRadius) {
+                    this.handleActual.x = shoulderMid.x + (hdx / hDist) * minRadius;
+                    this.handleActual.y = shoulderMid.y + (hdy / hDist) * minRadius;
+                }
             }
         }
 
@@ -241,6 +291,12 @@ export default class Bat {
         };
 
         this.centerOfMass = this.comActual;
+
+        if (this.prevHandlePos && dt > 0) {
+            this.debug_handleUpSpeed = (this.prevHandlePos.y - this.handleActual.y) / dt;
+            this.debug_handleRightSpeed = (this.handleActual.x - this.prevHandlePos.x) / dt;
+        }
+        this.prevHandlePos = { x: this.handleActual.x, y: this.handleActual.y };
     }
 
     private simulateComPhysics(dt: number): void {
@@ -281,7 +337,6 @@ export default class Bat {
         target: Vec2,
         upperLen: number,
         lowerLen: number,
-        minAngleDeg: number,
         bendSide: 1 | -1,
         which: "front" | "back"
     ): void {
@@ -289,9 +344,7 @@ export default class Bat {
         const dy = target.y - shoulder.y;
         const rawDist = Math.hypot(dx, dy);
 
-        const minAngleRad = minAngleDeg * (Math.PI / 180);
-        const minReachMath = Math.sqrt(upperLen**2 + lowerLen**2 - 2 * upperLen * lowerLen * Math.cos(minAngleRad));
-        const minReach = Math.max(Math.abs(upperLen - lowerLen) + this.EPS, minReachMath);
+        const minReach = Math.abs(upperLen - lowerLen) + this.EPS;
         const maxReach = upperLen + lowerLen - this.EPS;
         const dist = Math.min(Math.max(rawDist, minReach), maxReach);
 
@@ -347,7 +400,7 @@ export default class Bat {
 
     draw(ctx: CanvasRenderingContext2D): void {
         this.drawBat(ctx);
-        this.drawArms(ctx);
+        //this.drawArms(ctx);
         this.drawDebug(ctx);
     }
 
@@ -409,5 +462,51 @@ export default class Bat {
         ctx.arc(this.centerOfMass.x, this.centerOfMass.y, 4, 0, 2 * Math.PI);
         ctx.fillStyle = "yellow";
         ctx.fill();
+
+        // Debug draw shoulderMid center
+        const shoulderMid = {
+            x: (this.FRONT_SHOULDER.x + this.BACK_SHOULDER.x) / 2,
+            y: (this.FRONT_SHOULDER.y + this.BACK_SHOULDER.y) / 2,
+        };
+        ctx.beginPath();
+        ctx.arc(shoulderMid.x, shoulderMid.y, 4, 0, 2 * Math.PI);
+        ctx.fillStyle = "lime";
+        ctx.fill();
+
+        // Debug draw outer arc
+        ctx.beginPath();
+        for (let a = 0; a <= 180; a += 5) {
+            let maxRadius = this.getInterpolatedRadius(outerArcJson, a);
+            let px = shoulderMid.x + Math.cos(a * Math.PI / 180) * maxRadius;
+            let py = shoulderMid.y + Math.sin(a * Math.PI / 180) * maxRadius;
+            if (a === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        // Debug draw inner arc
+        ctx.beginPath();
+        for (let a = 0; a <= 180; a += 5) {
+            let minRadius = this.getInterpolatedRadius(innerArcJson, a, 400);
+            let px = shoulderMid.x + Math.cos(a * Math.PI / 180) * minRadius;
+            let py = shoulderMid.y + Math.sin(a * Math.PI / 180) * minRadius;
+            if (a === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.strokeStyle = "rgba(255, 100, 100, 0.3)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Debug text for Wrist Rotation
+        ctx.fillStyle = "black";
+        ctx.font = "bold 16px monospace";
+        ctx.textAlign = "center";
+        
+        ctx.fillText(`COM Y: ${this.comActual.y.toFixed(2)}`, ctx.canvas.width / 2, 30);
+        ctx.fillText(`Handle Y: ${this.handleActual.y.toFixed(2)}`, ctx.canvas.width / 2, 50);
+        ctx.fillText(`Handle X: ${this.handleActual.x.toFixed(2)}`, ctx.canvas.width / 2, 70);
+        
+        ctx.textAlign = "left"; // Reset alignment
     }
 }
