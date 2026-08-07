@@ -8,7 +8,7 @@ export default class Ball {
     
     public readonly radius = 8;
     private readonly gravity = 800; // Gravity ki taqat
-    private readonly restitution = 0.6; // Bounce kitna hoga (0.6 yani 60% speed bachegi tip ke baad)
+    private readonly restitution = 0.5; // Bounce kitna hoga (0.6 yani 60% speed bachegi tip ke baad)
     private readonly friction = 0.98; // Zameen par ragad (Friction)
 
     public isActive = false; // Check karne ke liye ki ball hawa mein hai ya nahi

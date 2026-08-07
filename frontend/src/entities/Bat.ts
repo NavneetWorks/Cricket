@@ -77,12 +77,12 @@ export default class Bat {
 
     private readonly EPS = 0.01;
 
-    private readonly SHOULDER_HEIGHT = CANVAS_HEIGHT-GROUND_HEIGHT-this.TOTAL_BAT_LENGTH*1.555; // Y position of the shoulder joints
+    private readonly SHOULDER_HEIGHT = CANVAS_HEIGHT-GROUND_HEIGHT-this.TOTAL_BAT_LENGTH*1.2; // Y position of the shoulder joints
 
 
 
     // Joint Positions
-    private FRONT_SHOULDER: Vec2 = { x: 400, y: this.SHOULDER_HEIGHT };
+    private FRONT_SHOULDER: Vec2 = { x: 200, y: this.SHOULDER_HEIGHT };
     private BACK_SHOULDER: Vec2 = {
         x: this.FRONT_SHOULDER.x + this.BACK_SHOULDER_OFFSET.x,
         y: this.FRONT_SHOULDER.y + this.BACK_SHOULDER_OFFSET.y,
@@ -90,6 +90,11 @@ export default class Bat {
 
     // Computed each frame
     private batAngle = 0;
+    
+    // Real Physics - Bat ki swing speed track karne ke liye
+    private prevHandleTop: Vec2 = { x: 0, y: 0 };
+    private prevBatAngle: number = 0;
+    private angularVelocity: number = 0;
     private centerOfMass: Vec2 = { x: 0, y: 0 };
     private handleTop: Vec2 = { x: 0, y: 0 };
     private bladeTip: Vec2 = { x: 0, y: 0 };
@@ -238,20 +243,28 @@ export default class Bat {
 
             // B. Arc Constraints on Handle
             
-            // 1. Strict Ceiling (Handle cannot go into the negative Y area above shoulder)
-            if (this.handleActual.y < shoulderMid.y) {
-                this.handleActual.y = shoulderMid.y;
-            }
-
-            // 2. Radial Arc Constraints
             let hdx = this.handleActual.x - shoulderMid.x;
             let hdy = this.handleActual.y - shoulderMid.y;
             let hDist = Math.hypot(hdx, hdy);
 
             if (hDist > 0.01) {
-                let angleDeg = Math.atan2(hdy, hdx) * 180 / Math.PI;
+                let angleDeg = (Math.atan2(hdy, hdx) * 180) / Math.PI;
+                
+                // 1. Angle Ceiling (-30 degree se upar roknna)
+                const MIN_ANGLE = -30; 
+                
+                // Agar angle -30 se aur chota (-40, -90) hai, toh usey -30 par lock kar do
+                if (angleDeg < MIN_ANGLE && angleDeg >= -180) {
+                    angleDeg = MIN_ANGLE;
+                    const rad = (angleDeg * Math.PI) / 180;
+                    hdx = Math.cos(rad) * hDist;
+                    hdy = Math.sin(rad) * hDist;
+                    this.handleActual.x = shoulderMid.x + hdx;
+                    this.handleActual.y = shoulderMid.y + hdy;
+                }
+
+                // 2. Radial Arc Constraints (JSON se radius check karna)
                 let maxRadius = this.getInterpolatedRadius(outerArcJson, angleDeg, 200);
-                // let minRadius = this.getInterpolatedRadius(innerArcJson, angleDeg, 400);
 
                 if (hDist > maxRadius) {
                     this.handleActual.x = shoulderMid.x + (hdx / hDist) * maxRadius;
@@ -299,6 +312,16 @@ export default class Bat {
             this.debug_handleRightSpeed = (this.handleActual.x - this.prevHandlePos.x) / dt;
         }
         this.prevHandlePos = { x: this.handleActual.x, y: this.handleActual.y };
+
+        // --- REAL PHYSICS UPDATE ---
+        if (dt > 0) {
+            this.handleVelocity.x = (this.handleTop.x - this.prevHandleTop.x) / dt;
+            this.handleVelocity.y = (this.handleTop.y - this.prevHandleTop.y) / dt;
+            this.angularVelocity = (this.batAngle - this.prevBatAngle) / dt;
+        }
+
+        this.prevHandleTop = { x: this.handleTop.x, y: this.handleTop.y };
+        this.prevBatAngle = this.batAngle;
     }
     // Check karega ki ball Bat se takrai ya nahi
     public checkHit(ball: any): void {
@@ -332,15 +355,22 @@ export default class Bat {
         // 4. Hit Detection! (Agar doori Ball ke radius + Bat ki half motaai se kam hai)
         if (distance <= ball.radius + (this.HANDLE_WIDTH / 2)) {
             
-            // -- PHYSICS SHOT (Temporary simple shot for testing) --
-            // Ball ko naya Momentum aur direction dena
-            ball.vel.x = Math.abs(ball.vel.x) * 1.5; // X speed tez karke wapas bhejna
-            ball.vel.y = -Math.abs(ball.vel.y) - 300; // Upar hawa mein uthana
+            // --- REAL KINEMATICS PHYSICS ---
+            const L = t * this.TOTAL_BAT_LENGTH;
+            const batHitSpeedX = this.handleVelocity.x - (this.angularVelocity * L * Math.sin(this.batAngle));
+            const batHitSpeedY = this.handleVelocity.y + (this.angularVelocity * L * Math.cos(this.batAngle));
+
+            const restitution = 0.1; // Bounciness
+            const relativeVx = ball.vel.x - batHitSpeedX;
+            const relativeVy = ball.vel.y - batHitSpeedY;
+
+            ball.vel.x = batHitSpeedX - (relativeVx * restitution);
+            ball.vel.y = batHitSpeedY - (relativeVy * restitution);
             
             // Glitch se bachne ke liye ball ko bat se thoda bahar dhakel dena
             ball.pos.x += 10; 
             
-            console.log("CRACK! The ball was Hit!");
+            console.log("PERFECT SHOT! Bat Speed X:", Math.floor(batHitSpeedX), " Y:", Math.floor(batHitSpeedY));
         }
     }
     private simulateComPhysics(dt: number): void {
@@ -625,11 +655,11 @@ export default class Bat {
 
         // Debug draw outer arc
         ctx.beginPath();
-        for (let a = 0; a <= 180; a += 5) {
-            let maxRadius = this.getInterpolatedRadius(outerArcJson, a);
+        for (let a = -30; a <= 180; a += 5) {
+            let maxRadius = this.getInterpolatedRadius(outerArcJson, a, 200);
             let px = shoulderMid.x + Math.cos(a * Math.PI / 180) * maxRadius;
             let py = shoulderMid.y + Math.sin(a * Math.PI / 180) * maxRadius;
-            if (a === 0) ctx.moveTo(px, py);
+            if (a === -30) ctx.moveTo(px, py);
             else ctx.lineTo(px, py);
         }
         ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
@@ -637,11 +667,11 @@ export default class Bat {
         ctx.stroke();
         // Debug draw inner arc
         ctx.beginPath();
-        for (let a = 0; a <= 180; a += 5) {
+        for (let a = -30; a <= 180; a += 5) {
             let minRadius = this.getInterpolatedRadius(innerArcJson, a, 400);
             let px = shoulderMid.x + Math.cos(a * Math.PI / 180) * minRadius;
             let py = shoulderMid.y + Math.sin(a * Math.PI / 180) * minRadius;
-            if (a === 0) ctx.moveTo(px, py);
+            if (a === -30) ctx.moveTo(px, py);
             else ctx.lineTo(px, py);
         }
         ctx.strokeStyle = "rgba(255, 100, 100, 0.3)";

@@ -21,14 +21,14 @@ export default class GameLoop{
     }
     public start(){
         this.lastFrameTime = performance.now();
-        window.addEventListener("mousedown", () => {
+        const throwNewBall = () => {
             
-            const minSpeed = 900;
-            const maxSpeed = 1300;
+            const minSpeed = 2000;
+            const maxSpeed = 3500;
             const randomSpeed = minSpeed + Math.random() * (maxSpeed - minSpeed);
             
-            const minAngle = 10;
-            const maxAngle = 20;
+            const minAngle = 5;
+            const maxAngle = 22;
             
             // RIGHT se LEFT fenkne ke liye changes:
             
@@ -42,7 +42,16 @@ export default class GameLoop{
             
             // Ball ko naye X aur naye Angle ke sath release karein
             this.ball.throwBall(startX, startY, randomSpeed, randomAngle); 
+        };
+         // 1. Mouse Click (Left Click) par ball fenkna
+        window.addEventListener("mousedown", throwNewBall);
+        // 2. Keyboard par 'Backspace' button dabane par ball fenkna
+        window.addEventListener("keydown", (event) => {
+            if (event.code === "Space") {
+                throwNewBall();
+            }
         });
+
         this.render();
         requestAnimationFrame(this.loop);
     }
