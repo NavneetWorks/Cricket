@@ -5,10 +5,17 @@ import {
     CANVAS_HEIGHT,
     GROUND_HEIGHT,
     GRAVITY,
-    RESTITUTION_BAT
+    RESTITUTION_BAT,
+    QUEUE_SIZE,
+    BAT_REGIONS_RESTITUTION
 } from "../game/constants";
 
 type Vec2 = { x: number; y: number };
+
+export interface BatRegion {
+    restitution: number;
+    history: { x: number; y: number; time: number }[];
+}
 
 export default class Bat {
 
@@ -110,6 +117,30 @@ export default class Bat {
     private backWrist: Vec2 = { x: 0, y: 0 };
 
     private mouse: Vec2 = { x: 0, y: 0 };
+    private currentTime: number = 0;
+    
+    // For rendering hit text
+    private lastHitStats: {
+        regionIndex: number;
+        batAngle: number;
+        batSpeedX: number;
+        batSpeedY: number;
+        ballSpeedBeforeX: number;
+        ballSpeedBeforeY: number;
+        ballSpeedAfterX: number;
+        ballSpeedAfterY: number;
+    } | null = null;
+
+    public regions: BatRegion[] = [];
+
+    constructor() {
+        for (let i = 0; i < 42; i++) {
+            this.regions.push({
+                restitution: BAT_REGIONS_RESTITUTION[i] || 0.3,
+                history: []
+            });
+        }
+    }
 
     private getInterpolatedRadius(pts: { angle: number, radius: number }[], targetAngle: number, scaleDivisor: number = 200): number {
         if (pts.length === 0) return 100;
@@ -143,8 +174,25 @@ export default class Bat {
         
         this.mouse.x = mouseX;
         this.mouse.y = mouseY;
+        this.currentTime += dt;
 
         this.updateBatPose(dt);
+        
+        // --- 42 REGIONS QUEUE UPDATE ---
+        const px = this.handleTop.x;
+        const py = this.handleTop.y;
+        for (let i = 0; i < 42; i++) {
+            const L = (i + 1) * 4; // 4th pixel of the region
+            const regionX = px + Math.cos(this.batAngle) * L;
+            const regionY = py + Math.sin(this.batAngle) * L;
+            
+            const queue = this.regions[i].history;
+            queue.push({ x: regionX, y: regionY, time: this.currentTime });
+            if (queue.length > QUEUE_SIZE) {
+                queue.shift(); // Remove oldest
+            }
+        }
+
         this.updateArm(
             this.FRONT_SHOULDER,
             this.frontWristTarget,
@@ -398,21 +446,67 @@ export default class Bat {
 
         if (hit) {
             
-            // --- REAL KINEMATICS PHYSICS ---
-            const L = t * this.TOTAL_BAT_LENGTH;
-            const batHitSpeedX = this.handleVelocity.x - (this.angularVelocity * L * Math.sin(this.batAngle));
-            const batHitSpeedY = this.handleVelocity.y + (this.angularVelocity * L * Math.cos(this.batAngle));
+            // --- 42 REGIONS PHYSICS (Data-Driven Queue) ---
+            const hitDistance = t * this.TOTAL_BAT_LENGTH;
+            let regionIndex = Math.floor(hitDistance / 4);
+            regionIndex = Math.max(0, Math.min(41, regionIndex));
 
+            const region = this.regions[regionIndex];
+            const queue = region.history;
+
+            const originalBallVelX = ball.vel.x;
+            const originalBallVelY = ball.vel.y;
+
+            let batHitSpeedX = 0;
+            let batHitSpeedY = 0;
+
+            if (queue.length > 1) {
+                const oldest = queue[0];
+                const latest = queue[queue.length - 1];
+                
+                const dx_q = latest.x - oldest.x;
+                const dy_q = latest.y - oldest.y;
+                const dist_q = Math.sqrt(dx_q * dx_q + dy_q * dy_q);
+                const time_q = latest.time - oldest.time;
+                
+                if (time_q > 0.0001 && dist_q > 0.0001) {
+                    const speed = dist_q / time_q;
+                    const dirX = dx_q / dist_q;
+                    const dirY = dy_q / dist_q;
+                    batHitSpeedX = dirX * speed;
+                    batHitSpeedY = dirY * speed;
+                }
+            } else {
+                // Fallback (Agar queue abhi poori nahi bhari ho)
+                const L = t * this.TOTAL_BAT_LENGTH;
+                batHitSpeedX = this.handleVelocity.x - (this.angularVelocity * L * Math.sin(this.batAngle));
+                batHitSpeedY = this.handleVelocity.y + (this.angularVelocity * L * Math.cos(this.batAngle));
+            }
+
+            // Normal Component Physics yahan laga sakte the, 
+            // par pehle is Data-Driven vector se dekhein takkar kaisi hoti hai!
             const relativeVx = ball.vel.x - batHitSpeedX;
             const relativeVy = ball.vel.y - batHitSpeedY;
 
-            ball.vel.x = batHitSpeedX - (relativeVx * RESTITUTION_BAT);
-            ball.vel.y = batHitSpeedY - (relativeVy * RESTITUTION_BAT);
+            ball.vel.x = batHitSpeedX - (relativeVx * region.restitution);
+            ball.vel.y = batHitSpeedY - (relativeVy * region.restitution);
             
+            // Capture for persistent debug text
+            this.lastHitStats = {
+                regionIndex: regionIndex,
+                batAngle: this.batAngle * (180 / Math.PI), // Convert to degrees
+                batSpeedX: batHitSpeedX,
+                batSpeedY: batHitSpeedY,
+                ballSpeedBeforeX: originalBallVelX,
+                ballSpeedBeforeY: originalBallVelY,
+                ballSpeedAfterX: ball.vel.x,
+                ballSpeedAfterY: ball.vel.y
+            };
+
             // Glitch se bachne ke liye ball ko bat se thoda bahar dhakel dena
             ball.pos.x += 10; 
             
-            console.log("PERFECT SHOT! Bat Speed X:", Math.floor(batHitSpeedX), " Y:", Math.floor(batHitSpeedY));
+            console.log(`HIT! Region: ${regionIndex}, Bounce: ${region.restitution}, Speed X: ${Math.floor(batHitSpeedX)}, Y: ${Math.floor(batHitSpeedY)}`);
         }
     }
     private simulateComPhysics(dt: number): void {
@@ -580,17 +674,10 @@ export default class Bat {
     //     ctx.fillStyle = "#d32f2f"; // Red sticker
     //     ctx.font = "bold 16px Arial";
     //     ctx.textAlign = "center";
-    //     ctx.textBaseline = "middle";
-    //     // Place sticker halfway down the blade, centered vertically
-    //     ctx.translate(hl + bl * 0.45, 0);
-    //     ctx.fillText("MRF", 0, 0);
-    //     ctx.restore();
-
     //     ctx.restore();
     // }
     private drawBat(ctx: CanvasRenderingContext2D): void {
     ctx.save();
-
     ctx.translate(this.handleTop.x, this.handleTop.y);
     ctx.rotate(this.batAngle);
 
@@ -720,15 +807,20 @@ export default class Bat {
         ctx.lineWidth = 1;
         ctx.stroke();
 
-        // Debug text for Wrist Rotation
-        ctx.fillStyle = "black";
-        ctx.font = "bold 16px monospace";
-        ctx.textAlign = "center";
-        
-        ctx.fillText(`COM Y: ${this.comActual.y.toFixed(2)}`, ctx.canvas.width / 2, 30);
-        ctx.fillText(`Handle Y: ${this.handleActual.y.toFixed(2)}`, ctx.canvas.width / 2, 50);
-        ctx.fillText(`Handle X: ${this.handleActual.x.toFixed(2)}`, ctx.canvas.width / 2, 70);
-        
-        ctx.textAlign = "left"; // Reset alignment
+        // Debug text for Collision Stats
+        if (this.lastHitStats) {
+            ctx.fillStyle = "black";
+            ctx.font = "bold 18px monospace";
+            ctx.textAlign = "center";
+            
+            const stats = this.lastHitStats;
+            ctx.fillText(`HIT REGION: ${stats.regionIndex}`, ctx.canvas.width / 2, 30);
+            ctx.fillText(`BAT ANGLE: ${stats.batAngle.toFixed(1)}°`, ctx.canvas.width / 2, 55);
+            ctx.fillText(`BAT SPEED: X=${stats.batSpeedX.toFixed(1)} Y=${stats.batSpeedY.toFixed(1)}`, ctx.canvas.width / 2, 80);
+            ctx.fillText(`BALL BEFORE: X=${stats.ballSpeedBeforeX.toFixed(1)} Y=${stats.ballSpeedBeforeY.toFixed(1)}`, ctx.canvas.width / 2, 105);
+            ctx.fillText(`BALL AFTER: X=${stats.ballSpeedAfterX.toFixed(1)} Y=${stats.ballSpeedAfterY.toFixed(1)}`, ctx.canvas.width / 2, 130);
+            
+            ctx.textAlign = "left"; // Reset alignment
+        }
     }
 }
