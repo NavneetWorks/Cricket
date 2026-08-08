@@ -7,7 +7,8 @@ import {
     GRAVITY,
     RESTITUTION_BAT,
     QUEUE_SIZE,
-    BAT_REGIONS_RESTITUTION
+    BAT_REGIONS_RESTITUTION,
+    GLOBAL_RESTITUTION_SCALE
 } from "../game/constants";
 
 type Vec2 = { x: number; y: number };
@@ -136,7 +137,7 @@ export default class Bat {
     constructor() {
         for (let i = 0; i < 42; i++) {
             this.regions.push({
-                restitution: BAT_REGIONS_RESTITUTION[i] || 0.3,
+                restitution: ((BAT_REGIONS_RESTITUTION[i] || 30) * GLOBAL_RESTITUTION_SCALE) / 100,
                 history: []
             });
         }
@@ -483,13 +484,31 @@ export default class Bat {
                 batHitSpeedY = this.handleVelocity.y + (this.angularVelocity * L * Math.cos(this.batAngle));
             }
 
-            // Normal Component Physics yahan laga sakte the, 
-            // par pehle is Data-Driven vector se dekhein takkar kaisi hoti hai!
+            // --- NORMAL & TANGENT COLLISION PHYSICS ---
             const relativeVx = ball.vel.x - batHitSpeedX;
             const relativeVy = ball.vel.y - batHitSpeedY;
 
-            ball.vel.x = batHitSpeedX - (relativeVx * region.restitution);
-            ball.vel.y = batHitSpeedY - (relativeVy * region.restitution);
+            // 1. Calculate Bat's Normal Vector
+            let normalX = -Math.sin(this.batAngle);
+            let normalY = Math.cos(this.batAngle);
+
+            // 2. Ensure Normal faces the incoming ball relative to bat
+            if (relativeVx * normalX + relativeVy * normalY > 0) {
+                normalX = -normalX;
+                normalY = -normalY;
+            }
+
+            // 3. Decompose relative velocity into Normal and Tangent components
+            const v_normal = relativeVx * normalX + relativeVy * normalY;
+            const v_tangentX = relativeVx - v_normal * normalX;
+            const v_tangentY = relativeVy - v_normal * normalY;
+
+            // 4. Apply restitution ONLY to the normal component
+            const v_normal_after = -v_normal * region.restitution;
+
+            // 5. Reconstruct final velocity
+            ball.vel.x = batHitSpeedX + (v_normal_after * normalX) + v_tangentX;
+            ball.vel.y = batHitSpeedY + (v_normal_after * normalY) + v_tangentY;
             
             // Capture for persistent debug text
             this.lastHitStats = {
