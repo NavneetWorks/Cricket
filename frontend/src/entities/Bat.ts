@@ -3,7 +3,9 @@ import outerArcJson from "../config/outer_handle_arc.json";
 import innerArcJson from "../config/inner_handle_arc.json";
 import {
     CANVAS_HEIGHT,
-    GROUND_HEIGHT
+    GROUND_HEIGHT,
+    GRAVITY,
+    RESTITUTION_BAT
 } from "../game/constants";
 
 type Vec2 = { x: number; y: number };
@@ -27,12 +29,13 @@ export default class Bat {
     private debug_dy = 0;
     private prevHandlePos: Vec2 | null = null;
     
-    private readonly GRAVITY = 600;
     private comTarget: Vec2 = { x: 300, y: 550 };   // where mouse wants it
     private comActual: Vec2 = { x: 700, y: 350 }; // where it PHYSICALLY is (start near shoulder)
     private comVelocity: Vec2 = { x: 0, y: 0 };
 
     private batAngleActual = 0;
+    private prevBatAngle = 0;
+    private prevHandleTop: Vec2 = { x: 700, y: 350 };
     private handleActual: Vec2 = { x: 700, y: 350 };
     private handleVelocity: Vec2 = { x: 0, y: 0 };
     private readonly HANDLE_STIFFNESS_Y = 30; // Increased so it hits speed limit!for now
@@ -82,7 +85,7 @@ export default class Bat {
 
 
     // Joint Positions
-    private FRONT_SHOULDER: Vec2 = { x: 200, y: this.SHOULDER_HEIGHT };
+    private FRONT_SHOULDER: Vec2 = { x: 350, y: this.SHOULDER_HEIGHT };
     private BACK_SHOULDER: Vec2 = {
         x: this.FRONT_SHOULDER.x + this.BACK_SHOULDER_OFFSET.x,
         y: this.FRONT_SHOULDER.y + this.BACK_SHOULDER_OFFSET.y,
@@ -92,8 +95,7 @@ export default class Bat {
     private batAngle = 0;
     
     // Real Physics - Bat ki swing speed track karne ke liye
-    private prevHandleTop: Vec2 = { x: 0, y: 0 };
-    private prevBatAngle: number = 0;
+
     private angularVelocity: number = 0;
     private centerOfMass: Vec2 = { x: 0, y: 0 };
     private handleTop: Vec2 = { x: 0, y: 0 };
@@ -136,6 +138,9 @@ export default class Bat {
     }
 
     update(mouseX: number, mouseY: number, dt: number): void {
+        this.prevHandleTop = { x: this.handleTop.x, y: this.handleTop.y };
+        this.prevBatAngle = this.batAngle;
+        
         this.mouse.x = mouseX;
         this.mouse.y = mouseY;
 
@@ -333,39 +338,76 @@ export default class Bat {
         const tipX = px + Math.cos(this.batAngle) * this.TOTAL_BAT_LENGTH;
         const tipY = py + Math.sin(this.batAngle) * this.TOTAL_BAT_LENGTH;
 
-        // 2. Line Segment (Bat) aur Point (Ball) ke beech ka Math
-        const dx = tipX - px;
-        const dy = tipY - py;
+        // Ball ki Line (A se B)
+        const ax = ball.prevPos.x;
+        const ay = ball.prevPos.y;
         const bx = ball.pos.x;
         const by = ball.pos.y;
+        
+        let hit = false;
+        let t = 0;
 
-        // Ball bat ke kitne hisse (percentage) par takrai
-        let t = ((bx - px) * dx + (by - py) * dy) / (dx * dx + dy * dy);
-        t = Math.max(0, Math.min(1, t)); // 0 (Handle) se 1 (Tip) ke beech clamp karna
+        // --- RELATIVE SWEEP CCD ---
+        const ballMoveX = bx - ax;
+        const ballMoveY = by - ay;
+        const batMoveX = px - this.prevHandleTop.x;
+        const batMoveY = py - this.prevHandleTop.y;
+        
+        const effAx = bx - (ballMoveX - batMoveX);
+        const effAy = by - (ballMoveY - batMoveY);
 
-        // Bat ke upar wo point jo ball ke sabse kareeb hai
-        const closestX = px + t * dx;
-        const closestY = py + t * dy;
+        const r_x = bx - effAx;
+        const r_y = by - effAy;
+        const s_x = tipX - px;
+        const s_y = tipY - py;
 
-        // 3. Exact Doori (Distance) calculate karna
-        const distX = bx - closestX;
-        const distY = by - closestY;
-        const distance = Math.sqrt(distX * distX + distY * distY);
+        const cross = r_x * s_y - r_y * s_x;
+        if (Math.abs(cross) > 0.0001) {
+            const u_t = ((px - effAx) * s_y - (py - effAy) * s_x) / cross;
+            const u_u = ((px - effAx) * r_y - (py - effAy) * r_x) / cross;
 
-        // 4. Hit Detection! (Agar doori Ball ke radius + Bat ki half motaai se kam hai)
-        if (distance <= ball.radius + (this.HANDLE_WIDTH / 2)) {
+            if (u_t >= 0 && u_t <= 1 && u_u >= 0 && u_u <= 1) {
+                hit = true;
+                t = u_u;
+                // Project ball to the exact point it hit using absolute path
+                ball.pos.x = ax + u_t * ballMoveX;
+                ball.pos.y = ay + u_t * ballMoveY;
+            }
+        }
+
+        // 2. Fallback distance check
+        if (!hit) {
+            const dx = tipX - px;
+            const dy = tipY - py;
+
+            let temp_t = ((bx - px) * dx + (by - py) * dy) / (dx * dx + dy * dy);
+            temp_t = Math.max(0, Math.min(1, temp_t));
+
+            const closestX = px + temp_t * dx;
+            const closestY = py + temp_t * dy;
+
+            const distX = bx - closestX;
+            const distY = by - closestY;
+            const distance = Math.sqrt(distX * distX + distY * distY);
+
+            if (distance <= ball.radius + (this.HANDLE_WIDTH / 2)) {
+                hit = true;
+                t = temp_t;
+            }
+        }
+
+        if (hit) {
             
             // --- REAL KINEMATICS PHYSICS ---
             const L = t * this.TOTAL_BAT_LENGTH;
             const batHitSpeedX = this.handleVelocity.x - (this.angularVelocity * L * Math.sin(this.batAngle));
             const batHitSpeedY = this.handleVelocity.y + (this.angularVelocity * L * Math.cos(this.batAngle));
 
-            const restitution = 0.1; // Bounciness
             const relativeVx = ball.vel.x - batHitSpeedX;
             const relativeVy = ball.vel.y - batHitSpeedY;
 
-            ball.vel.x = batHitSpeedX - (relativeVx * restitution);
-            ball.vel.y = batHitSpeedY - (relativeVy * restitution);
+            ball.vel.x = batHitSpeedX - (relativeVx * RESTITUTION_BAT);
+            ball.vel.y = batHitSpeedY - (relativeVy * RESTITUTION_BAT);
             
             // Glitch se bachne ke liye ball ko bat se thoda bahar dhakel dena
             ball.pos.x += 10; 
@@ -386,7 +428,7 @@ export default class Bat {
         const restingY = this.FRONT_SHOULDER.y + 150;
         const displacement = Math.max(0, restingY - this.comActual.y);
         const gravityScale = 1 + (displacement / 120) * 0.6;
-        const gravityForceY = this.GRAVITY * this.BAT_MASS * gravityScale;
+        const gravityForceY = GRAVITY * this.BAT_MASS * gravityScale;
 
         const totalForceX = springForceX + dampingForceX;
         const totalForceY = springForceY + dampingForceY + gravityForceY;

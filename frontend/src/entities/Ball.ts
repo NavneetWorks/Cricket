@@ -1,14 +1,13 @@
-import { CANVAS_HEIGHT, GROUND_HEIGHT } from "../game/constants";
+import { CANVAS_HEIGHT, GROUND_HEIGHT, GRAVITY, RESTITUTION_GROUND } from "../game/constants";
 
 type Vec2 = { x: number; y: number };
 
 export default class Ball {
     public pos: Vec2 = { x: -100, y: -100 }; // Screen ke bahar start hogi
+    public prevPos: Vec2 = { x: -100, y: -100 };
     public vel: Vec2 = { x: 0, y: 0 };
     
     public readonly radius = 8;
-    private readonly gravity = 800; // Gravity ki taqat
-    private readonly restitution = 0.5; // Bounce kitna hoga (0.6 yani 60% speed bachegi tip ke baad)
     private readonly friction = 0.98; // Zameen par ragad (Friction)
 
     public isActive = false; // Check karne ke liye ki ball hawa mein hai ya nahi
@@ -19,6 +18,8 @@ export default class Ball {
     public throwBall(startX: number, startY: number, speed: number, angleDegrees: number): void {
         this.pos.x = startX;
         this.pos.y = startY;
+        this.prevPos.x = startX;
+        this.prevPos.y = startY;
         
         // Math lagakar angle ko velocity (X aur Y) mein convert karna
         const angleRad = (angleDegrees * Math.PI) / 180;
@@ -46,8 +47,11 @@ export default class Ball {
     public update(dt: number): void {
         if (!this.isActive) return;
 
+        this.prevPos.x = this.pos.x;
+        this.prevPos.y = this.pos.y;
+
         // 1. Gravity apply karna (Neeche ki taraf speed badhana)
-        this.vel.y += this.gravity * dt;
+        this.vel.y += GRAVITY * dt;
 
         // 2. Velocity ke hisaab se Position change karna
         this.pos.x += this.vel.x * dt;
@@ -61,7 +65,7 @@ export default class Ball {
             this.pos.y = groundY - this.radius;
 
             // Y velocity ko ulta (reverse) karna aur bounce (restitution) lagana
-            this.vel.y = -this.vel.y * this.restitution;
+            this.vel.y = -this.vel.y * RESTITUTION_GROUND;
 
             // Zameen ki ragad (friction) ki wajah se aage jaane ki speed thodi kam karna
             this.vel.x *= this.friction;
