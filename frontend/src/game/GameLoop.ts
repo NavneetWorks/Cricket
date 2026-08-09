@@ -23,12 +23,12 @@ export default class GameLoop{
         this.lastFrameTime = performance.now();
         const throwNewBall = () => {
             
-            const minSpeed = 4000;
-            const maxSpeed = 4000;
+            const minSpeed = 2000;
+            const maxSpeed = 3500;
             const randomSpeed = minSpeed + Math.random() * (maxSpeed - minSpeed);
             
-            const minAngle = 8;
-            const maxAngle = 8;
+            const minAngle = 5;
+            const maxAngle = 18;
             
             // RIGHT se LEFT fenkne ke liye changes:
             
@@ -73,7 +73,7 @@ export default class GameLoop{
         //console.log(`Mouse Position: (${currentCommand.x}, ${currentCommand.y})`);
         this.bat.update(this.input.mouseX, this.input.mouseY, dt);
         this.ball.update(dt);
-        this.bat.checkHit(this.ball)
+        this.bat.checkHit(this.ball, dt);
     }
 
     private render(){

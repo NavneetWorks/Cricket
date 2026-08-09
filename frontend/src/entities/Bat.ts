@@ -438,80 +438,98 @@ export default class Bat {
             this.handleVelocity.y = (this.handleTop.y - this.prevHandleTop.y) / dt;
             this.angularVelocity = (this.batAngle - this.prevBatAngle) / dt;
         }
-
-        this.prevHandleTop = { x: this.handleTop.x, y: this.handleTop.y };
-        this.prevBatAngle = this.batAngle;
     }
     // Check karega ki ball Bat se takrai ya nahi
-    public checkHit(ball: any): void {
+    public checkHit(ball: any, dt: number = 0.016): void {
         if (!ball.isActive) return;
 
-        // 1. Bat ki Tip (Neeche ka hissa) ki exact position nikalna
-        const px = this.handleTop.x;
-        const py = this.handleTop.y;
-        const tipX = px + Math.cos(this.batAngle) * this.TOTAL_BAT_LENGTH;
-        const tipY = py + Math.sin(this.batAngle) * this.TOTAL_BAT_LENGTH;
-
-        // Ball ki Line (A se B)
-        const ax = ball.prevPos.x;
-        const ay = ball.prevPos.y;
-        const bx = ball.pos.x;
-        const by = ball.pos.y;
-        
         let hit = false;
         let t = 0;
-
-        // --- RELATIVE SWEEP CCD ---
-        const ballMoveX = bx - ax;
-        const ballMoveY = by - ay;
-        const batMoveX = px - this.prevHandleTop.x;
-        const batMoveY = py - this.prevHandleTop.y;
+        let hitSubStep = 0;
+        const subSteps = 30;
         
-        const effAx = bx - (ballMoveX - batMoveX);
-        const effAy = by - (ballMoveY - batMoveY);
+        let finalBx = ball.pos.x;
+        let finalBy = ball.pos.y;
+        let finalAngle = this.batAngle;
 
-        const r_x = bx - effAx;
-        const r_y = by - effAy;
-        const s_x = tipX - px;
-        const s_y = tipY - py;
+        for (let step = 1; step <= subSteps; step++) {
+            const fraction = step / subSteps;
+            const prevFraction = (step - 1) / subSteps;
 
-        const cross = r_x * s_y - r_y * s_x;
-        if (Math.abs(cross) > 0.0001) {
-            const u_t = ((px - effAx) * s_y - (py - effAy) * s_x) / cross;
-            const u_u = ((px - effAx) * r_y - (py - effAy) * r_x) / cross;
+            const px = this.prevHandleTop.x + (this.handleTop.x - this.prevHandleTop.x) * fraction;
+            const py = this.prevHandleTop.y + (this.handleTop.y - this.prevHandleTop.y) * fraction;
+            const angle = this.prevBatAngle + (this.batAngle - this.prevBatAngle) * fraction;
+            
+            const tipX = px + Math.cos(angle) * this.TOTAL_BAT_LENGTH;
+            const tipY = py + Math.sin(angle) * this.TOTAL_BAT_LENGTH;
 
-            if (u_t >= 0 && u_t <= 1 && u_u >= 0 && u_u <= 1) {
-                hit = true;
-                t = u_u;
-                // Project ball to the exact point it hit using absolute path
-                ball.pos.x = ax + u_t * ballMoveX;
-                ball.pos.y = ay + u_t * ballMoveY;
+            const bx = ball.prevPos.x + (ball.pos.x - ball.prevPos.x) * fraction;
+            const by = ball.prevPos.y + (ball.pos.y - ball.prevPos.y) * fraction;
+            
+            const prevBx = ball.prevPos.x + (ball.pos.x - ball.prevPos.x) * prevFraction;
+            const prevBy = ball.prevPos.y + (ball.pos.y - ball.prevPos.y) * prevFraction;
+            
+            const prevPx = this.prevHandleTop.x + (this.handleTop.x - this.prevHandleTop.x) * prevFraction;
+            const prevPy = this.prevHandleTop.y + (this.handleTop.y - this.prevHandleTop.y) * prevFraction;
+
+            // CCD at sub-step
+            const ballMoveX = bx - prevBx;
+            const ballMoveY = by - prevBy;
+            const batMoveX = px - prevPx;
+            const batMoveY = py - prevPy;
+            
+            const effAx = bx - (ballMoveX - batMoveX);
+            const effAy = by - (ballMoveY - batMoveY);
+
+            const r_x = bx - effAx;
+            const r_y = by - effAy;
+            const s_x = tipX - px;
+            const s_y = tipY - py;
+
+            const cross = r_x * s_y - r_y * s_x;
+            if (Math.abs(cross) > 0.0001) {
+                const u_t = ((px - effAx) * s_y - (py - effAy) * s_x) / cross;
+                const u_u = ((px - effAx) * r_y - (py - effAy) * r_x) / cross;
+
+                if (u_t >= 0 && u_t <= 1 && u_u >= 0 && u_u <= 1) {
+                    hit = true;
+                    t = u_u;
+                    hitSubStep = step;
+                    finalBx = ball.prevPos.x + u_t * (ball.pos.x - ball.prevPos.x);
+                    finalBy = ball.prevPos.y + u_t * (ball.pos.y - ball.prevPos.y);
+                    finalAngle = angle;
+                    break;
+                }
             }
-        }
 
-        // 2. Fallback distance check
-        if (!hit) {
-            const dx = tipX - px;
-            const dy = tipY - py;
+            // Distance fallback at sub-step
+            if (!hit) {
+                const dx = tipX - px;
+                const dy = tipY - py;
 
-            let temp_t = ((bx - px) * dx + (by - py) * dy) / (dx * dx + dy * dy);
-            temp_t = Math.max(0, Math.min(1, temp_t));
-            const closestX = px + temp_t * dx;
-            const closestY = py + temp_t * dy;
+                let temp_t = ((bx - px) * dx + (by - py) * dy) / (dx * dx + dy * dy);
+                temp_t = Math.max(0, Math.min(1, temp_t));
 
-            const distX = bx - closestX;
-            const distY = by - closestY;
-            const distance = Math.sqrt(distX * distX + distY * distY);
+                const closestX = px + temp_t * dx;
+                const closestY = py + temp_t * dy;
 
-            if (distance <= ball.radius + (this.HANDLE_WIDTH / 2)) {
-                hit = true;
-                t = temp_t;
+                const distX = bx - closestX;
+                const distY = by - closestY;
+                const distance = Math.sqrt(distX * distX + distY * distY);
+
+                if (distance <= ball.radius + (this.HANDLE_WIDTH / 2)) {
+                    hit = true;
+                    t = temp_t;
+                    hitSubStep = step;
+                    finalBx = bx;
+                    finalBy = by;
+                    finalAngle = angle;
+                    break;
+                }
             }
         }
 
         if (hit) {
-            
-            // --- 42 REGIONS PHYSICS (Data-Driven Queue) ---
             const hitDistance = t * this.TOTAL_BAT_LENGTH;
             let regionIndex = Math.floor(hitDistance / 4);
             regionIndex = Math.max(0, Math.min(41, regionIndex));
@@ -525,16 +543,15 @@ export default class Bat {
             let batHitSpeedX = 0;
             let batHitSpeedY = 0;
 
-            if (queue.length > 1) {                         
+            if (queue.length > 1) {
                 const oldest = queue[0];
                 const latest = queue[queue.length - 1];
-                
                 const dx_q = latest.x - oldest.x;
                 const dy_q = latest.y - oldest.y;
                 const dist_q = Math.sqrt(dx_q * dx_q + dy_q * dy_q);
                 const time_q = latest.time - oldest.time;
                 
-                if (time_q > 0.0000000001 && dist_q > 0.0000000001) {
+                if (time_q > 0.0001 && dist_q > 0.0001) {
                     const speed = dist_q / time_q;
                     const dirX = dx_q / dist_q;
                     const dirY = dy_q / dist_q;
@@ -542,64 +559,64 @@ export default class Bat {
                     batHitSpeedY = dirY * speed;
                 }
             } else {
-                // Fallback (Agar queue abhi poori nahi bhari ho)
                 const L = t * this.TOTAL_BAT_LENGTH;
-                batHitSpeedX = this.handleVelocity.x - (this.angularVelocity * L * Math.sin(this.batAngle));
-                batHitSpeedY = this.handleVelocity.y + (this.angularVelocity * L * Math.cos(this.batAngle));
+                batHitSpeedX = this.handleVelocity.x - (this.angularVelocity * L * Math.sin(finalAngle));
+                batHitSpeedY = this.handleVelocity.y + (this.angularVelocity * L * Math.cos(finalAngle));
             }
 
-            // --- NORMAL & TANGENT COLLISION PHYSICS ---
             const relativeVx = ball.vel.x - batHitSpeedX;
             const relativeVy = ball.vel.y - batHitSpeedY;
 
-            // 1. Calculate Bat's Normal Vector
-            let normalX = -Math.sin(this.batAngle);
-            let normalY = Math.cos(this.batAngle);
+            let normalX = -Math.sin(finalAngle);
+            let normalY = Math.cos(finalAngle);
 
-            // 2. Ensure Normal faces the incoming ball relative to bat
             if (relativeVx * normalX + relativeVy * normalY > 0) {
                 normalX = -normalX;
                 normalY = -normalY;
             }
 
-            // 3. Decompose relative velocity into Normal and Tangent components
+            // FIX: SEPARATING VELOCITY CHECK
             const v_normal = relativeVx * normalX + relativeVy * normalY;
+            if (v_normal > 0) return;
+
+            // FIX: PROPER PUSH-OUT
+            const pushOutDist = ball.radius + (this.HANDLE_WIDTH / 2) + 0.1;
+            ball.pos.x = finalBx + (normalX * pushOutDist);
+            ball.pos.y = finalBy + (normalY * pushOutDist);
+
             const v_tangentX = relativeVx - v_normal * normalX;
             const v_tangentY = relativeVy - v_normal * normalY;
 
-            // 4. Apply restitution ONLY to the normal component
             const v_normal_after = -v_normal * region.restitution;
 
-            // Raw physical relative velocity after collision
             const physicsVelX = (v_normal_after * normalX) + v_tangentX;
             const physicsVelY = (v_normal_after * normalY) + v_tangentY;
             const speed_after = Math.hypot(physicsVelX, physicsVelY);
 
-            // 5. Apply Normal Direction Assist via Angle Rotation
             if (speed_after > 0.001) {
                 const physicsAngle = Math.atan2(physicsVelY, physicsVelX);
                 const normalAngle = Math.atan2(normalY, normalX);
 
                 let angleDiff = physicsAngle - normalAngle;
                 
-                // Normalize angle difference to be between -PI and PI
                 while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
                 while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
 
-                // NORMAL_DIRECTION_ASSIST is a 0-100 percentage.
                 const assistFactor = Math.max(0, Math.min(100, NORMAL_DIRECTION_ASSIST)) / 100;
-                
-                // Reduce the angle difference by the assist percentage
-                // e.g., if assistFactor is 0.1 (10%), newAngle is 10% closer to normalAngle
                 const newAngle = normalAngle + angleDiff * (1 - assistFactor);
 
-                // Reconstruct final velocity using the new angle (keeping original speed)
                 ball.vel.x = batHitSpeedX + Math.cos(newAngle) * speed_after;
                 ball.vel.y = batHitSpeedY + Math.sin(newAngle) * speed_after;
             } else {
                 ball.vel.x = batHitSpeedX + physicsVelX;
                 ball.vel.y = batHitSpeedY + physicsVelY;
             }
+
+            // FIX: REMAINING TIME PROJECTION
+            const remainingFraction = (subSteps - hitSubStep) / subSteps;
+            const remainingDt = remainingFraction * dt;
+            ball.pos.x += ball.vel.x * remainingDt;
+            ball.pos.y += ball.vel.y * remainingDt;
             
             // Capture for persistent debug text
             this.lastHitStats = {
