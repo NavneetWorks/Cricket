@@ -7,10 +7,11 @@ export default class Ball {
     public prevPos: Vec2 = { x: -100, y: -100 };
     public vel: Vec2 = { x: 0, y: 0 };
     
-    public readonly radius = 8;
+    public readonly radius = 9;
     private readonly friction = 0.98; // Zameen par ragad (Friction)
 
     public isActive = false; // Check karne ke liye ki ball hawa mein hai ya nahi
+    public rotation = 0; // Ball ke spin ke liye
 
     constructor() {}
 
@@ -20,6 +21,7 @@ export default class Ball {
         this.pos.y = startY;
         this.prevPos.x = startX;
         this.prevPos.y = startY;
+        this.rotation = 0; // Reset spin
         
         // Math lagakar angle ko velocity (X aur Y) mein convert karna
         const angleRad = (angleDegrees * Math.PI) / 180;
@@ -34,13 +36,57 @@ export default class Ball {
         if (!this.isActive) return; // Agar active nahi hai toh draw mat karo
 
         ctx.save();
+        
+        // 1. Origin ko ball ke center par le aana (rotation aur drawing easy hogi)
+        ctx.translate(this.pos.x, this.pos.y);
+
+        // 2. 3D Sphere Shader (Radial Gradient - Top-Left Sun)
+        // cx, cy ko thoda top-left rakha hai taaki wahan light chamke
+        const gradient = ctx.createRadialGradient(
+            -this.radius * 0.4, -this.radius * 0.4, this.radius * 0.1, // Highlight (chhoti safed chamak)
+            0, 0, this.radius // Shadow edge (ball ke kinare)
+        );
+        
+        // Colors bilkul leather ball jaise (Soft Shine & Less Dark Edges)
+        gradient.addColorStop(0, "#ff8888"); // Soft pinkish-red highlight (less glossy plastic look)
+        gradient.addColorStop(0.3, "#e63946"); // Bright fresh leather red
+        gradient.addColorStop(0.7, "#d32f2f"); // Medium red (lighter than before)
+        gradient.addColorStop(1, "#990000"); // Edge shadow (less dark)
+
         ctx.beginPath();
-        ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = "#d32f2f"; // Dark Red color
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = gradient;
         ctx.fill();
-        ctx.strokeStyle = "#8b0000"; // Outline color
-        ctx.lineWidth = 1.5;
+
+        // 3. Crisp outline
+        ctx.strokeStyle = "#880000"; 
+        ctx.lineWidth = 0.5;
         ctx.stroke();
+
+        // 4. Draw Seam (Stitching) - Rotate the seam based on ball spin
+        ctx.clip(); // Taaki seam ball ke bahar na nikle
+        ctx.rotate(this.rotation); 
+        
+        // Main seam gap (middle dark line)
+        ctx.beginPath();
+        ctx.moveTo(0, -this.radius);
+        ctx.lineTo(0, this.radius);
+        ctx.strokeStyle = "#600000";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // White stitching (dono taraf dashed lines)
+        ctx.beginPath();
+        ctx.moveTo(-1.2, -this.radius);
+        ctx.lineTo(-1.2, this.radius);
+        ctx.moveTo(1.2, -this.radius);
+        ctx.lineTo(1.2, this.radius);
+        
+        ctx.setLineDash([1.5, 1.5]); // Dash patterns (thread length, gap)
+        ctx.strokeStyle = "#ffffff"; // Bright white threads
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+
         ctx.restore();
     }
         // Har frame mein ball ki physics (Gravity aur Bounce) calculate karna
@@ -56,6 +102,9 @@ export default class Ball {
         // 2. Velocity ke hisaab se Position change karna
         this.pos.x += this.vel.x * dt;
         this.pos.y += this.vel.y * dt;
+
+        // Calculate rotation based on velocity (spin effect)
+        this.rotation += (this.vel.x * dt) / this.radius;
 
         // 3. Ground Collision (Zameen se takrana)
         const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;

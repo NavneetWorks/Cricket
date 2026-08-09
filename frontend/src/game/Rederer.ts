@@ -13,12 +13,25 @@ export default class Renderer{
     private input: Input;
     private bat:Bat;
     private ball: Ball;
+    
+    public useImageGround: boolean = false;
+    private groundImage: HTMLImageElement;
 
     constructor(ctx:CanvasRenderingContext2D,bat:Bat,input:Input,ball: Ball){
         this.ctx = ctx;
         this.bat = bat;
         this.input = input;
         this.ball = ball;
+        
+        this.groundImage = new Image();
+        this.groundImage.src = '/assets/cricket_ground_layers_cropped.png';
+        
+        window.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'g') {
+                this.useImageGround = !this.useImageGround;
+                console.log("Image Ground toggled:", this.useImageGround);
+            }
+        });
     }
     public render(){
         this.ctx.clearRect(
@@ -44,9 +57,27 @@ export default class Renderer{
     }
 
     private drawGround(){
-        const blockW = 10;
-        const blockH = 6;
         const groundY = CANVAS_HEIGHT - GROUND_HEIGHT; 
+        
+        // Draw Image Ground if enabled
+        if (this.useImageGround && this.groundImage.complete && this.groundImage.naturalWidth !== 0) {
+            const imgWidth = this.groundImage.naturalWidth;
+            const imgHeight = this.groundImage.naturalHeight;
+            // Scale vertically to fit the ground height, keep aspect ratio horizontally
+            const scaleY = GROUND_HEIGHT / imgHeight;
+            const scaleX = scaleY; 
+            const scaledWidth = imgWidth * scaleX;
+            const scaledHeight = GROUND_HEIGHT;
+            
+            // Repeat the image side-by-side until the canvas is covered
+            for(let x = 0; x < CANVAS_WIDTH; x += scaledWidth) {
+                this.ctx.drawImage(this.groundImage, x, groundY, scaledWidth, scaledHeight);
+            }
+            return; // Skip the pixel rendering
+        }
+
+        const blockW = 4;
+        const blockH = 4;
         
         for (let y = groundY; y < CANVAS_HEIGHT; y += blockH) {
             for (let x = 0; x < CANVAS_WIDTH; x += blockW) {
@@ -55,28 +86,34 @@ export default class Renderer{
                 let baseR, baseG, baseB;
                 let noiseMultiplier = 1;
                 
-                // Add jagged wave to the depth index so the layers aren't perfectly flat
+                // Small jagged noise to keep layers mostly flat but slightly organic
                 const jaggedNoise = this.getStaticNoise(x, 0);
-                const effectiveDepth = depthIndex + Math.sin(x * 0.05) * 1.5 + jaggedNoise * 2;
+                const effectiveDepth = depthIndex + (jaggedNoise - 0.5) * 1.5;
                 
-                if (effectiveDepth < 3) {
-                    // 1. Top Soil (Lighter, less brownish/black)
-                    baseR = 80; baseG = 65; baseB = 50;
-                } else if (effectiveDepth < 6) {
-                    // 2. Loam Layer (Medium brown)
-                    baseR = 110; baseG = 80; baseB = 55;
-                } else if (effectiveDepth < 8) {
-                    // 3. Compacted Clay (Light brownish)
-                    baseR = 140; baseG = 100; baseB = 65;
-                    noiseMultiplier = 0.5; // Compacted = less coarse noise
+                if (effectiveDepth < 5.5) {
+                    // 1. Top Soil (Darkest blackish-brown) - decreased depth
+                    baseR = 30; baseG = 20; baseB = 15;
+                    noiseMultiplier = 1.0; 
+                } else if (effectiveDepth < 9.5) {
+                    // 2. Loam Layer (Dark chocolate brown) - increased depth
+                    baseR = 50; baseG = 30; baseB = 20;
+                    noiseMultiplier = 0.9;
+                } else if (effectiveDepth < 13.0) {
+                    // 3. Compacted Clay (Reddish rich brown) - increased depth
+                    baseR = 90; baseG = 45; baseB = 25;
+                    noiseMultiplier = 0.8; 
+                } else if (effectiveDepth < 15.5) {
+                    // 4. Base layer (Orange/Tan brown with pebbles)
+                    baseR = 130; baseG = 75; baseB = 40;
+                    noiseMultiplier = 1.0; 
                 } else {
-                    // 4. Base layer (Tuned reddish to pure brown)
-                    baseR = 145; baseG = 100; baseB = 60;
-                    noiseMultiplier = 1.2; // Slightly coarse
+                    // 5. Light Sandy Pebbles
+                    baseR = 160; baseG = 100; baseB = 50;
+                    noiseMultiplier = 1.2; 
                 }
                 
-                // Add random noise to each block for texture (-15 to +15) * multiplier
-                const noise = (this.getStaticNoise(x, y) - 0.5) * 30 * noiseMultiplier;
+                // Texture: noise amplitude reduced so it's not overly noisy, creating a finer texture
+                const noise = (this.getStaticNoise(x, y) - 0.5) * 35 * noiseMultiplier;
                 
                 const finalR = Math.min(255, Math.max(0, Math.floor(baseR + noise)));
                 const finalG = Math.min(255, Math.max(0, Math.floor(baseG + noise)));
@@ -92,47 +129,50 @@ export default class Renderer{
         for (let x = 0; x < CANVAS_WIDTH; x += 1) {
             const staticNoise = this.getStaticNoise(x, 2);
             
-            // 1. Draw Roots (pointing down into the Top Soil)
-            // Since density is higher, reduce root probability to 15% so it's not overcrowded
-            if (staticNoise > 0.85) { 
-                const rootLength = 3 + (this.getStaticNoise(x, 5) * 8); // 3 to 11 pixels deep
-                const rootAngle = (this.getStaticNoise(x, 6) - 0.5) * (Math.PI / 4); // Wiggle left/right
-                const rootEndX = x + Math.sin(rootAngle) * rootLength;
-                const rootEndY = groundY + Math.cos(rootAngle) * rootLength;
+            // 1. Draw Roots (Solid golden web)
+            // Almost every pixel has a root (very dense)
+            if (staticNoise > 0.1) { 
+                const rootDepth = 3 + (this.getStaticNoise(x, 5) * 5); // 3 to 8 pixels deep
                 
-                this.ctx.lineWidth = 1;
-                this.ctx.strokeStyle = `rgba(180, 160, 140, 0.4)`; // Tan/white semi-transparent
+                this.ctx.lineWidth = 1.5;
+                this.ctx.strokeStyle = `rgba(170, 130, 60, 0.8)`; // Golden brown
                 this.ctx.beginPath();
                 this.ctx.moveTo(x, groundY);
-                this.ctx.lineTo(rootEndX, rootEndY);
+                
+                // Curve heavily left or right
+                const dir = (this.getStaticNoise(x, 7) > 0.5) ? 1 : -1;
+                const spread = 3 + this.getStaticNoise(x, 8) * 8; // Spread wide horizontally
+                
+                const cpX = x + dir * spread * 0.5;
+                const cpY = groundY + rootDepth * 0.8;
+                
+                const endX = x + dir * spread;
+                const endY = groundY + rootDepth * (0.3 + this.getStaticNoise(x, 9) * 0.7);
+                
+                this.ctx.quadraticCurveTo(cpX, cpY, endX, endY);
                 this.ctx.stroke();
             }
 
-            // 2. Draw Grass Spikes (Sloggy / Drooping bend)
-            // Randomize height between 5.6 and 14 pixels (1.4x of original 4-10)
-            const spikeHeight = 5.6 + (staticNoise * 8.4);
+            // 2. Draw Grass Spikes 
+            const spikeHeight = 6 + (staticNoise * 8); // 6 to 14
             
-            // We want most grass to be bent, and only a few straight.
-            // Using a square root curve pushes values away from 0 (straight) towards extremes (bent).
-            const rawAngleNoise = this.getStaticNoise(x, 3) * 2 - 1; // -1 to 1
+            const rawAngleNoise = this.getStaticNoise(x, 3) * 2 - 1; 
             const bendFactor = Math.sign(rawAngleNoise) * Math.pow(Math.abs(rawAngleNoise), 0.5); 
             
-            const maxAngle = Math.PI / 2.2; // Up to ~80 degrees bend (very sloggy)
+            const maxAngle = Math.PI / 2.5; 
             const angle = bendFactor * maxAngle;
             
-            // Calculate curve endpoints (y is reduced more if angle is high, causing a droop)
             const endX = x + Math.sin(angle) * spikeHeight;
             const endY = groundY - Math.cos(angle) * (spikeHeight * 0.7); 
             
-            // Control point for the quadratic curve (pulls the blade outward before dropping)
             const cpX = x + Math.sin(angle * 1.5) * (spikeHeight * 0.6);
             const cpY = groundY - (spikeHeight * 0.5);
             
-            // Natural grass green color variation
+            // Vibrant Green grass (from image)
             const colorNoise = this.getStaticNoise(x, 4);
-            const grassR = 85 + Math.floor(colorNoise * 40); // 85-125
-            const grassG = 130 + Math.floor(colorNoise * 60); // 130-190
-            const grassB = 30 + Math.floor(colorNoise * 40); // 30-70
+            const grassR = 60 + Math.floor(colorNoise * 40); // 60-100
+            const grassG = 140 + Math.floor(colorNoise * 50); // 140-190
+            const grassB = 20 + Math.floor(colorNoise * 20); // 20-40
             
             this.ctx.lineWidth = 1.2;
             this.ctx.strokeStyle = `rgb(${grassR}, ${grassG}, ${grassB})`;

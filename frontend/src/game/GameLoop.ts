@@ -79,4 +79,9 @@ export default class GameLoop{
     private render(){
         this.renderer.render();
     }
+
+    public toggleGround() {
+        this.renderer.useImageGround = !this.renderer.useImageGround;
+        console.log("Image Ground toggled:", this.renderer.useImageGround);
+    }
 }
