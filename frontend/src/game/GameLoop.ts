@@ -24,11 +24,11 @@ export default class GameLoop{
         const throwNewBall = () => {
             
             const minSpeed = 3000;
-            const maxSpeed = 2500;
+            const maxSpeed = 3500;
             const randomSpeed = minSpeed + Math.random() * (maxSpeed - minSpeed);
             
-            const minAngle = 8;
-            const maxAngle = 21;
+            const minAngle = 0;
+            const maxAngle = 15;
             
             // RIGHT se LEFT fenkne ke liye changes:
             
