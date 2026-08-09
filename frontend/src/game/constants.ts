@@ -7,7 +7,7 @@ export const GAME_COLORS = {
     BALL: "#B22222",
 };
 export const PITCH_WIDTH = 180;
-export const QUEUE_SIZE = 5;
+export const QUEUE_SIZE = 3;
 export const NORMAL_DIRECTION_ASSIST = 50; // 0 to 100 scale. E.g. 10 = bends 10% towards Normal
 
 export const GLOBAL_RESTITUTION_SCALE = 0.3;
@@ -96,8 +96,5 @@ export const LEG_WIDTH_AT_GROUND = 100;
 
 export const LEG_WIDTH_AT_HIP = 40;
 
-
-
-
-
-
+export const OUTER_ARC_SCALE = 1.0;
+export const INNER_ARC_SCALE = 1.0;

@@ -9,7 +9,9 @@ import {
     BAT_REGIONS_RESTITUTION,
     GLOBAL_RESTITUTION_SCALE,
     NORMAL_DIRECTION_ASSIST,
-    NECT_TO_HIP_RATIO
+    NECT_TO_HIP_RATIO,
+    OUTER_ARC_SCALE,
+    INNER_ARC_SCALE
 } from "../game/constants";
 
 type Vec2 = { x: number; y: number };
@@ -52,14 +54,14 @@ export default class Bat {
     private readonly HANDLE_LENGTH = 56;  // 33% of the bat
     private readonly BLADE_LENGTH = 112; // 67% of the bat
     private readonly TOTAL_BAT_LENGTH = 168;
-    private readonly TOTAL_RIGHT_ARM_LENGTH  =  this.TOTAL_BAT_LENGTH*0.7777;
-    private readonly TOTAL_LEFT_ARM_LENGTH = this.TOTAL_BAT_LENGTH*0.58333;
+    private readonly TOTAL_RIGHT_ARM_LENGTH  =  this.TOTAL_BAT_LENGTH*0.7;
+    private readonly TOTAL_LEFT_ARM_LENGTH = this.TOTAL_BAT_LENGTH*0.7;
     // --- WIDTHS ---
 
     private readonly HANDLE_WIDTH = this.TOTAL_BAT_LENGTH*.0388888888;
 
     // --- FRONT ARM ---
-    private readonly FRONT_UPPER_ARM = this.TOTAL_LEFT_ARM_LENGTH*.3619;
+    private readonly FRONT_UPPER_ARM = this.TOTAL_LEFT_ARM_LENGTH*.4366;
     private readonly FRONT_LOWER_ARM = this.TOTAL_LEFT_ARM_LENGTH-this.FRONT_UPPER_ARM;
 
     // --- BACK ARM ---
@@ -82,15 +84,61 @@ export default class Bat {
 
     private readonly EPS = 0.01;
 
-    private HIPS_HEIGHT = CANVAS_HEIGHT - GROUND_HEIGHT - 168 * 1.2;
+    private readonly FULL_LEG_LENGTH = 160; // 43 % thigh;
+
+    private readonly THIGH_LENGTH = this.FULL_LEG_LENGTH*.53;// 43 % thigh;
+    private readonly SHIN_LENGTH = this.FULL_LEG_LENGTH-this.THIGH_LENGTH;
+
+
+    private readonly NECT_TO_HIP_LENGTH = 97;
+
+  
+
+
+        
+    private readonly MAX_HIP_POSITION : Vec2 = { x: 400, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+10 };
+    private readonly MIN_HIP_POSITION : Vec2 = { x: 300, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+60 };
+
+    private readonly ORIGINAL_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+40 };
+
+    private CURRENT_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+10 };
+
+    private readonly LEG_WIDTH_AT_HIP = 30;
+
+    private CURRENT_LEFT_HIP_POSITION : Vec2  = {x:this.CURRENT_HIP_POSITION.x-this.LEG_WIDTH_AT_HIP/2,y:this.CURRENT_HIP_POSITION.y};
+    private CURRENT_RIGHT_HIP_POSITION : Vec2  = {x:this.CURRENT_HIP_POSITION.x+this.LEG_WIDTH_AT_HIP/2,y:this.CURRENT_HIP_POSITION.y};
+
+
+
+    private readonly ORIGINAL_ANGLE_OF_SPINE = 95 * (Math.PI / 180);
+
+    private readonly MAX_ANGLE_OF_SPINE = 160 * (Math.PI / 180);
+
+    private readonly MIN_ANGLE_OF_SPINE = 100 * (Math.PI / 180);
+
+    private CURRENT_ANGLE_OF_SPINE = this.ORIGINAL_ANGLE_OF_SPINE;
+
+    private readonly MAX_LEG_WIDTH_AT_GROUND = 120;
+
+    private readonly MIN_LEG_WIDTH_AT_GROUND = 80;
+
+    private CURRENT_LEG_WIDTH_AT_GROUND = 80;
+
+    private CURRENT_LEFT_LEG_POSTION_AT_GROUND : Vec2 = {x:this.ORIGINAL_HIP_POSITION.x-40,y:CANVAS_HEIGHT - GROUND_HEIGHT}
+
+    private CURRENT_RIGHT_LEG_POSTION_AT_GROUND : Vec2 = {x:this.CURRENT_LEFT_LEG_POSTION_AT_GROUND.x + this.CURRENT_LEG_WIDTH_AT_GROUND,y:CANVAS_HEIGHT-GROUND_HEIGHT}
 
     private readonly SHOULDER_HEIGHT = CANVAS_HEIGHT - GROUND_HEIGHT - 168 * 1.2; // Y position of the shoulder joints
-    private readonly SHOULDER_JOINT_OFFSET = 40;
+    private readonly SHOULDER_JOINT_OFFSET = 50;
 
 
 
     // Joint Positions
-    private SHOULDER_MID: Vec2 = { x: 350, y: this.SHOULDER_HEIGHT};
+    private SHOULDER_MID: Vec2 = { 
+        x: this.CURRENT_HIP_POSITION.x - Math.cos(this.CURRENT_ANGLE_OF_SPINE) * this.NECT_TO_HIP_LENGTH,
+        y: this.CURRENT_HIP_POSITION.y - Math.sin(this.CURRENT_ANGLE_OF_SPINE) * this.NECT_TO_HIP_LENGTH 
+    };  
+    
     private FRONT_SHOULDER: Vec2 = { 
         x: this.SHOULDER_MID.x - this.SHOULDER_JOINT_OFFSET / 2, 
         y: this.SHOULDER_MID.y 
@@ -115,6 +163,8 @@ export default class Bat {
 
     private frontElbow: Vec2 = { x: 0, y: 0 };
     private backElbow: Vec2 = { x: 0, y: 0 };
+    private leftKnee: Vec2 = { x: 0, y: 0 };
+    private rightKnee: Vec2 = { x: 0, y: 0 };
     private frontWrist: Vec2 = { x: 0, y: 0 }; // actual (possibly clamped) wrist
     private backWrist: Vec2 = { x: 0, y: 0 };
 
@@ -211,6 +261,23 @@ export default class Bat {
             this.BACK_ARM_BEND,
             "back"
         );
+
+        this.updateLeg(
+            this.CURRENT_LEFT_HIP_POSITION,
+            this.CURRENT_LEFT_LEG_POSTION_AT_GROUND,
+            this.THIGH_LENGTH,
+            this.SHIN_LENGTH,
+            1,
+            "left"
+        );
+        this.updateLeg(
+            this.CURRENT_RIGHT_HIP_POSITION,
+            this.CURRENT_RIGHT_LEG_POSTION_AT_GROUND,
+            this.THIGH_LENGTH,
+            this.SHIN_LENGTH,
+            -1,
+            "right"
+        );
     }
 
     // ---------------------------------------------------------------
@@ -272,7 +339,7 @@ export default class Bat {
         this.handleActual.x = desiredHandleX;
         this.handleActual.y = desiredHandleY;
 
-        const frontHandPosition = 0.5;
+        const frontHandPosition = 0.8;
         const frontWristDistFromTop = this.HANDLE_LENGTH * frontHandPosition;
 
         for (let i = 0; i < 5; i++) {
@@ -316,7 +383,7 @@ export default class Bat {
                 }
 
                 // 2. Radial Arc Constraints (JSON se radius check karna)
-                let maxRadius = this.getInterpolatedRadius(outerArcJson, angleDeg, 200);
+                let maxRadius = this.getInterpolatedRadius(outerArcJson, angleDeg, 200 * OUTER_ARC_SCALE);
 
                 if (hDist > maxRadius) {
                     this.handleActual.x = shoulderMid.x + (hdx / hDist) * maxRadius;
@@ -346,7 +413,7 @@ export default class Bat {
             y: this.handleTop.y + dir.y * this.TOTAL_BAT_LENGTH,
         };
 
-        const backHandPosition = 0.0;
+        const backHandPosition = 0.3;
         
         this.backWristTarget = {
             x: this.handleTop.x + dir.x * (this.HANDLE_LENGTH * backHandPosition),
@@ -429,7 +496,6 @@ export default class Bat {
 
             let temp_t = ((bx - px) * dx + (by - py) * dy) / (dx * dx + dy * dy);
             temp_t = Math.max(0, Math.min(1, temp_t));
-
             const closestX = px + temp_t * dx;
             const closestY = py + temp_t * dy;
 
@@ -459,7 +525,7 @@ export default class Bat {
             let batHitSpeedX = 0;
             let batHitSpeedY = 0;
 
-            if (queue.length > 1) {
+            if (queue.length > 1) {                         
                 const oldest = queue[0];
                 const latest = queue[queue.length - 1];
                 
@@ -468,7 +534,7 @@ export default class Bat {
                 const dist_q = Math.sqrt(dx_q * dx_q + dy_q * dy_q);
                 const time_q = latest.time - oldest.time;
                 
-                if (time_q > 0.0001 && dist_q > 0.0001) {
+                if (time_q > 0.0000000001 && dist_q > 0.0000000001) {
                     const speed = dist_q / time_q;
                     const dirX = dx_q / dist_q;
                     const dirY = dy_q / dist_q;
@@ -637,6 +703,52 @@ export default class Bat {
         }
     }
 
+    private updateLeg(
+        hip: Vec2,
+        target: Vec2,
+        upperLen: number,
+        lowerLen: number,
+        bendSide: 1 | -1,
+        which: "left" | "right"
+    ): void {
+        const dx = target.x - hip.x;
+        const dy = target.y - hip.y;
+        const rawDist = Math.hypot(dx, dy);
+
+        const minReach = Math.abs(upperLen - lowerLen) + this.EPS;
+        const maxReach = upperLen + lowerLen - this.EPS;
+        const dist = Math.min(Math.max(rawDist, minReach), maxReach);
+
+        const clampedTarget: Vec2 =
+            rawDist === 0
+                ? { x: hip.x + dist, y: hip.y }
+                : {
+                      x: hip.x + (dx / rawDist) * dist,
+                      y: hip.y + (dy / rawDist) * dist,
+                  };
+
+        const baseAngle = Math.atan2(
+            clampedTarget.y - hip.y,
+            clampedTarget.x - hip.x
+        );
+
+        const cosAngle = (upperLen ** 2 + dist ** 2 - lowerLen ** 2) / (2 * upperLen * dist);
+        const hipAngle = Math.acos(Math.min(1, Math.max(-1, cosAngle)));
+
+        const candidateA = this.pointOnCircle(hip, upperLen, baseAngle + hipAngle);
+        const candidateB = this.pointOnCircle(hip, upperLen, baseAngle - hipAngle);
+
+        const knee = this.sideOfLine(hip, clampedTarget, candidateA) === bendSide
+            ? candidateA
+            : candidateB;
+
+        if (which === "left") {
+            this.leftKnee = knee;
+        } else {
+            this.rightKnee = knee;
+        }
+    }
+
     private pointOnCircle(center: Vec2, radius: number, angle: number): Vec2 {
         return {
             x: center.x + radius * Math.cos(angle),
@@ -653,9 +765,10 @@ export default class Bat {
     }
 
     draw(ctx: CanvasRenderingContext2D): void {
-        this.drawBat(ctx);
+        
         this.drawArms(ctx);
         this.drawDebug(ctx);
+        this.drawBat(ctx);
     }
 
     // private drawBat(ctx: CanvasRenderingContext2D): void {
@@ -823,12 +936,54 @@ export default class Bat {
         ctx.fillStyle = "lime";
         ctx.fill();
 
-        // The debug line and orange dot have been removed.
+        // Draw line between hips and shoulder mid (Spine)
+        ctx.beginPath();
+        ctx.moveTo(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y);
+        ctx.lineTo(this.SHOULDER_MID.x, this.SHOULDER_MID.y);
+        ctx.strokeStyle = "orange";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Draw circle at hips
+        ctx.beginPath();
+        ctx.arc(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y, 4, 0, 2 * Math.PI);
+        ctx.fillStyle = "cyan";
+        ctx.fill();
+
+        // Draw left leg (thigh + shin)
+        this.drawLimb(ctx, this.CURRENT_LEFT_HIP_POSITION, this.leftKnee, this.CURRENT_LEFT_LEG_POSTION_AT_GROUND, "red");
+        
+        // Draw right leg (thigh + shin)
+        this.drawLimb(ctx, this.CURRENT_RIGHT_HIP_POSITION, this.rightKnee, this.CURRENT_RIGHT_LEG_POSTION_AT_GROUND, "blue");
+
+        // Draw line from left hip to right hip
+        ctx.beginPath();
+        ctx.moveTo(this.CURRENT_LEFT_HIP_POSITION.x, this.CURRENT_LEFT_HIP_POSITION.y);
+        ctx.lineTo(this.CURRENT_RIGHT_HIP_POSITION.x, this.CURRENT_RIGHT_HIP_POSITION.y);
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Draw line from left hip to front shoulder
+        ctx.beginPath();
+        ctx.moveTo(this.CURRENT_LEFT_HIP_POSITION.x, this.CURRENT_LEFT_HIP_POSITION.y);
+        ctx.lineTo(this.FRONT_SHOULDER.x, this.FRONT_SHOULDER.y);
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Draw line from right hip to back shoulder
+        ctx.beginPath();
+        ctx.moveTo(this.CURRENT_RIGHT_HIP_POSITION.x, this.CURRENT_RIGHT_HIP_POSITION.y);
+        ctx.lineTo(this.BACK_SHOULDER.x, this.BACK_SHOULDER.y);
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
+        ctx.stroke();
 
         // Debug draw outer arc
         ctx.beginPath();
         for (let a = -30; a <= 180; a += 5) {
-            let maxRadius = this.getInterpolatedRadius(outerArcJson, a, 200);
+            let maxRadius = this.getInterpolatedRadius(outerArcJson, a, 200 * OUTER_ARC_SCALE);
             let px = shoulderMid.x + Math.cos(a * Math.PI / 180) * maxRadius;
             let py = shoulderMid.y + Math.sin(a * Math.PI / 180) * maxRadius;
             if (a === -30) ctx.moveTo(px, py);
@@ -840,7 +995,7 @@ export default class Bat {
         // Debug draw inner arc
         ctx.beginPath();
         for (let a = -30; a <= 180; a += 5) {
-            let minRadius = this.getInterpolatedRadius(innerArcJson, a, 400);
+            let minRadius = this.getInterpolatedRadius(innerArcJson, a, 400 * INNER_ARC_SCALE);
             let px = shoulderMid.x + Math.cos(a * Math.PI / 180) * minRadius;
             let py = shoulderMid.y + Math.sin(a * Math.PI / 180) * minRadius;
             if (a === -30) ctx.moveTo(px, py);
