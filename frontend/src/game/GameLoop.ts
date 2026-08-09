@@ -23,7 +23,7 @@ export default class GameLoop{
         this.lastFrameTime = performance.now();
         const throwNewBall = () => {
             
-            const minSpeed = 3000;
+            const minSpeed = 2000;
             const maxSpeed = 3500;
             const randomSpeed = minSpeed + Math.random() * (maxSpeed - minSpeed);
             
