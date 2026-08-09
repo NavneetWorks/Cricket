@@ -9,13 +9,7 @@ import {
     BAT_REGIONS_RESTITUTION,
     GLOBAL_RESTITUTION_SCALE,
     NORMAL_DIRECTION_ASSIST,
-    NECT_TO_HIP_RATIO,
-    HANDLE_LENGTH,
-    BLADE_LENGTH,
-    TOTAL_BAT_LENGTH,
-    SHOULDER_HEIGHT,
-    INITIAL_SHOULDER_MID,
-    SHOULDER_JOINT_OFFSET
+    NECT_TO_HIP_RATIO
 } from "../game/constants";
 
 type Vec2 = { x: number; y: number };
@@ -55,9 +49,9 @@ export default class Bat {
     private handleVelocity: Vec2 = { x: 0, y: 0 };
     private readonly HANDLE_STIFFNESS_Y = 30; // Increased so it hits speed limit!for now
     // --- BAT BREAKDOWN ---
-    private readonly HANDLE_LENGTH = HANDLE_LENGTH;  // 33% of the bat
-    private readonly BLADE_LENGTH = BLADE_LENGTH; // 67% of the bat
-    private readonly TOTAL_BAT_LENGTH = TOTAL_BAT_LENGTH;
+    private readonly HANDLE_LENGTH = 56;  // 33% of the bat
+    private readonly BLADE_LENGTH = 112; // 67% of the bat
+    private readonly TOTAL_BAT_LENGTH = 168;
     private readonly TOTAL_RIGHT_ARM_LENGTH  =  this.TOTAL_BAT_LENGTH*0.7777;
     private readonly TOTAL_LEFT_ARM_LENGTH = this.TOTAL_BAT_LENGTH*0.58333;
     // --- WIDTHS ---
@@ -88,18 +82,21 @@ export default class Bat {
 
     private readonly EPS = 0.01;
 
-    private readonly SHOULDER_HEIGHT = SHOULDER_HEIGHT; // Y position of the shoulder joints
+    private HIPS_HEIGHT = CANVAS_HEIGHT - GROUND_HEIGHT - 168 * 1.2;
+
+    private readonly SHOULDER_HEIGHT = CANVAS_HEIGHT - GROUND_HEIGHT - 168 * 1.2; // Y position of the shoulder joints
+    private readonly SHOULDER_JOINT_OFFSET = 40;
 
 
 
     // Joint Positions
-    private SHOULDER_MID: Vec2 = { x: INITIAL_SHOULDER_MID.x, y: INITIAL_SHOULDER_MID.y };
+    private SHOULDER_MID: Vec2 = { x: 350, y: this.SHOULDER_HEIGHT};
     private FRONT_SHOULDER: Vec2 = { 
-        x: this.SHOULDER_MID.x - SHOULDER_JOINT_OFFSET / 2, 
+        x: this.SHOULDER_MID.x - this.SHOULDER_JOINT_OFFSET / 2, 
         y: this.SHOULDER_MID.y 
     };
     private BACK_SHOULDER: Vec2 = {
-        x: this.SHOULDER_MID.x + SHOULDER_JOINT_OFFSET / 2,
+        x: this.SHOULDER_MID.x + this.SHOULDER_JOINT_OFFSET / 2,
         y: this.SHOULDER_MID.y
     };
 

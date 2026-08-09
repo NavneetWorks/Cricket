@@ -96,12 +96,7 @@ export const LEG_WIDTH_AT_GROUND = 100;
 
 export const LEG_WIDTH_AT_HIP = 40;
 
-export const HANDLE_LENGTH = 56;
-export const BLADE_LENGTH = 2 * HANDLE_LENGTH;
-export const TOTAL_BAT_LENGTH = HANDLE_LENGTH + BLADE_LENGTH;
-export const SHOULDER_HEIGHT = CANVAS_HEIGHT - GROUND_HEIGHT - TOTAL_BAT_LENGTH * 1.2;
-export const INITIAL_SHOULDER_MID = { x: 350, y: SHOULDER_HEIGHT };
-export const SHOULDER_JOINT_OFFSET = 40;
+
 
 
 
