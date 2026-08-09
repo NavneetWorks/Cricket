@@ -8,7 +8,14 @@ import {
     QUEUE_SIZE,
     BAT_REGIONS_RESTITUTION,
     GLOBAL_RESTITUTION_SCALE,
-    NORMAL_DIRECTION_ASSIST
+    NORMAL_DIRECTION_ASSIST,
+    NECT_TO_HIP_RATIO,
+    HANDLE_LENGTH,
+    BLADE_LENGTH,
+    TOTAL_BAT_LENGTH,
+    SHOULDER_HEIGHT,
+    INITIAL_SHOULDER_MID,
+    SHOULDER_JOINT_OFFSET
 } from "../game/constants";
 
 type Vec2 = { x: number; y: number };
@@ -48,9 +55,9 @@ export default class Bat {
     private handleVelocity: Vec2 = { x: 0, y: 0 };
     private readonly HANDLE_STIFFNESS_Y = 30; // Increased so it hits speed limit!for now
     // --- BAT BREAKDOWN ---
-    private readonly HANDLE_LENGTH = 56;  // 33% of the bat
-    private readonly BLADE_LENGTH = 2*this.HANDLE_LENGTH; // 67% of the bat
-    private readonly TOTAL_BAT_LENGTH = this.HANDLE_LENGTH + this.BLADE_LENGTH;
+    private readonly HANDLE_LENGTH = HANDLE_LENGTH;  // 33% of the bat
+    private readonly BLADE_LENGTH = BLADE_LENGTH; // 67% of the bat
+    private readonly TOTAL_BAT_LENGTH = TOTAL_BAT_LENGTH;
     private readonly TOTAL_RIGHT_ARM_LENGTH  =  this.TOTAL_BAT_LENGTH*0.7777;
     private readonly TOTAL_LEFT_ARM_LENGTH = this.TOTAL_BAT_LENGTH*0.58333;
     // --- WIDTHS ---
@@ -65,13 +72,7 @@ export default class Bat {
     private readonly BACK_UPPER_ARM = this.TOTAL_RIGHT_ARM_LENGTH*.4366;
     private readonly BACK_LOWER_ARM = this.TOTAL_RIGHT_ARM_LENGTH-this.BACK_UPPER_ARM;
 
-    private readonly SHOULDER_JOINT_OFFSET =   (this.FRONT_UPPER_ARM + this.FRONT_LOWER_ARM)/5;
-
-
-
-    // --- SHOULDER ANCHORS ---
-    private readonly FRONT_SHOULDER_OFFSET = { x: 0, y: 0 };
-    private readonly BACK_SHOULDER_OFFSET = { x: this.SHOULDER_JOINT_OFFSET, y: 0 };
+    // --- SHOULDER ANCHORS (Removed unused variables) ---
 
     // How far the bat's center of mass sits from the raw cursor point,
     // perpendicular to the bat's own axis. Purely a feel/tuning constant —
@@ -79,8 +80,7 @@ export default class Bat {
     private readonly GRIP_OFFSET_FROM_CURSOR = 20;
 
     // Minimum elbow bend angles (degrees). 0 means completely folded, 180 means completely straight.
-    private readonly FRONT_ARM_MIN_ELBOW_ANGLE = 45;
-    private readonly BACK_ARM_MIN_ELBOW_ANGLE = 80;
+
 
     // Bend-side flags. Both -1 makes the elbows bend naturally in parallel (fixes the diamond shape).
     private readonly BACK_ARM_BEND: 1 | -1 = -1;   // must bend to the right
@@ -88,15 +88,19 @@ export default class Bat {
 
     private readonly EPS = 0.01;
 
-    private readonly SHOULDER_HEIGHT = CANVAS_HEIGHT-GROUND_HEIGHT-this.TOTAL_BAT_LENGTH*1.2; // Y position of the shoulder joints
+    private readonly SHOULDER_HEIGHT = SHOULDER_HEIGHT; // Y position of the shoulder joints
 
 
 
     // Joint Positions
-    private FRONT_SHOULDER: Vec2 = { x: 350, y: this.SHOULDER_HEIGHT };
+    private SHOULDER_MID: Vec2 = { x: INITIAL_SHOULDER_MID.x, y: INITIAL_SHOULDER_MID.y };
+    private FRONT_SHOULDER: Vec2 = { 
+        x: this.SHOULDER_MID.x - SHOULDER_JOINT_OFFSET / 2, 
+        y: this.SHOULDER_MID.y 
+    };
     private BACK_SHOULDER: Vec2 = {
-        x: this.FRONT_SHOULDER.x + this.BACK_SHOULDER_OFFSET.x,
-        y: this.FRONT_SHOULDER.y + this.BACK_SHOULDER_OFFSET.y,
+        x: this.SHOULDER_MID.x + SHOULDER_JOINT_OFFSET / 2,
+        y: this.SHOULDER_MID.y
     };
 
     // Computed each frame
@@ -216,10 +220,7 @@ export default class Bat {
     // STEP 1: bat orientation + COM + wrist targets, driven by mouse
     // ---------------------------------------------------------------
     private updateBatPose(dt: number): void {
-        const shoulderMid = {
-            x: (this.FRONT_SHOULDER.x + this.BACK_SHOULDER.x) / 2,
-            y: (this.FRONT_SHOULDER.y + this.BACK_SHOULDER.y) / 2,
-        };
+        const shoulderMid = this.SHOULDER_MID;
         const FRONT_MAX = this.FRONT_UPPER_ARM + this.FRONT_LOWER_ARM;
         const BACK_MAX = this.BACK_UPPER_ARM + this.BACK_LOWER_ARM;
         const comOffsetFromTop = this.TOTAL_BAT_LENGTH * BAT_CENTER_OF_MASS_RATIO;
@@ -819,14 +820,13 @@ export default class Bat {
         ctx.fill();
 
         // Debug draw shoulderMid center
-        const shoulderMid = {
-            x: (this.FRONT_SHOULDER.x + this.BACK_SHOULDER.x) / 2,
-            y: (this.FRONT_SHOULDER.y + this.BACK_SHOULDER.y) / 2,
-        };
+        const shoulderMid = this.SHOULDER_MID;
         ctx.beginPath();
         ctx.arc(shoulderMid.x, shoulderMid.y, 4, 0, 2 * Math.PI);
         ctx.fillStyle = "lime";
         ctx.fill();
+
+        // The debug line and orange dot have been removed.
 
         // Debug draw outer arc
         ctx.beginPath();
