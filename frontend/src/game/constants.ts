@@ -8,8 +8,10 @@ export const GAME_COLORS = {
 };
 export const PITCH_WIDTH = 180;
 export const QUEUE_SIZE = 5;
-export const GLOBAL_RESTITUTION_SCALE = 0.4;
-export const REGION1 = 5;
+export const NORMAL_DIRECTION_ASSIST = 50; // 0 to 100 scale. E.g. 10 = bends 10% towards Normal
+
+export const GLOBAL_RESTITUTION_SCALE = 0.2;
+export const REGION1 = 2;
 export const REGION2 = REGION1;
 export const REGION3 = REGION1;
 export const REGION4 = REGION1;
@@ -25,30 +27,30 @@ export const REGION13 = REGION1;
 export const REGION14 = REGION1;
 export const REGION15 = 6;
 export const REGION16 = 8; // Start Sweet Spot
-export const REGION17 = 15;
-export const REGION18 = 18;
-export const REGION19 = 19;
-export const REGION20 = 20;
-export const REGION21 = 20;
-export const REGION22 = 25;
-export const REGION23 = 26;
-export const REGION24 = 29;
-export const REGION25 = 29;
-export const REGION26 = 32;
-export const REGION27 = 35;
-export const REGION28 = 40;
-export const REGION29 = 45;
-export const REGION30 = 50; // End Sweet Spot
-export const REGION31 = 50;
-export const REGION32 = 45;
-export const REGION33 = 40;
-export const REGION34 = 38;
-export const REGION35 = 35;
-export const REGION36 = 34;
-export const REGION37 = 33;
-export const REGION38 = 32;
-export const REGION39 = 31;
-export const REGION40 = 30;
+export const REGION17 = 10;
+export const REGION18 = 12;
+export const REGION19 = 14;
+export const REGION20 = 15;
+export const REGION21 = 16;
+export const REGION22 = 17;
+export const REGION23 = 18;
+export const REGION24 = 19;
+export const REGION25 = 20;
+export const REGION26 = 21;
+export const REGION27 = 22;
+export const REGION28 = 23;
+export const REGION29 = 24;
+export const REGION30 = 25; // End Sweet Spot
+export const REGION31 = 24;
+export const REGION32 = 22;
+export const REGION33 = 21;
+export const REGION34 = 21;
+export const REGION35 = 20;
+export const REGION36 = 19;
+export const REGION37 = 18;
+export const REGION38 = 17;
+export const REGION39 = 17;
+export const REGION40 = 15;
 export const REGION41 = 8;
 export const REGION42 = 1;
 
@@ -69,10 +71,10 @@ export const GROUND_HEIGHT = 120;
 
 export const BAT_CENTER_OF_MASS_RATIO = 0.75;
 
-export const GRAVITY = 1666;
+export const GRAVITY = 3566;
 
-export const RESTITUTION_BAT = 0.1; // Bat aur Ball ki takkar ka bounce
-export const RESTITUTION_GROUND = 0.5; // Zameen aur Ball ki takkar ka bounce
+//export const RESTITUTION_BAT = 0.1; // Bat aur Ball ki takkar ka bounce
+export const RESTITUTION_GROUND = 0.6; // Zameen aur Ball ki takkar ka bounce
 
 export const TARGET_ANGLE_THRESHOLD = 0.02;
 

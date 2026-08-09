@@ -5,10 +5,10 @@ import {
     CANVAS_HEIGHT,
     GROUND_HEIGHT,
     GRAVITY,
-    RESTITUTION_BAT,
     QUEUE_SIZE,
     BAT_REGIONS_RESTITUTION,
-    GLOBAL_RESTITUTION_SCALE
+    GLOBAL_RESTITUTION_SCALE,
+    NORMAL_DIRECTION_ASSIST
 } from "../game/constants";
 
 type Vec2 = { x: number; y: number };
@@ -506,9 +506,36 @@ export default class Bat {
             // 4. Apply restitution ONLY to the normal component
             const v_normal_after = -v_normal * region.restitution;
 
-            // 5. Reconstruct final velocity
-            ball.vel.x = batHitSpeedX + (v_normal_after * normalX) + v_tangentX;
-            ball.vel.y = batHitSpeedY + (v_normal_after * normalY) + v_tangentY;
+            // Raw physical relative velocity after collision
+            const physicsVelX = (v_normal_after * normalX) + v_tangentX;
+            const physicsVelY = (v_normal_after * normalY) + v_tangentY;
+            const speed_after = Math.hypot(physicsVelX, physicsVelY);
+
+            // 5. Apply Normal Direction Assist via Angle Rotation
+            if (speed_after > 0.001) {
+                const physicsAngle = Math.atan2(physicsVelY, physicsVelX);
+                const normalAngle = Math.atan2(normalY, normalX);
+
+                let angleDiff = physicsAngle - normalAngle;
+                
+                // Normalize angle difference to be between -PI and PI
+                while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+                // NORMAL_DIRECTION_ASSIST is a 0-100 percentage.
+                const assistFactor = Math.max(0, Math.min(100, NORMAL_DIRECTION_ASSIST)) / 100;
+                
+                // Reduce the angle difference by the assist percentage
+                // e.g., if assistFactor is 0.1 (10%), newAngle is 10% closer to normalAngle
+                const newAngle = normalAngle + angleDiff * (1 - assistFactor);
+
+                // Reconstruct final velocity using the new angle (keeping original speed)
+                ball.vel.x = batHitSpeedX + Math.cos(newAngle) * speed_after;
+                ball.vel.y = batHitSpeedY + Math.sin(newAngle) * speed_after;
+            } else {
+                ball.vel.x = batHitSpeedX + physicsVelX;
+                ball.vel.y = batHitSpeedY + physicsVelY;
+            }
             
             // Capture for persistent debug text
             this.lastHitStats = {
