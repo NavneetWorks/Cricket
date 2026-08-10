@@ -2,6 +2,7 @@ import { BAT_CENTER_OF_MASS_RATIO } from "../game/constants";
 import outerArcJson from "../config/outer_handle_arc.json";
 import innerArcJson from "../config/inner_handle_arc.json";
 import {
+    CANVAS_WIDTH,
     CANVAS_HEIGHT,
     GROUND_HEIGHT,
     GRAVITY,
@@ -11,7 +12,8 @@ import {
     NORMAL_DIRECTION_ASSIST,
     NECT_TO_HIP_RATIO,
     OUTER_ARC_SCALE,
-    INNER_ARC_SCALE
+    INNER_ARC_SCALE,
+    k_values
 } from "../game/constants";
 
 type Vec2 = { x: number; y: number };
@@ -101,7 +103,7 @@ export default class Bat {
 
     private readonly ORIGINAL_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+40 };
 
-    private CURRENT_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+10 };
+    private CURRENT_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+40 };
 
     private readonly LEG_WIDTH_AT_HIP = 30;
 
@@ -324,12 +326,23 @@ export default class Bat {
         
         // Find current angle
         let currentAngle = Math.atan2(dyAngle, dxAngle); 
-        
         // 1. Upward Swing -> Tilt Linearly
         if (comUpSpeed > 0) {
+            let armDx = this.handleActual.x - this.SHOULDER_MID.x;
+            let armDy = this.handleActual.y - this.SHOULDER_MID.y;
+            let armAngleDeg = Math.atan2(armDy, armDx) * (180 / Math.PI);
+           // if (armAngleDeg < 0) armAngleDeg = 0; 
+
+            let index = Math.floor((armAngleDeg+30) / 3);
+
+            index = Math.max(0, Math.min(69, index));
+
+            let k = k_values[index];
+
+
             let tiltSpeed = comUpSpeed * this.WRIST_TILT_SPEED_SCALE;
             // Straight up is -PI/2. Tilting right means angle increases towards 0.
-            currentAngle += tiltSpeed * dtClamp; 
+            currentAngle += tiltSpeed * dtClamp*k; 
         } 
         
         // 2. Set desired handle position using the angle (Locks the angle if not moving UP)
@@ -931,6 +944,39 @@ export default class Bat {
     }
 
     private drawDebug(ctx: CanvasRenderingContext2D): void {
+        // Vector B->C (Handle to Shoulder)
+        const bc_dx = this.SHOULDER_MID.x - this.handleActual.x;
+        const bc_dy = this.SHOULDER_MID.y - this.handleActual.y;
+        const angleBC = Math.atan2(bc_dy, bc_dx);
+        
+        // Vector B->A (Handle to Tip) is batAngleActual
+        let dRadians = this.batAngleActual - angleBC;
+        
+        while (dRadians > Math.PI) dRadians -= 2 * Math.PI;
+        while (dRadians < -Math.PI) dRadians += 2 * Math.PI;
+        
+        const handleAngleDeg = Math.round(Math.abs(dRadians * (180 / Math.PI)));
+
+        ctx.save();
+        ctx.font = "24px Arial";
+        ctx.fillStyle = "yellow";
+        ctx.textAlign = "right";
+        ctx.fillText(`Handle Angle 'd': ${handleAngleDeg}°`, CANVAS_WIDTH - 20, 40);
+        ctx.restore();
+
+        // Arm Angle Debug Print
+        const armDx = this.handleActual.x - this.SHOULDER_MID.x;
+        const armDy = this.handleActual.y - this.SHOULDER_MID.y;
+        let armAngleDeg = Math.atan2(armDy, armDx) * (180 / Math.PI);
+       // if (armAngleDeg < 0) armAngleDeg = 0; 
+
+        ctx.save();
+        ctx.font = "24px Arial";
+        ctx.fillStyle = "black";
+        ctx.textAlign = "right";
+        ctx.fillText(`Arm Angle: ${Math.round(armAngleDeg)}°`, CANVAS_WIDTH - 20, 70); 
+        ctx.restore();
+
         ctx.beginPath();
         ctx.arc(this.FRONT_SHOULDER.x, this.FRONT_SHOULDER.y, 3, 0, 2 * Math.PI);
         ctx.fillStyle = "red";

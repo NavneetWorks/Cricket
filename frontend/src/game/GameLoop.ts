@@ -2,7 +2,7 @@ import Bat from "../entities/Bat";
 import Ball from "../entities/Ball";
 import Renderer from "./Rederer";
 import Input from "./Input";
-import { CANVAS_HEIGHT, CANVAS_WIDTH, GROUND_HEIGHT } from "./constants";
+import { CANVAS_HEIGHT, CANVAS_WIDTH, GROUND_HEIGHT ,k_values} from "./constants";
 
 export default class GameLoop{
     private ctx:CanvasRenderingContext2D;
