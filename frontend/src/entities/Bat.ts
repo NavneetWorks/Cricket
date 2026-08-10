@@ -879,68 +879,195 @@ export default class Bat {
     //     ctx.textAlign = "center";
     //     ctx.restore();
     // }
+    private shadeColor(color: string, percent: number): string {
+        let R = parseInt(color.substring(1,3), 16);
+        let G = parseInt(color.substring(3,5), 16);
+        let B = parseInt(color.substring(5,7), 16);
+
+        R = Math.floor(R * (100 + percent) / 100);
+        G = Math.floor(G * (100 + percent) / 100);
+        B = Math.floor(B * (100 + percent) / 100);
+
+        R = (R < 255) ? R : 255;  
+        G = (G < 255) ? G : 255;  
+        B = (B < 255) ? B : 255;
+        
+        R = (R > 0) ? R : 0;
+        G = (G > 0) ? G : 0;
+        B = (B > 0) ? B : 0;
+
+        let RR = ((R.toString(16).length == 1) ? "0" + R.toString(16) : R.toString(16));
+        let GG = ((G.toString(16).length == 1) ? "0" + G.toString(16) : G.toString(16));
+        let BB = ((B.toString(16).length == 1) ? "0" + B.toString(16) : B.toString(16));
+
+        return "#" + RR + GG + BB;
+    }
+
     private drawBat(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
-    ctx.translate(this.handleTop.x, this.handleTop.y);
-    ctx.rotate(this.batAngle);
+        ctx.save();
+        ctx.translate(this.handleTop.x, this.handleTop.y);
+        ctx.rotate(this.batAngle);
 
-    const hl = this.HANDLE_LENGTH;
-    const tl = this.TOTAL_BAT_LENGTH;
-    const bl = tl - hl; // Blade length
+        const hl = this.HANDLE_LENGTH;
+        const tl = this.TOTAL_BAT_LENGTH;
+        const bl = tl - hl; // Blade length
 
-    const hr = this.HANDLE_WIDTH / 2;
-    const frontY = -hr; // Flat front face, same as handle
-    const toeBackY = hr * 0.5; // Toe tapers thin near bottom
+        const hr = this.HANDLE_WIDTH / 2;
+        const frontY = -hr;
+        const toeBackY = hr * 0.5;
 
-    // Sweet spot position: 75% down the bat (real bat measurement: 345/460 px)
-    const swellX = hl + bl * 0.6;
-    // Sweet spot width scaled from real bat ratio: 32px width / 460px length
-    const maxSpineY = tl * (32 / 460);
+        // Sweet spot position
+        const swellX = hl + bl * 0.75; // Moved down closer to toe to match photo
+        const maxSpineY = 14; // Thicker sweet spot to match photo curve
 
-    // 1. Draw Bat Body (Wood Blade)
-    ctx.beginPath();
-    ctx.moveTo(hl, frontY); // Handle junction (front)
-    ctx.lineTo(tl - 3, frontY); // Flat front face all the way down
+        // Pre-calculate the back spine curve using a lookup table to perfectly match the original bezier shape
+        const backYTable: number[] = new Array(Math.ceil(tl) + 2).fill(0);
+        
+        // Handle part
+        for (let x = 0; x <= hl; x++) {
+            backYTable[x] = hr;
+        }
 
-    // Rounded Toe
-    ctx.quadraticCurveTo(tl, frontY, tl, 0);
-    ctx.lineTo(tl, toeBackY);
+        // Spine Bezier part
+        const P0x = tl, P0y = toeBackY;
+        const P1x = swellX, P1y = maxSpineY + 5;
+        const P2x = hl + bl * 0.2, P2y = maxSpineY * 0.4;
+        const P3x = hl, P3y = hr;
 
-    // Segment A: toe -> sweet spot (curve builds up)
-    ctx.quadraticCurveTo(
-        (tl + swellX) / 2, maxSpineY,   // control point pulls curve out to max width
-        swellX, maxSpineY                // sweet spot peak
-    );
+        for (let t = 0; t <= 1; t += 0.002) { // 500 steps for smooth mapping
+            const u = 1 - t;
+            const tt = t * t;
+            const uu = u * u;
+            const uuu = uu * u;
+            const ttt = tt * t;
 
-    // Segment B: sweet spot -> handle junction (gradual taper back in)
-    ctx.quadraticCurveTo(
-        hl + (swellX - hl) * 0.35, maxSpineY * 0.5,  // control point, slow taper
-        hl, hr                                        // handle junction (back)
-    );
+            const bx = uuu * P0x + 3 * uu * t * P1x + 3 * u * tt * P2x + ttt * P3x;
+            const by = uuu * P0y + 3 * uu * t * P1y + 3 * u * tt * P2y + ttt * P3y;
+            
+            const roundedX = Math.round(bx);
+            if (roundedX >= hl && roundedX <= tl + 1) {
+                if (!backYTable[roundedX] || by > backYTable[roundedX]) {
+                    backYTable[roundedX] = by;
+                }
+            }
+        }
+        
+        // Fill any gaps
+        for (let x = hl + 1; x <= tl; x++) {
+            if (!backYTable[x]) backYTable[x] = backYTable[x - 1] || hr;
+        }
 
-    ctx.closePath();
+        const getBackY = (x: number) => {
+            let idx = Math.floor(x);
+            if (idx < 0) return hr;
+            if (idx > tl) return toeBackY;
+            return backYTable[idx];
+        };
 
-    ctx.fillStyle = "#e6cba8"; // Light English Willow
-    ctx.fill();
-    ctx.strokeStyle = "#8a5a2b";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
+        const isInsideBat = (x: number, y: number) => {
+            if (x < 0 || x > tl) return false;
+            if (y < frontY) return false;
+            
+            let backY = getBackY(x);
+            if (x > tl - 3) {
+                let toeT = (x - (tl - 3)) / 3;
+                return y <= backY * (1 - toeT);
+            }
+            return y <= backY;
+        };
 
-    // 2. Draw Handle / Grip
-    ctx.beginPath();
-    ctx.moveTo(0, -hr);
-    ctx.lineTo(hl, -hr);
-    ctx.lineTo(hl, hr);
-    ctx.lineTo(0, hr);
-    ctx.closePath();
+        // Light setup (Sun at -135 deg: top-left)
+        const sunAngleGlobal = -135 * Math.PI / 180;
+        const sunAngleLocal = sunAngleGlobal - this.batAngle;
+        const lx = Math.cos(sunAngleLocal);
+        const ly = Math.sin(sunAngleLocal);
 
-    ctx.fillStyle = "#f2f0e8"; // White/off-white grip
-    ctx.fill();
-    ctx.strokeStyle = "#c9c6ba";
-    ctx.stroke();
+        const startX = 0;
+        const endX = Math.ceil(tl);
+        const startY = Math.floor(frontY);
+        const endY = Math.ceil(maxSpineY);
 
-    ctx.restore();
-}
+        for (let x = startX; x <= endX; x++) {
+            for (let y = startY; y <= endY; y++) {
+                if (isInsideBat(x, y)) {
+                    // Fully 1-pixel blocks now (no sx/sy 2x2 snapping)
+                    
+                    let color = "#fdf5e6"; // Very light creamy willow
+                    let spineY = getBackY(x);
+
+                    if (x < hl) {
+                        color = "#ffffff"; // White handle
+                        // Rounded rubber texture rings
+                        if (x % 5 === 0 || x % 5 === 1) {
+                            color = "#e8e8e8"; // Slight shadow for ring gaps
+                        }
+                        // Add black rubber grip base
+                        if (x > hl - 5 && x <= hl) color = "#1a1a1a"; 
+                    } else {
+                        // Flat front face shadow
+                        if (y >= frontY && y < frontY + 2) {
+                            color = "#e3d5c1"; 
+                        }
+
+                        // MRF Sticker Geometry (Continuous Red Strip along spine)
+                        if (x > hl + 15 && x < tl - 20) {
+                            // Sticker covers the top/spine area
+                            if (y > spineY - 7 && y <= spineY - 1) {
+                                color = "#d32f2f"; // MRF Red
+                                
+                                // White gaps to simulate "MRF" letters
+                                if (x > hl + 35 && x < hl + 38) color = "#ffffff";
+                                if (x > hl + 55 && x < hl + 58) color = "#ffffff";
+                                if (x > hl + 75 && x < hl + 78) color = "#ffffff";
+                                
+                                // Thin white border to the red sticker
+                                if (y === Math.floor(spineY - 7) || y === Math.floor(spineY - 1)) {
+                                    color = "#ffffff";
+                                }
+                            }
+                        }
+                        
+                        // MRF Black Text Hint (near the flat front edge)
+                        if (x > hl + 50 && x < hl + 75) {
+                            if (y >= frontY && y < frontY + 3) {
+                                color = "#111111"; // Black text
+                                if ((x % 8) < 3) color = color === "#111111" ? "#fdf5e6" : color; // Gaps for letters
+                            }
+                        }
+
+                        // Wood Grain Noise (Extremely Subtle)
+                        if (color === "#fdf5e6" && (Math.floor(x/4) + Math.floor(y/2)) % 8 === 0) {
+                            color = "#f2e6d5"; 
+                        }
+                    }
+
+                    // Compute Shading Normal
+                    let midY = (frontY + spineY) / 2;
+                    let ny = (y - midY) / ((spineY - frontY) / 2); // Ranges roughly -1 to 1
+                    let nx = (x > tl - 3) ? 1 : 0; // Toe faces right
+                    
+                    let mag = Math.hypot(nx, ny);
+                    if (mag > 0) { nx /= mag; ny /= mag; }
+
+                    // Dot product with sun light vector
+                    let diffuse = (nx * lx + ny * ly);
+                    
+                    // Artificial highlight on the very top edge of the spine (like in photo)
+                    if (ny > 0.8) {
+                        diffuse += 0.4;
+                    }
+                    
+                    // Apply dynamic shading
+                    ctx.fillStyle = this.shadeColor(color, diffuse * 40);
+                    
+                    // Overlap pixels slightly (1.4x1.4) to seal sub-pixel gaps caused by canvas rotation anti-aliasing
+                    ctx.fillRect(x - 0.2, y - 0.2, 1.4, 1.4);
+                }
+            }
+        }
+        
+        ctx.restore();
+    }
 
     private drawArms(ctx: CanvasRenderingContext2D): void {
         this.drawLimb(ctx, this.FRONT_SHOULDER, this.frontElbow, this.frontWrist, "green");
