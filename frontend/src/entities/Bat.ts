@@ -13,6 +13,7 @@ import {
     NECT_TO_HIP_RATIO,
     OUTER_ARC_SCALE,
     INNER_ARC_SCALE,
+    HORIZONTAL_TILT_SPEED_SCALE,
     k_values
 } from "../game/constants";
 
@@ -49,6 +50,7 @@ export default class Bat {
     private batAngleActual = 0;
     private prevBatAngle = 0;
     private prevHandleTop: Vec2 = { x: 700, y: 350 };
+    private prevComTarget: Vec2 | null = null;
     private handleActual: Vec2 = { x: 700, y: 350 };
     private handleVelocity: Vec2 = { x: 0, y: 0 };
     private readonly HANDLE_STIFFNESS_Y = 30; // Increased so it hits speed limit!for now
@@ -313,6 +315,12 @@ export default class Bat {
             this.comTarget = { x: rawMouseX, y: rawMouseY };
         }
 
+        if (!this.prevComTarget) {
+            this.prevComTarget = { x: this.comTarget.x, y: this.comTarget.y };
+        }
+        const targetVelocityX = (this.comTarget.x - this.prevComTarget.x) / dt;
+        this.prevComTarget = { x: this.comTarget.x, y: this.comTarget.y };
+
         this.simulateComPhysics(dt);
 
         const dtClamp = Math.min(dt, 0.05);
@@ -345,6 +353,16 @@ export default class Bat {
             currentAngle += tiltSpeed * dtClamp*k; 
         } 
         
+        // Horizontal tilt based on smooth Target (Mouse) X velocity
+        let horizontalTiltSpeed = targetVelocityX * HORIZONTAL_TILT_SPEED_SCALE;
+        
+        // Clamp tilt speed so it doesn't spin wildly on very fast mouse flicks
+        const maxTiltSpeed = 10.0;
+        if (horizontalTiltSpeed > maxTiltSpeed) horizontalTiltSpeed = maxTiltSpeed;
+        if (horizontalTiltSpeed < -maxTiltSpeed) horizontalTiltSpeed = -maxTiltSpeed;
+
+        currentAngle += horizontalTiltSpeed * dtClamp;
+
         // 2. Set desired handle position using the angle (Locks the angle if not moving UP)
         let desiredHandleX = this.comActual.x + Math.cos(currentAngle) * comOffsetFromTop;
         let desiredHandleY = this.comActual.y + Math.sin(currentAngle) * comOffsetFromTop;
@@ -396,18 +414,16 @@ export default class Bat {
                 }
 
                 // 2. Radial Arc Constraints (JSON se radius check karna)
-                let maxRadius = this.getInterpolatedRadius(outerArcJson, angleDeg, 200 * OUTER_ARC_SCALE);
+                let maxRadius = this.getInterpolatedRadius(outerArcJson, angleDeg, 200) * OUTER_ARC_SCALE;
+                let minRadius = this.getInterpolatedRadius(innerArcJson, angleDeg, 400) * INNER_ARC_SCALE;
 
                 if (hDist > maxRadius) {
                     this.handleActual.x = shoulderMid.x + (hdx / hDist) * maxRadius;
                     this.handleActual.y = shoulderMid.y + (hdy / hDist) * maxRadius;
-                } 
-                // else if (hDist < minRadius) {
-                //     if (!handleHitSpeedLimit) { // BYPASS MIN ARC IF TILTING
-                //         this.handleActual.x = shoulderMid.x + (hdx / hDist) * minRadius;
-                //         this.handleActual.y = shoulderMid.y + (hdy / hDist) * minRadius;
-                //     }
-                // }
+                } else if (hDist < minRadius) {
+                    this.handleActual.x = shoulderMid.x + (hdx / hDist) * minRadius;
+                    this.handleActual.y = shoulderMid.y + (hdy / hDist) * minRadius;
+                }
             }
         }
 
@@ -1046,7 +1062,7 @@ export default class Bat {
         // Debug draw outer arc
         ctx.beginPath();
         for (let a = -30; a <= 180; a += 5) {
-            let maxRadius = this.getInterpolatedRadius(outerArcJson, a, 200 * OUTER_ARC_SCALE);
+            let maxRadius = this.getInterpolatedRadius(outerArcJson, a, 200) * OUTER_ARC_SCALE;
             let px = shoulderMid.x + Math.cos(a * Math.PI / 180) * maxRadius;
             let py = shoulderMid.y + Math.sin(a * Math.PI / 180) * maxRadius;
             if (a === -30) ctx.moveTo(px, py);
@@ -1058,7 +1074,7 @@ export default class Bat {
         // Debug draw inner arc
         ctx.beginPath();
         for (let a = -30; a <= 180; a += 5) {
-            let minRadius = this.getInterpolatedRadius(innerArcJson, a, 400 * INNER_ARC_SCALE);
+            let minRadius = this.getInterpolatedRadius(innerArcJson, a, 400) * INNER_ARC_SCALE;
             let px = shoulderMid.x + Math.cos(a * Math.PI / 180) * minRadius;
             let py = shoulderMid.y + Math.sin(a * Math.PI / 180) * minRadius;
             if (a === -30) ctx.moveTo(px, py);
