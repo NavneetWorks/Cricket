@@ -15,31 +15,89 @@ export default class Wicket {
     public isOut: boolean = false;
     public hitTime: number = 0;
 
+    // Dynamic Physics & Animation Properties
+    public stumpAngle: number = 0; // Current tilt angle in radians (0 = vertical)
+    public targetStumpAngle: number = 0; // Target tilt angle (e.g. 1.48 rad for full uproot)
+    public stumpAngularVel: number = 0; // Rotation speed (rad/s)
+
+    public isBailDislodged: boolean = false;
+    public bailPos: { x: number; y: number } = { x: 150, y: 0 };
+    public bailVel: { x: number; y: number } = { x: 0, y: 0 };
+    public bailAngle: number = 0;
+    public bailAngularVel: number = 0;
+
     constructor(bat: Bat) {
         this.bat = bat;
+        this.reset();
     }
 
-    /**do code
-     * 
-     * Get the fixed X position of the wicket (X = 150)
-     */
     public getCenterX(): number {
         return this.FIXED_X;
     }
 
     /**
-     * Reset wicket collision state for new ball
+     * Reset wicket and bail positions & animation states for a new ball
      */
     public reset(): void {
         this.isOut = false;
         this.hitTime = 0;
+
+        this.stumpAngle = 0;
+        this.targetStumpAngle = 0;
+        this.stumpAngularVel = 0;
+
+        this.isBailDislodged = false;
+        const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
+        const stumpTopY = groundY - this.WICKET_HEIGHT;
+        const bailRadius = this.BAIL_BARREL_DIAMETER / 2;
+        this.bailPos = { x: this.FIXED_X, y: stumpTopY - bailRadius + 1.0 };
+        this.bailVel = { x: 0, y: 0 };
+        this.bailAngle = 0;
+        this.bailAngularVel = 0;
     }
 
     /**
-     * Check if ball trajectory line segment intersects the static vertical wicket line
-     * @param ball Ball entity
-     * @param batHitOccurred Whether a bat collision occurred in the same frame
-     * @param batHitSubStep Sub-step (1..30) when bat collision occurred
+     * Update dynamic animation step for stump rotation & flying bail physics
+     */
+    public update(dt: number): void {
+        const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
+
+        // 1. Stump Rotation Animation
+        if (this.stumpAngle < this.targetStumpAngle) {
+            this.stumpAngle += this.stumpAngularVel * dt;
+            if (this.stumpAngle >= this.targetStumpAngle) {
+                this.stumpAngle = this.targetStumpAngle;
+                this.stumpAngularVel = 0;
+            }
+        }
+
+        // 2. Bail Projectile Flight Physics
+        if (this.isBailDislodged) {
+            this.bailPos.x += this.bailVel.x * dt;
+            this.bailPos.y += this.bailVel.y * dt;
+
+            // Gravity pulls bail down to ground
+            const gravity = 980; // px/s^2
+            this.bailVel.y += gravity * dt;
+            this.bailAngle += this.bailAngularVel * dt;
+
+            // Ground plane collision check for falling bail
+            const bailRadius = this.BAIL_BARREL_DIAMETER / 2;
+            if (this.bailPos.y >= groundY - bailRadius) {
+                this.bailPos.y = groundY - bailRadius;
+                this.bailVel.x *= 0.6; // Friction on ground
+                this.bailVel.y = -this.bailVel.y * 0.3; // Small bounce
+                if (Math.abs(this.bailVel.y) < 15) {
+                    this.bailVel.y = 0;
+                    this.bailVel.x = 0;
+                    this.bailAngularVel = 0;
+                }
+            }
+        }
+    }
+
+    /**
+     * Check hit & trigger uproot/bend and bail dislodgement
      */
     public checkHit(ball: any, batHitOccurred: boolean = false, batHitSubStep: number = 30): boolean {
         if (!ball || !ball.isActive) return false;
@@ -49,7 +107,7 @@ export default class Wicket {
         const stumpX = this.FIXED_X;
         const radius = (ball.radius || 6) + (this.STUMP_DIAMETER / 2);
 
-        // Ball trajectory segment from prevPos (or pos) to pos
+        // Ball trajectory segment from prevPos to pos
         const x1 = ball.prevPos ? ball.prevPos.x : ball.pos.x;
         const y1 = ball.prevPos ? ball.prevPos.y : ball.pos.y;
         const x2 = ball.pos.x;
@@ -77,11 +135,11 @@ export default class Wicket {
             return false;
         }
 
-        // Y position of ball at the moment of intersection at stumpX
+        // Y position of ball at moment of intersection at stumpX
         const yAtStump = y1 + tWicket * (y2 - y1);
 
-        // Vertical collision range: from top of bail (stumpTopY - 5px) down to groundY
-        if (yAtStump >= (stumpTopY - 5.0 - (ball.radius || 6)) && yAtStump <= groundY + 5) {
+        // Vertical collision range
+        if (yAtStump >= (stumpTopY - 6.0 - (ball.radius || 6)) && yAtStump <= groundY + 5) {
             // Priority Resolution Rule: Compare tBat vs tWicket
             if (batHitOccurred) {
                 const tBat = batHitSubStep / 30.0;
@@ -91,10 +149,42 @@ export default class Wicket {
                 }
             }
 
-            // WICKET HIT! Trigger OUT!
+            // WICKET HIT! Trigger OUT & Dynamic Physics!
             this.isOut = true;
             this.hitTime = Date.now();
-            console.log(`[WICKET HIT - BOWLED OUT!] tWicket: ${tWicket.toFixed(3)} | Ball Y: ${yAtStump.toFixed(1)}`);
+
+            const vImpact = Math.hypot(ball.vel.x, ball.vel.y);
+
+            // 1. NO REVERSE BOUNCE! Keep ball moving forward with reduced speed & slight deflection
+            ball.vel.x *= 0.82; // 18% speed reduction passing through wickets
+            ball.vel.y += (Math.random() - 0.5) * 50;
+
+            // 2. STUMP UPROOT / BEND ANIMATION BASED ON IMPACT SPEED
+            if (vImpact > 1800) {
+                // High Speed Impact -> Full Uproot (falls flat ~85 deg)
+                this.targetStumpAngle = 1.48; // ~85 degrees
+                this.stumpAngularVel = 6.0;   // Fast spin
+            } else if (vImpact > 800) {
+                // Medium Speed Impact -> Moderate Bend (~40 deg)
+                this.targetStumpAngle = 0.70; // ~40 degrees
+                this.stumpAngularVel = 3.5;
+            } else {
+                // Low Speed Impact -> Gentle Nudge (~15 deg)
+                this.targetStumpAngle = 0.26; // ~15 degrees
+                this.stumpAngularVel = 2.0;
+            }
+
+            // 3. ALWAYS DISLODGE BAIL & FLY IN AIR
+            this.isBailDislodged = true;
+            const bailRadius = this.BAIL_BARREL_DIAMETER / 2;
+            this.bailPos = { x: stumpX, y: stumpTopY - bailRadius };
+            this.bailVel = {
+                x: - (120 + vImpact * 0.08), // Flies backwards (left)
+                y: - (180 + vImpact * 0.05)  // Pops up into air
+            };
+            this.bailAngularVel = 12.0; // Tumbling rotation
+
+            console.log(`[WICKET HIT - BOWLED OUT!] Impact Speed: ${Math.floor(vImpact)} | Target Angle: ${this.targetStumpAngle.toFixed(2)}`);
             return true;
         }
 
@@ -102,14 +192,13 @@ export default class Wicket {
     }
 
     /**
-     * Draw True 2D Side-View ICC Deep Blue Wicket (Single Stump + Side-View Circular Bail End-Profile) at X = 150
+     * Draw Wicket (Rotating Stump + Flying Bail)
      */
     public draw(ctx: CanvasRenderingContext2D): void {
         const sx = this.FIXED_X;
         const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
         const stumpTopY = groundY - this.WICKET_HEIGHT;
         const w = this.STUMP_DIAMETER;
-        const leftX = sx - w / 2;
 
         ctx.save();
 
@@ -119,9 +208,13 @@ export default class Wicket {
         ctx.ellipse(sx, groundY + 1, 6, 2.5, 0, 0, 2 * Math.PI);
         ctx.fill();
 
-        // --- 2. SINGLE ICC DEEP BLUE STUMP (SIDE VIEW) ---
-        // Metallic ICC Deep Blue Gradient (#030a1c -> #0b2553 -> #1d4ed8 -> #020713)
-        const stumpGrad = ctx.createLinearGradient(leftX, 0, leftX + w, 0);
+        // --- 2. ROTATING ICC DEEP BLUE STUMP (PIVOT AT GROUND BASE) ---
+        ctx.save();
+        ctx.translate(sx, groundY);
+        ctx.rotate(-this.stumpAngle); // Rotate backwards (leftwards)
+
+        // Stump Gradient
+        const stumpGrad = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
         stumpGrad.addColorStop(0.0, "#030a1c");
         stumpGrad.addColorStop(0.3, "#0b2553");
         stumpGrad.addColorStop(0.55, "#1d4ed8"); // Metallic blue shine ridge
@@ -129,41 +222,69 @@ export default class Wicket {
         stumpGrad.addColorStop(1.0, "#020713");
 
         ctx.fillStyle = stumpGrad;
-        ctx.fillRect(leftX, stumpTopY, w, this.WICKET_HEIGHT);
+        ctx.fillRect(-w / 2, -this.WICKET_HEIGHT, w, this.WICKET_HEIGHT);
 
-        // Fine metallic edge outline
+        // Metallic outline
         ctx.strokeStyle = "rgba(147, 197, 253, 0.5)";
         ctx.lineWidth = 0.6;
-        ctx.strokeRect(leftX, stumpTopY, w, this.WICKET_HEIGHT);
+        ctx.strokeRect(-w / 2, -this.WICKET_HEIGHT, w, this.WICKET_HEIGHT);
 
-        // Top U-shaped groove notch on stump head
+        // Top U-shaped notch
         ctx.fillStyle = "#030a1c";
-        ctx.fillRect(leftX + 1.0, stumpTopY, w - 2.0, 2.0);
+        ctx.fillRect(-w / 2 + 1.0, -this.WICKET_HEIGHT, w - 2.0, 2.0);
 
-        // --- 3. TRUE 2D SIDE-VIEW BAIL (CIRCULAR END PROFILE) ---
-        const bailRadius = this.BAIL_BARREL_DIAMETER / 2; // 2.5px radius (5.0px diameter)
-        const bailCenterY = stumpTopY - bailRadius + 1.0;  // Seated inside top notch
+        // Draw seated bail ONLY if not yet dislodged
+        if (!this.isBailDislodged) {
+            const bailRadius = this.BAIL_BARREL_DIAMETER / 2;
+            const bailCenterY = -this.WICKET_HEIGHT - bailRadius + 1.0;
 
-        // Inner Spigot Peg Seating (2.5px diameter base)
-        ctx.fillStyle = "#1d4ed8";
-        ctx.fillRect(sx - 1.25, stumpTopY - 0.5, 2.5, 1.5);
+            // Spigot peg
+            ctx.fillStyle = "#1d4ed8";
+            ctx.fillRect(-1.25, -this.WICKET_HEIGHT - 0.5, 2.5, 1.5);
 
-        // Metallic ICC Blue Circle (5.0px diameter)
-        const circleGrad = ctx.createRadialGradient(sx - 0.8, bailCenterY - 0.8, 0.5, sx, bailCenterY, bailRadius);
-        circleGrad.addColorStop(0.0, "#93c5fd"); // Top reflection spot
-        circleGrad.addColorStop(0.4, "#2563eb"); // ICC Deep Blue
-        circleGrad.addColorStop(0.85, "#0b2553");
-        circleGrad.addColorStop(1.0, "#020713");
+            // Metallic Circle
+            const circleGrad = ctx.createRadialGradient(-0.8, bailCenterY - 0.8, 0.5, 0, bailCenterY, bailRadius);
+            circleGrad.addColorStop(0.0, "#93c5fd");
+            circleGrad.addColorStop(0.4, "#2563eb");
+            circleGrad.addColorStop(0.85, "#0b2553");
+            circleGrad.addColorStop(1.0, "#020713");
 
-        ctx.fillStyle = circleGrad;
-        ctx.beginPath();
-        ctx.arc(sx, bailCenterY, bailRadius, 0, 2 * Math.PI);
-        ctx.fill();
+            ctx.fillStyle = circleGrad;
+            ctx.beginPath();
+            ctx.arc(0, bailCenterY, bailRadius, 0, 2 * Math.PI);
+            ctx.fill();
 
-        // White metallic reflection ring border
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
-        ctx.lineWidth = 0.6;
-        ctx.stroke();
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+            ctx.lineWidth = 0.6;
+            ctx.stroke();
+        }
+
+        ctx.restore();
+
+        // --- 3. DRAW FLYING / DISLODGED BAIL (PROJECTILE POSITION) ---
+        if (this.isBailDislodged) {
+            ctx.save();
+            ctx.translate(this.bailPos.x, this.bailPos.y);
+            ctx.rotate(this.bailAngle);
+
+            const bailRadius = this.BAIL_BARREL_DIAMETER / 2;
+            const circleGrad = ctx.createRadialGradient(-0.8, -0.8, 0.5, 0, 0, bailRadius);
+            circleGrad.addColorStop(0.0, "#93c5fd");
+            circleGrad.addColorStop(0.4, "#2563eb");
+            circleGrad.addColorStop(0.85, "#0b2553");
+            circleGrad.addColorStop(1.0, "#020713");
+
+            ctx.fillStyle = circleGrad;
+            ctx.beginPath();
+            ctx.arc(0, 0, bailRadius, 0, 2 * Math.PI);
+            ctx.fill();
+
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+            ctx.lineWidth = 0.7;
+            ctx.stroke();
+
+            ctx.restore();
+        }
 
         ctx.restore();
     }

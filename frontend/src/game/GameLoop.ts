@@ -74,6 +74,7 @@ export default class GameLoop{
         //console.log(`Mouse Position: (${currentCommand.x}, ${currentCommand.y})`);
         this.bat.update(this.input.mouseX, this.input.mouseY, dt, this.input);
         this.ball.update(dt);
+        this.renderer.wicket.update(dt);
         const batHitResult = this.bat.checkHit(this.ball, dt);
         this.renderer.wicket.checkHit(this.ball, batHitResult.hit, batHitResult.hitSubStep);
     }
