@@ -31,7 +31,7 @@ export default class Bat {
     private readonly SPRING_STIFFNESS = 260;
     private readonly DAMPING = 22;
     // --- Wrist Rotation Physics ---
-    private readonly WRIST_TILT_SPEED_SCALE: number = 0.002; // Reduced so handle translates UP while backlifting
+    private readonly WRIST_TILT_SPEED_SCALE: number = 0.0014; // Scaled down to 0.7x per user request
 
     // Debug vars
     private debug_comUpSpeed = 0;
@@ -507,8 +507,8 @@ export default class Bat {
             currentAngle += tiltSpeed * dtClamp*k; 
         } 
         
-        // Horizontal tilt based on smooth Target (Mouse) X velocity
-        let horizontalTiltSpeed = targetVelocityX * HORIZONTAL_TILT_SPEED_SCALE;
+        // Horizontal tilt based on smooth Target (Mouse) X velocity (0.7x scaled)
+        let horizontalTiltSpeed = targetVelocityX * HORIZONTAL_TILT_SPEED_SCALE * 0.7;
         
         // Clamp tilt speed so it doesn't spin wildly on very fast mouse flicks
         const maxTiltSpeed = 10.0;
