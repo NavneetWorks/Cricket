@@ -1,4 +1,5 @@
 import { BAT_CENTER_OF_MASS_RATIO } from "../game/constants";
+import Input from "../game/Input";
 import outerArcJson from "../config/outer_handle_arc.json";
 import innerArcJson from "../config/inner_handle_arc.json";
 import {
@@ -199,6 +200,8 @@ export default class Bat {
         regionIndex: number;
     } | null = null;
 
+    private stanceOffsetY: number = 0;
+
     public regions: BatRegion[] = [];
 
     constructor() {
@@ -236,7 +239,7 @@ export default class Bat {
         return interpolatedRadius * (frontMax / scaleDivisor);
     }
 
-    update(mouseX: number, mouseY: number, dt: number): void {
+    update(mouseX: number, mouseY: number, dt: number, input?: Input): void {
         // --- DYNAMIC WEIGHT SHIFTING (Relative Delta-Based Hips) ---
         // 1. Initialize previous tracking if not present
         if (!(this as any).prevHandleActualForHip) {
@@ -277,7 +280,20 @@ export default class Bat {
         (this as any).prevHandleActualForHip = { x: this.handleActual.x, y: this.handleActual.y };
         (this as any).prevComActualForHip = { x: this.comActual.x, y: this.comActual.y };
 
-        // 5. Clamp the final hip position to ensure it stays within physical limits
+        // 5. Manual Stance Height Adjustment (W = UP, S = DOWN) - Speed halved to 75
+        if (input) {
+            const stanceSpeedY = 75; // Halved speed px/s
+            if (input.isKeyPressed("w") || input.isKeyPressed("KeyW")) {
+                this.CURRENT_HIP_POSITION.y -= stanceSpeedY * dt; // UP
+                this.stanceOffsetY -= stanceSpeedY * dt;
+            }
+            if (input.isKeyPressed("s") || input.isKeyPressed("KeyS")) {
+                this.CURRENT_HIP_POSITION.y += stanceSpeedY * dt; // DOWN
+                this.stanceOffsetY += stanceSpeedY * dt;
+            }
+        }
+
+        // 6. Clamp the final hip position to ensure it stays within physical limits
         this.CURRENT_HIP_POSITION.x = Math.max(this.MIN_HIP_POSITION.x, Math.min(this.MAX_HIP_POSITION.x, this.CURRENT_HIP_POSITION.x));
         const highestHipY = this.MAX_HIP_POSITION.y; // smaller value
         const lowestHipY = this.MIN_HIP_POSITION.y;  // larger value
@@ -433,7 +449,7 @@ export default class Bat {
         
         // 1. Mouse Target Clamping (Safe Zone)
         const rawMouseX = this.mouse.x + this.GRIP_OFFSET_FROM_CURSOR;
-        const rawMouseY = this.mouse.y;
+        const rawMouseY = this.mouse.y + this.stanceOffsetY;
         
         const dxMouse = rawMouseX - shoulderMid.x;
         const dyMouse = rawMouseY - shoulderMid.y;

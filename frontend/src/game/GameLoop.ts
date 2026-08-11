@@ -71,7 +71,7 @@ export default class GameLoop{
             return;
         }
         //console.log(`Mouse Position: (${currentCommand.x}, ${currentCommand.y})`);
-        this.bat.update(this.input.mouseX, this.input.mouseY, dt);
+        this.bat.update(this.input.mouseX, this.input.mouseY, dt, this.input);
         this.ball.update(dt);
         this.bat.checkHit(this.ball, dt);
     }
