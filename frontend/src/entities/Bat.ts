@@ -517,6 +517,11 @@ export default class Bat {
 
         currentAngle += horizontalTiltSpeed * dtClamp;
 
+        // Clamp minimum/maximum wrist tilt angle to prevent unnatural inward curl under body
+        const MIN_WRIST_ANGLE = -Math.PI * 0.58; // approx -104 degrees
+        const MAX_WRIST_ANGLE = Math.PI * 0.15;   // approx 27 degrees
+        currentAngle = Math.max(MIN_WRIST_ANGLE, Math.min(MAX_WRIST_ANGLE, currentAngle));
+
         // 2. Set desired handle position using the angle (Locks the angle if not moving UP)
         let desiredHandleX = this.comActual.x + Math.cos(currentAngle) * comOffsetFromTop;
         let desiredHandleY = this.comActual.y + Math.sin(currentAngle) * comOffsetFromTop;
