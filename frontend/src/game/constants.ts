@@ -97,7 +97,7 @@ export const LEG_WIDTH_AT_GROUND = 100;
 export const LEG_WIDTH_AT_HIP = 40;
 
 export const OUTER_ARC_SCALE = 1;
-export const INNER_ARC_SCALE = 1.0;
+export const INNER_ARC_SCALE = 1.2;
 export const HORIZONTAL_TILT_SPEED_SCALE = 0.002;
 
 
@@ -143,13 +143,13 @@ k_values[34] = 0.55; // 72
 k_values[35] = 0.6; // 75
 k_values[36] = 0.65; // 78
 k_values[37] = 0.7;  // 81
-k_values[38] = 0.75;  // 84
-k_values[39] = 0.8;  // 87
-k_values[40] = 0.85;  // 90
-k_values[41] = 1.0;  // 93
-k_values[42] = 1.0;  // 96
-k_values[43] = 1.0;  // 99
-k_values[44] = 1.0;  // 102
+k_values[38] = 2.75;  // 84
+k_values[39] = 2.8;  // 87
+k_values[40] = 2.85;  // 90
+k_values[41] = 2.0;  // 93
+k_values[42] = 2.0;  // 96
+k_values[43] = 2.0;  // 99
+k_values[44] = 2.0;  // 102
 k_values[45] = 1.0;  // 105
 k_values[46] = 1.0;  // 108
 k_values[47] = 1.0;  // 111

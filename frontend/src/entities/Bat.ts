@@ -30,7 +30,7 @@ export default class Bat {
     private readonly SPRING_STIFFNESS = 260;
     private readonly DAMPING = 22;
     // --- Wrist Rotation Physics ---
-    private readonly WRIST_TILT_SPEED_SCALE: number = 0.005; // How much the bat tilts based on UP speed
+    private readonly WRIST_TILT_SPEED_SCALE: number = 0.002; // Reduced so handle translates UP while backlifting
 
     // Debug vars
     private debug_comUpSpeed = 0;
@@ -100,12 +100,12 @@ export default class Bat {
 
 
         
-    private readonly MAX_HIP_POSITION : Vec2 = { x: 400, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+10 };
-    private readonly MIN_HIP_POSITION : Vec2 = { x: 300, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+60 };
+    private readonly MAX_HIP_POSITION : Vec2 = { x: 450, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH-20 };
+    private readonly MIN_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+80 };
 
-    private readonly ORIGINAL_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+40 };
+    private readonly ORIGINAL_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH-20 };
 
-    private CURRENT_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+40 };
+    private CURRENT_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH-20 };
 
     private readonly LEG_WIDTH_AT_HIP = 30;
 
@@ -116,9 +116,9 @@ export default class Bat {
 
     private readonly ORIGINAL_ANGLE_OF_SPINE = 95 * (Math.PI / 180);
 
-    private readonly MAX_ANGLE_OF_SPINE = 160 * (Math.PI / 180);
+    private readonly MAX_ANGLE_OF_SPINE = 110 * (Math.PI / 180);
 
-    private readonly MIN_ANGLE_OF_SPINE = 100 * (Math.PI / 180);
+    private readonly MIN_ANGLE_OF_SPINE = 95 * (Math.PI / 180);
 
     private CURRENT_ANGLE_OF_SPINE = this.ORIGINAL_ANGLE_OF_SPINE;
 
@@ -225,14 +225,101 @@ export default class Bat {
     }
 
     update(mouseX: number, mouseY: number, dt: number): void {
+        // --- DYNAMIC WEIGHT SHIFTING (Relative Delta-Based Hips) ---
+        // 1. Initialize previous tracking if not present
+        if (!(this as any).prevHandleActualForHip) {
+            (this as any).prevHandleActualForHip = { x: this.handleActual.x, y: this.handleActual.y };
+        }
+
+        // 2. Calculate how much the handle moved compared to the LAST frame
+        const handleDeltaX = this.handleActual.x - (this as any).prevHandleActualForHip.x;
+        const handleDeltaY = this.handleActual.y - (this as any).prevHandleActualForHip.y;
+
+        // 3. Move the hips in that same direction (Both X & Y axis movements set to 0.4)
+        this.CURRENT_HIP_POSITION.x += handleDeltaX * 0.4;
+        this.CURRENT_HIP_POSITION.y += handleDeltaY * 0.2;
+
+        // 4. Add subtle COM movement influence on Hips if COM is right of Hip or left by at most 10px
+        if (!(this as any).prevComActualForHip) {
+            (this as any).prevComActualForHip = { x: this.comActual.x, y: this.comActual.y };
+        }
+        const comDeltaX = this.comActual.x - (this as any).prevComActualForHip.x;
+        const comDeltaY = this.comActual.y - (this as any).prevComActualForHip.y;
+
+        const comHipDistX = this.comActual.x - this.CURRENT_HIP_POSITION.x;
+        if (comHipDistX >= -10) {
+            this.CURRENT_HIP_POSITION.x += comDeltaX * 0.075;
+            this.CURRENT_HIP_POSITION.y += comDeltaY * 0.075;
+        } else {
+            // When COM is >10px to the left of hips:
+            if (comDeltaY < 0) {
+                // Moving UP: 3x of right part (0.075 * 3 = 0.225)
+                this.CURRENT_HIP_POSITION.y += comDeltaY * 0.1125;
+            } else if (comDeltaY > 0) {
+                // Moving DOWN: Half of upward momentum (0.225 / 2 = 0.1125)
+                this.CURRENT_HIP_POSITION.y += comDeltaY * 0.1125;
+            }
+        }
+
+        // Save for the next frame
+        (this as any).prevHandleActualForHip = { x: this.handleActual.x, y: this.handleActual.y };
+        (this as any).prevComActualForHip = { x: this.comActual.x, y: this.comActual.y };
+
+        // 5. Clamp the final hip position to ensure it stays within physical limits
+        this.CURRENT_HIP_POSITION.x = Math.max(this.MIN_HIP_POSITION.x, Math.min(this.MAX_HIP_POSITION.x, this.CURRENT_HIP_POSITION.x));
+        const highestHipY = this.MAX_HIP_POSITION.y; // smaller value
+        const lowestHipY = this.MIN_HIP_POSITION.y;  // larger value
+        this.CURRENT_HIP_POSITION.y = Math.max(highestHipY, Math.min(lowestHipY, this.CURRENT_HIP_POSITION.y));
+        
+        // 6. Calculate Spine Angle based on Hip displacement and stretch (halved again per request)
+        const RESTING_HANDLE_OFFSET_X = 50; 
+        const batOffsetX = (this.handleActual.x - this.ORIGINAL_HIP_POSITION.x) - RESTING_HANDLE_OFFSET_X;
+        const batOffsetY = this.handleActual.y - this.ORIGINAL_HIP_POSITION.y;
+        const stretchX = this.mouse.x - this.handleActual.x;
+        const stretchY = this.mouse.y - this.handleActual.y;
+
+        let targetSpineAngle = this.CURRENT_ANGLE_OF_SPINE + (batOffsetX * 0.00425);
+        if (stretchX < 0) {
+            targetSpineAngle += (stretchX * 0.0009375); // Halved: Extra lean forward when reaching outer arc horizontally
+        }
+        if (stretchY > 0 && batOffsetY > 0) {
+            targetSpineAngle += (stretchY * 0.00025); // Halved: Extra lean forward when reaching outer arc vertically
+        }
+        
+        // Clamp spine angle so the player doesn't bend backward or forward too much
+        targetSpineAngle = Math.max(this.MIN_ANGLE_OF_SPINE, Math.min(this.MAX_ANGLE_OF_SPINE, targetSpineAngle));
+        
+        // 7. Smooth Interpolation (Lerp) towards targets
+        const lerpSpeed = 8 * (dt || 0.016); // Heavy inertia feel
+        this.CURRENT_ANGLE_OF_SPINE += (targetSpineAngle - this.CURRENT_ANGLE_OF_SPINE) * lerpSpeed;
+        
+        // Update Dependent Joints dynamically
+        this.CURRENT_LEFT_HIP_POSITION.x = this.CURRENT_HIP_POSITION.x - this.LEG_WIDTH_AT_HIP / 2;
+        this.CURRENT_LEFT_HIP_POSITION.y = this.CURRENT_HIP_POSITION.y;
+        this.CURRENT_RIGHT_HIP_POSITION.x = this.CURRENT_HIP_POSITION.x + this.LEG_WIDTH_AT_HIP / 2;
+        this.CURRENT_RIGHT_HIP_POSITION.y = this.CURRENT_HIP_POSITION.y;
+        
+        this.SHOULDER_MID.x = this.CURRENT_HIP_POSITION.x - Math.cos(this.CURRENT_ANGLE_OF_SPINE) * this.NECT_TO_HIP_LENGTH;
+        this.SHOULDER_MID.y = this.CURRENT_HIP_POSITION.y - Math.sin(this.CURRENT_ANGLE_OF_SPINE) * this.NECT_TO_HIP_LENGTH;
+        
+        this.FRONT_SHOULDER.x = this.SHOULDER_MID.x - this.SHOULDER_JOINT_OFFSET / 2;
+        this.FRONT_SHOULDER.y = this.SHOULDER_MID.y;
+        this.BACK_SHOULDER.x = this.SHOULDER_MID.x + this.SHOULDER_JOINT_OFFSET / 2;
+        this.BACK_SHOULDER.y = this.SHOULDER_MID.y;
+
         this.prevHandleTop = { x: this.handleTop.x, y: this.handleTop.y };
         this.prevBatAngle = this.batAngle;
         
         this.mouse.x = mouseX;
         this.mouse.y = mouseY;
         this.currentTime += dt;
+        
+        let targetShoulderMid = {
+            x: this.CURRENT_HIP_POSITION.x - Math.cos(targetSpineAngle) * this.NECT_TO_HIP_LENGTH,
+            y: this.CURRENT_HIP_POSITION.y - Math.sin(targetSpineAngle) * this.NECT_TO_HIP_LENGTH
+        };
 
-        this.updateBatPose(dt);
+        this.updateBatPose(dt, targetShoulderMid);
         
         // --- 42 REGIONS QUEUE UPDATE ---
         const px = this.handleTop.x;
@@ -248,6 +335,45 @@ export default class Bat {
                 queue.shift(); // Remove oldest
             }
         }
+
+        // --- UPDATE SHOULDERS ALONG THE DEBUG ELLIPSE BASED ON HAND CONTACT POINTS ---
+        const shoulderRx = this.SHOULDER_JOINT_OFFSET / 2;
+        const shoulderRy = shoulderRx * 0.3;
+
+        // Front hand contact point (left hand) offset
+        const frontDx = this.frontWristTarget.x - (this.ORIGINAL_HIP_POSITION.x + RESTING_HANDLE_OFFSET_X);
+        const frontDy = this.frontWristTarget.y - this.ORIGINAL_HIP_POSITION.y;
+        const frontShiftAngle = (frontDx * 0.0105) + (frontDy * 0.007); // 0.7x rate of change
+        const frontAngle = Math.PI - frontShiftAngle;
+
+        this.FRONT_SHOULDER.x = this.SHOULDER_MID.x + shoulderRx * Math.cos(frontAngle);
+        this.FRONT_SHOULDER.y = this.SHOULDER_MID.y + shoulderRy * Math.sin(frontAngle);
+
+        // Back hand contact point (right hand) offset
+        const backDx = this.backWristTarget.x - (this.ORIGINAL_HIP_POSITION.x + RESTING_HANDLE_OFFSET_X);
+        const backDy = this.backWristTarget.y - this.ORIGINAL_HIP_POSITION.y;
+        const backShiftAngle = (backDx * 0.0105) + (backDy * 0.007); // 0.7x rate of change
+        const backAngle = 0 - backShiftAngle;
+
+        this.BACK_SHOULDER.x = this.SHOULDER_MID.x + shoulderRx * Math.cos(backAngle);
+        this.BACK_SHOULDER.y = this.SHOULDER_MID.y + shoulderRy * Math.sin(backAngle);
+
+        // --- UPDATE LEG / HIP JOINTS ALONG THE HIP DEBUG ELLIPSE (0.5x speed of shoulders) ---
+        const hipRx = this.LEG_WIDTH_AT_HIP / 2;
+        const hipRy = hipRx * 0.3;
+
+        const leftHipAngle = Math.PI - (frontShiftAngle * 0.5);
+        this.CURRENT_LEFT_HIP_POSITION.x = this.CURRENT_HIP_POSITION.x + hipRx * Math.cos(leftHipAngle);
+        this.CURRENT_LEFT_HIP_POSITION.y = this.CURRENT_HIP_POSITION.y + hipRy * Math.sin(leftHipAngle);
+
+        const rightHipAngle = 0 - (backShiftAngle * 0.5);
+        this.CURRENT_RIGHT_HIP_POSITION.x = this.CURRENT_HIP_POSITION.x + hipRx * Math.cos(rightHipAngle);
+        this.CURRENT_RIGHT_HIP_POSITION.y = this.CURRENT_HIP_POSITION.y + hipRy * Math.sin(rightHipAngle);
+
+        // Dynamic Right Foot Ground Position (moves 2x of hip X displacement)
+        const originalRightFootX = (this.ORIGINAL_HIP_POSITION.x - 40) + this.CURRENT_LEG_WIDTH_AT_GROUND;
+        const hipShiftX = this.CURRENT_HIP_POSITION.x - this.ORIGINAL_HIP_POSITION.x;
+        this.CURRENT_RIGHT_LEG_POSTION_AT_GROUND.x = originalRightFootX + (hipShiftX * 2.0);
 
         this.updateArm(
             this.FRONT_SHOULDER,
@@ -287,8 +413,8 @@ export default class Bat {
     // ---------------------------------------------------------------
     // STEP 1: bat orientation + COM + wrist targets, driven by mouse
     // ---------------------------------------------------------------
-    private updateBatPose(dt: number): void {
-        const shoulderMid = this.SHOULDER_MID;
+    private updateBatPose(dt: number, targetShoulderMid: Vec2): void {
+        const shoulderMid = targetShoulderMid; // Evaluate constraints based on future body position!
         const FRONT_MAX = this.FRONT_UPPER_ARM + this.FRONT_LOWER_ARM;
         const BACK_MAX = this.BACK_UPPER_ARM + this.BACK_LOWER_ARM;
         const comOffsetFromTop = this.TOTAL_BAT_LENGTH * BAT_CENTER_OF_MASS_RATIO;
@@ -575,6 +701,8 @@ export default class Bat {
             if (queue.length > 1) {
                 const oldest = queue[0];
                 const latest = queue[queue.length - 1];
+                const secondOldest = queue.length > 2 ? queue[1] : queue[0];
+
                 const dx_q = latest.x - oldest.x;
                 const dy_q = latest.y - oldest.y;
                 const dist_q = Math.sqrt(dx_q * dx_q + dy_q * dy_q);
@@ -582,8 +710,19 @@ export default class Bat {
                 
                 if (time_q > 0.0001 && dist_q > 0.0001) {
                     const speed = dist_q / time_q;
-                    const dirX = dx_q / dist_q;
-                    const dirY = dy_q / dist_q;
+
+                    // Direction calculated using latest - secondOldest
+                    const dx_dir = latest.x - secondOldest.x;
+                    const dy_dir = latest.y - secondOldest.y;
+                    const dist_dir = Math.hypot(dx_dir, dy_dir);
+
+                    let dirX = dx_q / dist_q;
+                    let dirY = dy_q / dist_q;
+                    if (dist_dir > 0.0001) {
+                        dirX = dx_dir / dist_dir;
+                        dirY = dy_dir / dist_dir;
+                    }
+
                     batHitSpeedX = dirX * speed;
                     batHitSpeedY = dirY * speed;
                 }
@@ -1142,6 +1281,15 @@ export default class Bat {
         ctx.fillStyle = "lime";
         ctx.fill();
 
+        // Debug draw shoulder ellipse
+        const shoulderMaxRadius = this.SHOULDER_JOINT_OFFSET / 2;
+        const shoulderMinRadius = shoulderMaxRadius * 0.3;
+        ctx.beginPath();
+        ctx.ellipse(shoulderMid.x, shoulderMid.y, shoulderMaxRadius, shoulderMinRadius, 0, 0, 2 * Math.PI);
+        ctx.strokeStyle = "yellow";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
         // Draw line between hips and shoulder mid (Spine)
         ctx.beginPath();
         ctx.moveTo(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y);
@@ -1155,6 +1303,15 @@ export default class Bat {
         ctx.arc(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y, 4, 0, 2 * Math.PI);
         ctx.fillStyle = "cyan";
         ctx.fill();
+
+        // Debug draw hip ellipse
+        const hipMaxRadius = this.LEG_WIDTH_AT_HIP / 2;
+        const hipMinRadius = hipMaxRadius * 0.3;
+        ctx.beginPath();
+        ctx.ellipse(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y, hipMaxRadius, hipMinRadius, 0, 0, 2 * Math.PI);
+        ctx.strokeStyle = "magenta";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
 
         // Draw left leg (thigh + shin)
         this.drawLimb(ctx, this.CURRENT_LEFT_HIP_POSITION, this.leftKnee, this.CURRENT_LEFT_LEG_POSTION_AT_GROUND, "red");
@@ -1211,6 +1368,13 @@ export default class Bat {
         ctx.lineWidth = 1;
         ctx.stroke();
 
+        // Debug text for Spine Angle
+        ctx.fillStyle = "black";
+        ctx.font = "bold 18px monospace";
+        ctx.textAlign = "center";
+        const currentSpineDeg = this.CURRENT_ANGLE_OF_SPINE * (180 / Math.PI);
+        ctx.fillText(`SPINE ANGLE: ${currentSpineDeg.toFixed(1)}°`, ctx.canvas.width / 4, 30);
+
         // Debug text for Collision Stats
         if (this.lastHitStats) {
             ctx.fillStyle = "black";
@@ -1218,11 +1382,13 @@ export default class Bat {
             ctx.textAlign = "center";
             
             const stats = this.lastHitStats;
+            const totalBatSpeed = Math.hypot(stats.batSpeedX, stats.batSpeedY);
             ctx.fillText(`HIT REGION: ${stats.regionIndex}`, ctx.canvas.width / 2, 30);
             ctx.fillText(`BAT ANGLE: ${stats.batAngle.toFixed(1)}°`, ctx.canvas.width / 2, 55);
             ctx.fillText(`BAT SPEED: X=${stats.batSpeedX.toFixed(1)} Y=${stats.batSpeedY.toFixed(1)}`, ctx.canvas.width / 2, 80);
             ctx.fillText(`BALL BEFORE: X=${stats.ballSpeedBeforeX.toFixed(1)} Y=${stats.ballSpeedBeforeY.toFixed(1)}`, ctx.canvas.width / 2, 105);
             ctx.fillText(`BALL AFTER: X=${stats.ballSpeedAfterX.toFixed(1)} Y=${stats.ballSpeedAfterY.toFixed(1)}`, ctx.canvas.width / 2, 130);
+            ctx.fillText(`BAT SPEED AT COLLISION: ${totalBatSpeed.toFixed(1)}`, ctx.canvas.width / 2, 155);
             
             ctx.textAlign = "left"; // Reset alignment
         }
