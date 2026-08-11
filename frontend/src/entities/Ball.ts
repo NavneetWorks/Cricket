@@ -11,17 +11,19 @@ export default class Ball {
     private readonly friction = 0.98; // Zameen par ragad (Friction)
 
     public isActive = false; // Check karne ke liye ki ball hawa mein hai ya nahi
+    public isStuck = false; // 1-frame dwell state jab bat se chipki ho
     public rotation = 0; // Ball ke spin ke liye
 
     constructor() {}
 
-        // Ball ko kisi angle aur speed se fenkne ka function
+    // Ball ko kisi angle aur speed se fenkne ka function
     public throwBall(startX: number, startY: number, speed: number, angleDegrees: number): void {
         this.pos.x = startX;
         this.pos.y = startY;
         this.prevPos.x = startX;
         this.prevPos.y = startY;
         this.rotation = 0; // Reset spin
+        this.isStuck = false;
         
         // Math lagakar angle ko velocity (X aur Y) mein convert karna
         const angleRad = (angleDegrees * Math.PI) / 180;
@@ -34,40 +36,32 @@ export default class Ball {
     // Ball ko Canvas par draw karna (Ek Red color ki cricket ball)
     public draw(ctx: CanvasRenderingContext2D): void {
         if (!this.isActive) return; // Agar active nahi hai toh draw mat karo
-
-        ctx.save();
         
-        // 1. Origin ko ball ke center par le aana (rotation aur drawing easy hogi)
+        ctx.save();
         ctx.translate(this.pos.x, this.pos.y);
 
-        // 2. 3D Sphere Shader (Radial Gradient - Top-Left Sun)
-        // cx, cy ko thoda top-left rakha hai taaki wahan light chamke
         const gradient = ctx.createRadialGradient(
-            -this.radius * 0.4, -this.radius * 0.4, this.radius * 0.1, // Highlight (chhoti safed chamak)
-            0, 0, this.radius // Shadow edge (ball ke kinare)
+            -this.radius * 0.4, -this.radius * 0.4, this.radius * 0.1,
+            0, 0, this.radius
         );
         
-        // Colors bilkul leather ball jaise (Soft Shine & Less Dark Edges)
-        gradient.addColorStop(0, "#ff8888"); // Soft pinkish-red highlight (less glossy plastic look)
-        gradient.addColorStop(0.3, "#e63946"); // Bright fresh leather red
-        gradient.addColorStop(0.7, "#d32f2f"); // Medium red (lighter than before)
-        gradient.addColorStop(1, "#990000"); // Edge shadow (less dark)
+        gradient.addColorStop(0, "#ff8888");
+        gradient.addColorStop(0.3, "#e63946");
+        gradient.addColorStop(0.7, "#d32f2f");
+        gradient.addColorStop(1, "#990000");
 
         ctx.beginPath();
         ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
         ctx.fillStyle = gradient;
         ctx.fill();
 
-        // 3. Crisp outline
         ctx.strokeStyle = "#880000"; 
         ctx.lineWidth = 0.5;
         ctx.stroke();
 
-        // 4. Draw Seam (Stitching) - Rotate the seam based on ball spin
-        ctx.clip(); // Taaki seam ball ke bahar na nikle
+        ctx.clip();
         ctx.rotate(this.rotation); 
         
-        // Main seam gap (middle dark line)
         ctx.beginPath();
         ctx.moveTo(0, -this.radius);
         ctx.lineTo(0, this.radius);
@@ -75,23 +69,23 @@ export default class Ball {
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // White stitching (dono taraf dashed lines)
         ctx.beginPath();
         ctx.moveTo(-1.2, -this.radius);
         ctx.lineTo(-1.2, this.radius);
         ctx.moveTo(1.2, -this.radius);
         ctx.lineTo(1.2, this.radius);
         
-        ctx.setLineDash([1.5, 1.5]); // Dash patterns (thread length, gap)
-        ctx.strokeStyle = "#ffffff"; // Bright white threads
+        ctx.setLineDash([1.5, 1.5]);
+        ctx.strokeStyle = "#ffffff";
         ctx.lineWidth = 0.8;
         ctx.stroke();
 
         ctx.restore();
     }
-        // Har frame mein ball ki physics (Gravity aur Bounce) calculate karna
+
+    // Har frame mein ball ki physics (Gravity aur Bounce) calculate karna
     public update(dt: number): void {
-        if (!this.isActive) return;
+        if (!this.isActive || this.isStuck) return;
 
         this.prevPos.x = this.pos.x;
         this.prevPos.y = this.pos.y;

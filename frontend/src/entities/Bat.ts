@@ -105,7 +105,7 @@ export default class Bat {
 
     private readonly ORIGINAL_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH-20 };
 
-    private CURRENT_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH-20 };
+    private CURRENT_HIP_POSITION : Vec2 = this.ORIGINAL_HIP_POSITION;
 
     private readonly LEG_WIDTH_AT_HIP = 30;
 
@@ -185,6 +185,18 @@ export default class Bat {
         ballSpeedBeforeY: number;
         ballSpeedAfterX: number;
         ballSpeedAfterY: number;
+        relativeImpactSpeed: number;
+    } | null = null;
+
+    // 1-Frame Dwell/Stick Collision State
+    private isBallStuck: boolean = false;
+    private stuckInfo: {
+        ball: any;
+        tRatio: number;
+        normalSign: number;
+        originalBallVelX: number;
+        originalBallVelY: number;
+        regionIndex: number;
     } | null = null;
 
     public regions: BatRegion[] = [];
@@ -598,6 +610,115 @@ export default class Bat {
     public checkHit(ball: any, dt: number = 0.016): void {
         if (!ball.isActive) return;
 
+        // --- FRAME 2: RELEASE & LAUNCH STUCK BALL ---
+        if (this.isBallStuck && this.stuckInfo) {
+            const info = this.stuckInfo;
+            const regionIndex = info.regionIndex;
+            const region = this.regions[regionIndex];
+            const queue = region.history;
+
+            let batHitSpeedX = 0;
+            let batHitSpeedY = 0;
+
+            if (queue.length > 1) {
+                const oldest = queue[0];
+                const latest = queue[queue.length - 1];
+                const secondOldest = queue.length > 2 ? queue[1] : queue[0];
+
+                const dx_q = latest.x - oldest.x;
+                const dy_q = latest.y - oldest.y;
+                const dist_q = Math.sqrt(dx_q * dx_q + dy_q * dy_q);
+                const time_q = latest.time - oldest.time;
+                
+                if (time_q > 0.0001 && dist_q > 0.0001) {
+                    const speed = dist_q / time_q;
+
+                    // Latest direction calculated using latest - secondOldest
+                    const dx_dir = latest.x - secondOldest.x;
+                    const dy_dir = latest.y - secondOldest.y;
+                    const dist_dir = Math.hypot(dx_dir, dy_dir);
+
+                    let dirX = dx_q / dist_q;
+                    let dirY = dy_q / dist_q;
+                    if (dist_dir > 0.0001) {
+                        dirX = dx_dir / dist_dir;
+                        dirY = dy_dir / dist_dir;
+                    }
+
+                    batHitSpeedX = dirX * speed;
+                    batHitSpeedY = dirY * speed;
+                }
+            } else {
+                const L = info.tRatio * this.TOTAL_BAT_LENGTH;
+                batHitSpeedX = this.handleVelocity.x - (this.angularVelocity * L * Math.sin(this.batAngle));
+                batHitSpeedY = this.handleVelocity.y + (this.angularVelocity * L * Math.cos(this.batAngle));
+            }
+
+            const relativeVx = info.originalBallVelX - batHitSpeedX;
+            const relativeVy = info.originalBallVelY - batHitSpeedY;
+
+            let normalX = -Math.sin(this.batAngle);
+            let normalY = Math.cos(this.batAngle);
+
+            if (info.normalSign < 0) {
+                normalX = -normalX;
+                normalY = -normalY;
+            }
+
+            const v_normal = relativeVx * normalX + relativeVy * normalY;
+
+            const pushOutDist = ball.radius + (this.HANDLE_WIDTH / 2) + 0.1;
+            const L = info.tRatio * this.TOTAL_BAT_LENGTH;
+            ball.pos.x = this.handleTop.x + Math.cos(this.batAngle) * L + (normalX * pushOutDist);
+            ball.pos.y = this.handleTop.y + Math.sin(this.batAngle) * L + (normalY * pushOutDist);
+
+            const v_tangentX = relativeVx - v_normal * normalX;
+            const v_tangentY = relativeVy - v_normal * normalY;
+
+            const v_normal_after = -v_normal * region.restitution;
+
+            const physicsVelX = (v_normal_after * normalX) + v_tangentX;
+            const physicsVelY = (v_normal_after * normalY) + v_tangentY;
+            const speed_after = Math.hypot(physicsVelX, physicsVelY);
+
+            if (speed_after > 0.001) {
+                const physicsAngle = Math.atan2(physicsVelY, physicsVelX);
+                const normalAngle = Math.atan2(normalY, normalX);
+
+                let angleDiff = physicsAngle - normalAngle;
+                
+                while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+                const assistFactor = Math.max(0, Math.min(100, NORMAL_DIRECTION_ASSIST)) / 100;
+                const newAngle = normalAngle + angleDiff * (1 - assistFactor);
+
+                ball.vel.x = batHitSpeedX + Math.cos(newAngle) * speed_after;
+                ball.vel.y = batHitSpeedY + Math.sin(newAngle) * speed_after;
+            } else {
+                ball.vel.x = batHitSpeedX + physicsVelX;
+                ball.vel.y = batHitSpeedY + physicsVelY;
+            }
+
+            this.lastHitStats = {
+                regionIndex,
+                batAngle: (this.batAngle * 180) / Math.PI,
+                batSpeedX: batHitSpeedX,
+                batSpeedY: batHitSpeedY,
+                ballSpeedBeforeX: info.originalBallVelX,
+                ballSpeedBeforeY: info.originalBallVelY,
+                ballSpeedAfterX: ball.vel.x,
+                ballSpeedAfterY: ball.vel.y,
+                relativeImpactSpeed: Math.hypot(relativeVx, relativeVy),
+            };
+
+            // Release ball!
+            ball.isStuck = false;
+            this.isBallStuck = false;
+            this.stuckInfo = null;
+            return;
+        }
+
         let hit = false;
         let t = 0;
         let hitSubStep = 0;
@@ -738,12 +859,50 @@ export default class Bat {
             let normalX = -Math.sin(finalAngle);
             let normalY = Math.cos(finalAngle);
 
+            let normalSign = 1;
             if (relativeVx * normalX + relativeVy * normalY > 0) {
                 normalX = -normalX;
                 normalY = -normalY;
+                normalSign = -1;
             }
 
-            // FIX: SEPARATING VELOCITY CHECK
+            const relativeImpactSpeed = Math.hypot(relativeVx, relativeVy);
+
+            // --- FRAME 1: IF RELATIVE IMPACT SPEED > 2000, STICK BALL TO BAT FOR 1 FRAME DWELL ---
+            if (relativeImpactSpeed > 2000) {
+                this.isBallStuck = true;
+                ball.isStuck = true;
+                this.stuckInfo = {
+                    ball,
+                    tRatio: t,
+                    normalSign,
+                    originalBallVelX,
+                    originalBallVelY,
+                    regionIndex
+                };
+
+                const pushOutDist = ball.radius + (this.HANDLE_WIDTH / 2) + 0.1;
+                const L = t * this.TOTAL_BAT_LENGTH;
+                ball.pos.x = this.handleTop.x + Math.cos(this.batAngle) * L + (normalX * pushOutDist);
+                ball.pos.y = this.handleTop.y + Math.sin(this.batAngle) * L + (normalY * pushOutDist);
+                ball.vel.x = batHitSpeedX;
+                ball.vel.y = batHitSpeedY;
+
+                this.lastHitStats = {
+                    regionIndex,
+                    batAngle: (this.batAngle * 180) / Math.PI,
+                    batSpeedX: batHitSpeedX,
+                    batSpeedY: batHitSpeedY,
+                    ballSpeedBeforeX: originalBallVelX,
+                    ballSpeedBeforeY: originalBallVelY,
+                    ballSpeedAfterX: 0,
+                    ballSpeedAfterY: 0,
+                    relativeImpactSpeed,
+                };
+                return;
+            }
+
+            // Normal immediate bounce if batSpeed <= 1000
             const v_normal = relativeVx * normalX + relativeVy * normalY;
             if (v_normal > 0) return;
 
@@ -795,7 +954,8 @@ export default class Bat {
                 ballSpeedBeforeX: originalBallVelX,
                 ballSpeedBeforeY: originalBallVelY,
                 ballSpeedAfterX: ball.vel.x,
-                ballSpeedAfterY: ball.vel.y
+                ballSpeedAfterY: ball.vel.y,
+                relativeImpactSpeed: relativeImpactSpeed
             };
 
             // Glitch se bachne ke liye ball ko bat se thoda bahar dhakel dena
@@ -1389,6 +1549,7 @@ export default class Bat {
             ctx.fillText(`BALL BEFORE: X=${stats.ballSpeedBeforeX.toFixed(1)} Y=${stats.ballSpeedBeforeY.toFixed(1)}`, ctx.canvas.width / 2, 105);
             ctx.fillText(`BALL AFTER: X=${stats.ballSpeedAfterX.toFixed(1)} Y=${stats.ballSpeedAfterY.toFixed(1)}`, ctx.canvas.width / 2, 130);
             ctx.fillText(`BAT SPEED AT COLLISION: ${totalBatSpeed.toFixed(1)}`, ctx.canvas.width / 2, 155);
+            ctx.fillText(`RELATIVE IMPACT SPEED: ${stats.relativeImpactSpeed.toFixed(1)}`, ctx.canvas.width / 2, 180);
             
             ctx.textAlign = "left"; // Reset alignment
         }
