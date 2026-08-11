@@ -368,25 +368,25 @@ export default class Bat {
         const shoulderRx = this.SHOULDER_JOINT_OFFSET / 2;
         const shoulderRy = shoulderRx * 0.3;
 
-        // Front hand contact point (left hand) offset
-        const frontDx = this.frontWristTarget.x - (this.ORIGINAL_HIP_POSITION.x + RESTING_HANDLE_OFFSET_X);
-        const frontDy = this.frontWristTarget.y - this.ORIGINAL_HIP_POSITION.y;
-        const frontShiftAngle = (frontDx * 0.0105) + (frontDy * 0.007); // 0.7x rate of change
+        // Front hand contact point (left hand) offset relative to Hip Y-axis line (0.7x of previous speed)
+        const frontDx = this.frontWristTarget.x - this.CURRENT_HIP_POSITION.x;
+        const frontDy = this.frontWristTarget.y - this.CURRENT_HIP_POSITION.y;
+        const frontShiftAngle = (frontDx * 0.0147) + (frontDy * 0.0098); // 0.7x rate of change
         const frontAngle = Math.PI - frontShiftAngle;
 
         this.FRONT_SHOULDER.x = this.SHOULDER_MID.x + shoulderRx * Math.cos(frontAngle);
         this.FRONT_SHOULDER.y = this.SHOULDER_MID.y + shoulderRy * Math.sin(frontAngle);
 
-        // Back hand contact point (right hand) offset
-        const backDx = this.backWristTarget.x - (this.ORIGINAL_HIP_POSITION.x + RESTING_HANDLE_OFFSET_X);
-        const backDy = this.backWristTarget.y - this.ORIGINAL_HIP_POSITION.y;
-        const backShiftAngle = (backDx * 0.0105) + (backDy * 0.007); // 0.7x rate of change
+        // Back hand contact point (right hand) offset relative to Hip Y-axis line (0.7x of previous speed)
+        const backDx = this.backWristTarget.x - this.CURRENT_HIP_POSITION.x;
+        const backDy = this.backWristTarget.y - this.CURRENT_HIP_POSITION.y;
+        const backShiftAngle = (backDx * 0.0147) + (backDy * 0.0098); // 0.7x rate of change
         const backAngle = 0 - backShiftAngle;
 
         this.BACK_SHOULDER.x = this.SHOULDER_MID.x + shoulderRx * Math.cos(backAngle);
         this.BACK_SHOULDER.y = this.SHOULDER_MID.y + shoulderRy * Math.sin(backAngle);
 
-        // --- UPDATE LEG / HIP JOINTS ALONG THE HIP DEBUG ELLIPSE (0.5x speed of shoulders) ---
+        // --- UPDATE LEG / HIP JOINTS ALONG THE HIP DEBUG ELLIPSE (0.5x speed of shoulders, SAME direction) ---
         const hipRx = this.LEG_WIDTH_AT_HIP / 2;
         const hipRy = hipRx * 0.3;
 
