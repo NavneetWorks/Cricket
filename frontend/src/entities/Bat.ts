@@ -738,6 +738,7 @@ export default class Bat {
             ball.isStuck = false;
             this.isBallStuck = false;
             this.stuckInfo = null;
+            return; // Exit Frame 2 release cleanly - prevents double sound!
             return;
         }
 
@@ -889,9 +890,10 @@ export default class Bat {
             }
 
             const relativeImpactSpeed = Math.hypot(relativeVx, relativeVy);
+            const isBladeRegion = (t * this.TOTAL_BAT_LENGTH) >= 56; // Entire wooden blade (excluding 56px handle)
 
-            // --- FRAME 1: IF RELATIVE IMPACT SPEED > 2000, STICK BALL TO BAT FOR 1 FRAME DWELL ---
-            if (relativeImpactSpeed > 2000) {
+            // --- FRAME 1: IF RELATIVE IMPACT SPEED > 2000 ON BLADE, STICK BALL TO BAT FOR 1 FRAME DWELL ---
+            if (relativeImpactSpeed > 2000 && isBladeRegion) {
                 // Single-shot sound on confirmed physical dwell collision
                 SoundManager.getInstance().playBatHit(relativeImpactSpeed, t * this.TOTAL_BAT_LENGTH);
 
