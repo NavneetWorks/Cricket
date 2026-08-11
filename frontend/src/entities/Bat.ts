@@ -105,7 +105,7 @@ export default class Bat {
     private readonly MAX_HIP_POSITION : Vec2 = { x: 450, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH-20 };
     private readonly MIN_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+80 };
 
-    private readonly ORIGINAL_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH-20 };
+    public readonly ORIGINAL_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH-20 };
 
     private CURRENT_HIP_POSITION : Vec2 = this.ORIGINAL_HIP_POSITION;
 
@@ -144,6 +144,7 @@ export default class Bat {
         x: this.CURRENT_HIP_POSITION.x - Math.cos(this.CURRENT_ANGLE_OF_SPINE) * this.NECT_TO_HIP_LENGTH,
         y: this.CURRENT_HIP_POSITION.y - Math.sin(this.CURRENT_ANGLE_OF_SPINE) * this.NECT_TO_HIP_LENGTH 
     };  
+    private HEAD_CENTER: Vec2 = { x: 0, y: 0 };
     
     private FRONT_SHOULDER: Vec2 = { 
         x: this.SHOULDER_MID.x - this.SHOULDER_JOINT_OFFSET / 2, 
@@ -330,6 +331,10 @@ export default class Bat {
         
         this.SHOULDER_MID.x = this.CURRENT_HIP_POSITION.x - Math.cos(this.CURRENT_ANGLE_OF_SPINE) * this.NECT_TO_HIP_LENGTH;
         this.SHOULDER_MID.y = this.CURRENT_HIP_POSITION.y - Math.sin(this.CURRENT_ANGLE_OF_SPINE) * this.NECT_TO_HIP_LENGTH;
+
+        const neckLength = 35;
+        this.HEAD_CENTER.x = this.SHOULDER_MID.x - Math.cos(this.CURRENT_ANGLE_OF_SPINE) * neckLength;
+        this.HEAD_CENTER.y = this.SHOULDER_MID.y - Math.sin(this.CURRENT_ANGLE_OF_SPINE) * neckLength;
         
         this.FRONT_SHOULDER.x = this.SHOULDER_MID.x - this.SHOULDER_JOINT_OFFSET / 2;
         this.FRONT_SHOULDER.y = this.SHOULDER_MID.y;
@@ -629,8 +634,8 @@ export default class Bat {
         }
     }
     // Check karega ki ball Bat se takrai ya nahi
-    public checkHit(ball: any, dt: number = 0.016): void {
-        if (!ball.isActive) return;
+    public checkHit(ball: any, dt: number = 0.016): { hit: boolean; hitSubStep: number } {
+        if (!ball.isActive) return { hit: false, hitSubStep: 30 };
 
         // --- FRAME 2: RELEASE & LAUNCH STUCK BALL ---
         if (this.isBallStuck && this.stuckInfo) {
@@ -738,8 +743,7 @@ export default class Bat {
             ball.isStuck = false;
             this.isBallStuck = false;
             this.stuckInfo = null;
-            return; // Exit Frame 2 release cleanly - prevents double sound!
-            return;
+            return { hit: true, hitSubStep: 1 }; // Exit Frame 2 release cleanly!
         }
 
         let hit = false;
@@ -892,10 +896,14 @@ export default class Bat {
             const relativeImpactSpeed = Math.hypot(relativeVx, relativeVy);
             const isBladeRegion = (t * this.TOTAL_BAT_LENGTH) >= 56; // Entire wooden blade (excluding 56px handle)
 
-            // --- FRAME 1: IF RELATIVE IMPACT SPEED > 2000 ON BLADE, STICK BALL TO BAT FOR 1 FRAME DWELL ---
+            // CRITICAL PHYSICAL GUARD: Unconditionally exit if ball is separating / passing past (v_normal > 0)
+            const v_normal = relativeVx * normalX + relativeVy * normalY;
+            if (v_normal > 0) return { hit: false, hitSubStep: 30 }; // No physical impact -> NO sound! NO stick! NO deflection!
+
+            // --- BRANCH 1: HIGH SPEED DWELL COLLISION (relativeImpactSpeed > 2000 on Blade) ---
             if (relativeImpactSpeed > 2000 && isBladeRegion) {
                 // Single-shot sound on confirmed physical dwell collision
-                SoundManager.getInstance().playBatHit(relativeImpactSpeed, t * this.TOTAL_BAT_LENGTH);
+                SoundManager.getInstance().playBatHit(Math.abs(v_normal), t * this.TOTAL_BAT_LENGTH);
 
                 this.isBallStuck = true;
                 ball.isStuck = true;
@@ -926,15 +934,12 @@ export default class Bat {
                     ballSpeedAfterY: 0,
                     relativeImpactSpeed,
                 };
-                return;
+                return { hit: true, hitSubStep: hitSubStep };
             }
 
-            // Normal immediate bounce if batSpeed <= 2000
-            const v_normal = relativeVx * normalX + relativeVy * normalY;
-            if (v_normal > 0) return; // Separating velocity -> No collision/deflection -> NO sound!
-
+            // --- BRANCH 2: NORMAL IMMEDIATE BOUNCE COLLISION ---
             // Single-shot sound on confirmed physical bounce deflection
-            SoundManager.getInstance().playBatHit(relativeImpactSpeed, t * this.TOTAL_BAT_LENGTH);
+            SoundManager.getInstance().playBatHit(Math.abs(v_normal), t * this.TOTAL_BAT_LENGTH);
 
             // FIX: PROPER PUSH-OUT
             const pushOutDist = ball.radius + (this.HANDLE_WIDTH / 2) + 0.1;
@@ -993,6 +998,8 @@ export default class Bat {
             
             console.log(`HIT! Region: ${regionIndex}, Bounce: ${region.restitution}, Speed X: ${Math.floor(batHitSpeedX)}, Y: ${Math.floor(batHitSpeedY)}`);
         }
+
+        return { hit: hit, hitSubStep: hitSubStep };
     }
     private simulateComPhysics(dt: number): void {
         const dx = this.comTarget.x - this.comActual.x;
@@ -1430,6 +1437,7 @@ export default class Bat {
         const handleAngleDeg = Math.round(Math.abs(dRadians * (180 / Math.PI)));
 
         ctx.save();
+        /* DEBUG PRINT - DISABLED FOR NOW
         ctx.font = "24px Arial";
         ctx.fillStyle = "yellow";
         ctx.textAlign = "right";
@@ -1440,7 +1448,6 @@ export default class Bat {
         const armDx = this.handleActual.x - this.SHOULDER_MID.x;
         const armDy = this.handleActual.y - this.SHOULDER_MID.y;
         let armAngleDeg = Math.atan2(armDy, armDx) * (180 / Math.PI);
-       // if (armAngleDeg < 0) armAngleDeg = 0; 
 
         ctx.save();
         ctx.font = "24px Arial";
@@ -1448,6 +1455,7 @@ export default class Bat {
         ctx.textAlign = "right";
         ctx.fillText(`Arm Angle: ${Math.round(armAngleDeg)}°`, CANVAS_WIDTH - 20, 70); 
         ctx.restore();
+        */
 
         ctx.beginPath();
         ctx.arc(this.FRONT_SHOULDER.x, this.FRONT_SHOULDER.y, 3, 0, 2 * Math.PI);
@@ -1486,6 +1494,33 @@ export default class Bat {
         ctx.lineTo(this.SHOULDER_MID.x, this.SHOULDER_MID.y);
         ctx.strokeStyle = "orange";
         ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // --- HEAD & NECK DEBUG DRAWING ---
+        const headCenterX = this.HEAD_CENTER.x;
+        const headCenterY = this.HEAD_CENTER.y;
+
+        // Draw Neck Line from shoulderMid to headCenter
+        ctx.beginPath();
+        ctx.moveTo(shoulderMid.x, shoulderMid.y);
+        ctx.lineTo(headCenterX, headCenterY);
+        ctx.strokeStyle = "cyan";
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        // Draw Head Ellipse center dot
+        ctx.beginPath();
+        ctx.arc(headCenterX, headCenterY, 3.5, 0, 2 * Math.PI);
+        ctx.fillStyle = "yellow";
+        ctx.fill();
+
+        // Draw Head Ellipse (Smaller radius in X axis: 14px, Longer radius in Y axis: 20px)
+        const headRadiusX = 14;
+        const headRadiusY = 20;
+        ctx.beginPath();
+        ctx.ellipse(headCenterX, headCenterY, headRadiusX, headRadiusY, 0, 0, 2 * Math.PI);
+        ctx.strokeStyle = "cyan";
+        ctx.lineWidth = 1.5;
         ctx.stroke();
 
         // Draw circle at hips
@@ -1558,6 +1593,7 @@ export default class Bat {
         ctx.lineWidth = 1;
         ctx.stroke();
 
+        /* DEBUG PRINT - DISABLED FOR NOW
         // Debug text for Spine Angle
         ctx.fillStyle = "black";
         ctx.font = "bold 18px monospace";
@@ -1583,5 +1619,6 @@ export default class Bat {
             
             ctx.textAlign = "left"; // Reset alignment
         }
+        */
     }
 }

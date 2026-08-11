@@ -1,6 +1,8 @@
 import Bat from "../entities/Bat";
 import Ball from "../entities/Ball";
+import Wicket from "../entities/Wicket";
 import Input from "./Input";
+import { SoundManager } from "../audio/SoundManager";
 import {
     CANVAS_WIDTH,
     CANVAS_HEIGHT,
@@ -13,6 +15,7 @@ export default class Renderer{
     private input: Input;
     private bat:Bat;
     private ball: Ball;
+    public wicket: Wicket;
     
     public useImageGround: boolean = false;
     private groundImage: HTMLImageElement;
@@ -22,6 +25,7 @@ export default class Renderer{
         this.bat = bat;
         this.input = input;
         this.ball = ball;
+        this.wicket = new Wicket(this.bat);
         
         this.groundImage = new Image();
         this.groundImage.src = '/assets/cricket_ground_layers_cropped.png';
@@ -40,6 +44,7 @@ export default class Renderer{
 
         this.drawSky();
         this.drawGround();
+        this.wicket.draw(this.ctx);
         this.drawBat();
         this.ball.draw(this.ctx);
         this.drawDebug();
@@ -182,21 +187,83 @@ export default class Renderer{
             this.ctx.quadraticCurveTo(cpX, cpY, endX, endY);
             this.ctx.stroke();
         }
+
+        /* CREASE LINES - DISABLED FOR NOW
+        // Add 2 thin horizontal white crease lines
+        this.ctx.strokeStyle = "#ffffff";
+        this.ctx.lineWidth = 1.5;
+        
+        // 1. Pop Crease Line (at X = 320)
+        this.ctx.beginPath();
+        this.ctx.moveTo(320, groundY);
+        this.ctx.lineTo(320, CANVAS_HEIGHT);
+        this.ctx.stroke();
+        
+        // 2. Bowling Crease Line (at X = 380)
+        this.ctx.beginPath();
+        this.ctx.moveTo(380, groundY);
+        this.ctx.lineTo(380, CANVAS_HEIGHT);
+        this.ctx.stroke();
+        */
     }
     private drawBat(){
         this.bat.draw(this.ctx);
     }
     private drawDebug(){
-        this.ctx.font = "20px Arial";
-        this.ctx.fillStyle = "white";;
-        this.ctx.fillText(`Mouse X: ${this.input.mouseX}, Mouse Y: ${this.input.mouseY}`, 10, 30);
-        
+        /* DEBUG OVERLAYS - DISABLED FOR NOW
+        this.ctx.font = "14px monospace";
+        this.ctx.fillStyle = "#ffffff";
+        this.ctx.fillText(`Mouse X: ${this.input.mouseX}, Mouse Y: ${this.input.mouseY}`, 10, 22);
+
+        // LIVE AUDIO HUD DEBUGGER OVERLAY
+        const debugInfo = SoundManager.getInstance().lastDebugInfo;
+        if (debugInfo && debugInfo.time > 0) {
+            const boxX = 10;
+            const boxY = 90;
+            const boxW = 450;
+            const boxH = 75;
+
+            // Dark semi-transparent background HUD card
+            this.ctx.fillStyle = "rgba(0, 0, 0, 0.82)";
+            this.ctx.fillRect(boxX, boxY, boxW, boxH);
+            this.ctx.strokeStyle = "#fbbf24"; // Amber border
+            this.ctx.lineWidth = 1.5;
+            this.ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+            // Metrics
+            this.ctx.font = "bold 14px monospace";
+            this.ctx.fillStyle = "#facc15"; // Yellow header
+            this.ctx.fillText(`impactGain * thicknessGain: ${debugInfo.product.toFixed(4)}`, boxX + 10, boxY + 22);
+
+            this.ctx.font = "12px monospace";
+            this.ctx.fillStyle = "#67e8f9"; // Cyan metrics
+            const regionLabel = debugInfo.regionIndex === 0 ? "Handle (0..56px)" : `Blade Region ${debugInfo.regionIndex} (of 16)`;
+            this.ctx.fillText(`impactGain: ${debugInfo.impactGain.toFixed(4)} | thicknessGain: ${debugInfo.thicknessGain.toFixed(4)}`, boxX + 10, boxY + 44);
+            this.ctx.fillText(`impactSpeed: ${debugInfo.impactSpeed.toFixed(1)} px/s | Zone: ${regionLabel}`, boxX + 10, boxY + 63);
+        }
+        */
+
+        // DRAW BOLD RED "OUT" DEBUG OVERLAY IF WICKET IS HIT
+        if (this.wicket && this.wicket.isOut) {
+            this.ctx.save();
+            const outX = CANVAS_WIDTH * 0.28; // Mid of top center and top left
+            const outY = 45;
+
+            // Glowing red background badge
+            this.ctx.fillStyle = "rgba(220, 38, 38, 0.95)";
+            this.ctx.fillRect(outX - 60, outY - 22, 120, 42);
+            this.ctx.strokeStyle = "#ffffff";
+            this.ctx.lineWidth = 2.5;
+            this.ctx.strokeRect(outX - 60, outY - 22, 120, 42);
+
+            this.ctx.font = "bold 30px sans-serif";
+            this.ctx.fillStyle = "#ffffff";
+            this.ctx.textAlign = "center";
+            this.ctx.textBaseline = "middle";
+            this.ctx.fillText("OUT", outX, outY - 1);
+            this.ctx.restore();
+        }
     }
-
-
-
-
-
 
 
 

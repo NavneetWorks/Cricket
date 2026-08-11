@@ -24,7 +24,7 @@ export default class GameLoop{
         const throwNewBall = () => {
             
             const minSpeed = 2000;
-            const maxSpeed = 3000;
+            const maxSpeed = 4000;
             const randomSpeed = minSpeed + Math.random() * (maxSpeed - minSpeed);
             
             const minAngle = 5;
@@ -41,6 +41,7 @@ export default class GameLoop{
             const randomAngle = 180 - (minAngle + Math.random() * (maxAngle - minAngle));
             
             // Ball ko naye X aur naye Angle ke sath release karein
+            this.renderer.wicket.reset();
             this.ball.throwBall(startX, startY, randomSpeed, randomAngle); 
         };
          // 1. Mouse Click (Left Click) par ball fenkna
@@ -73,7 +74,8 @@ export default class GameLoop{
         //console.log(`Mouse Position: (${currentCommand.x}, ${currentCommand.y})`);
         this.bat.update(this.input.mouseX, this.input.mouseY, dt, this.input);
         this.ball.update(dt);
-        this.bat.checkHit(this.ball, dt);
+        const batHitResult = this.bat.checkHit(this.ball, dt);
+        this.renderer.wicket.checkHit(this.ball, batHitResult.hit, batHitResult.hitSubStep);
     }
 
     private render(){
