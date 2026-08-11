@@ -175,3 +175,27 @@ k_values[66] = 0.5;  // 168
 k_values[67] = 0.5;  // 171
 k_values[68] = 0.5;  // 174
 k_values[69] = 0.5;  // 177
+
+// 84 Regions (2 pixels per region for 168px total bat length)
+// Indices 0..27: 56px Handle & Grip (thickness = 12mm)
+// Indices 28..83: 112px Blade wood profile (thickness 14mm -> 42mm sweetspot -> 18mm toe)
+export const BAT_THICKNESS_PROFILE: number[] = [
+    // 0..9 (Handle Top & Upper Grip)
+    12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+    // 10..19 (Handle Mid Grip)
+    12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+    // 20..27 (Handle Lower Grip - End of 56px Handle)
+    12, 12, 12, 12, 12, 12, 12, 12,
+    // 28..37 (Shoulder Transition: 14mm to 23mm)
+    14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+    // 38..47 (Upper Blade: 24mm to 33mm)
+    24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
+    // 48..57 (Sweetspot Swell Start: 34mm to 42mm)
+    34, 35, 36, 37, 38, 39, 40, 41, 42, 42,
+    // 58..67 (Sweetspot Swell Peak & Spine: 42mm to 35mm)
+    42, 42, 42, 42, 41, 40, 39, 38, 37, 35,
+    // 68..77 (Lower Blade Taper: 34mm to 22mm)
+    34, 33, 32, 31, 30, 28, 26, 25, 24, 22,
+    // 78..83 (Toe End: 20mm to 18mm)
+    20, 19, 18, 18, 18, 18
+];

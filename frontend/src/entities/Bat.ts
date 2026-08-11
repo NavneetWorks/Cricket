@@ -1,5 +1,6 @@
 import { BAT_CENTER_OF_MASS_RATIO } from "../game/constants";
 import Input from "../game/Input";
+import { SoundManager } from "../audio/SoundManager";
 import outerArcJson from "../config/outer_handle_arc.json";
 import innerArcJson from "../config/inner_handle_arc.json";
 import {
@@ -891,6 +892,9 @@ export default class Bat {
 
             // --- FRAME 1: IF RELATIVE IMPACT SPEED > 2000, STICK BALL TO BAT FOR 1 FRAME DWELL ---
             if (relativeImpactSpeed > 2000) {
+                // Single-shot sound on confirmed physical dwell collision
+                SoundManager.getInstance().playBatHit(relativeImpactSpeed, t * this.TOTAL_BAT_LENGTH);
+
                 this.isBallStuck = true;
                 ball.isStuck = true;
                 this.stuckInfo = {
@@ -923,9 +927,12 @@ export default class Bat {
                 return;
             }
 
-            // Normal immediate bounce if batSpeed <= 1000
+            // Normal immediate bounce if batSpeed <= 2000
             const v_normal = relativeVx * normalX + relativeVy * normalY;
-            if (v_normal > 0) return;
+            if (v_normal > 0) return; // Separating velocity -> No collision/deflection -> NO sound!
+
+            // Single-shot sound on confirmed physical bounce deflection
+            SoundManager.getInstance().playBatHit(relativeImpactSpeed, t * this.TOTAL_BAT_LENGTH);
 
             // FIX: PROPER PUSH-OUT
             const pushOutDist = ball.radius + (this.HANDLE_WIDTH / 2) + 0.1;

@@ -24,7 +24,7 @@ export default class GameLoop{
         const throwNewBall = () => {
             
             const minSpeed = 2000;
-            const maxSpeed = 3500;
+            const maxSpeed = 3000;
             const randomSpeed = minSpeed + Math.random() * (maxSpeed - minSpeed);
             
             const minAngle = 5;
