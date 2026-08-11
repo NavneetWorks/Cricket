@@ -37,29 +37,6 @@ function GameCanvas() {
 
     return (
         <div style={{ position: "relative", width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}>
-            <button
-                style={{
-                    position: "absolute",
-                    top: 20,
-                    left: 20,
-                    zIndex: 10,
-                    padding: "10px 15px",
-                    backgroundColor: "#333",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "5px",
-                    cursor: "pointer",
-                    fontSize: "16px",
-                    fontWeight: "bold"
-                }}
-                onClick={() => {
-                    if (gameLoopRef.current) {
-                        gameLoopRef.current.toggleGround();
-                    }
-                }}
-            >
-                Toggle Ground (Image / Pixel)
-            </button>
             <canvas
                 ref={canvasRef}
                 width={CANVAS_WIDTH}
