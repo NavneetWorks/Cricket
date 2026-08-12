@@ -9,7 +9,7 @@ export default class Wicket {
     public readonly STUMP_DIAMETER = 6.5; // 6.5px diameter for stump post
     public readonly BAIL_BARREL_DIAMETER = 5.0; // 5.0px diameter for bail barrel
     public readonly BAIL_SPIGOT_DIAMETER = 2.5; // 2.5px diameter for inner spigot seating
-    public readonly FIXED_X = 150; // Fixed X = 150 position
+    public readonly FIXED_X = 50; // Fixed X = 150 position
 
     // Wicket Hit / OUT State
     public isOut: boolean = false;
@@ -21,7 +21,7 @@ export default class Wicket {
     public stumpAngularVel: number = 0; // Rotation speed (rad/s)
 
     public isBailDislodged: boolean = false;
-    public bailPos: { x: number; y: number } = { x: 150, y: 0 };
+    public bailPos: { x: number; y: number } = { x: 50, y: 0 };
     public bailVel: { x: number; y: number } = { x: 0, y: 0 };
     public bailAngle: number = 0;
     public bailAngularVel: number = 0;

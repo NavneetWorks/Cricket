@@ -102,10 +102,10 @@ export default class Bat {
 
 
         
-    private readonly MAX_HIP_POSITION : Vec2 = { x: 450, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH-20 };
-    private readonly MIN_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+80 };
+    private readonly MAX_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH-20 };
+    private readonly MIN_HIP_POSITION : Vec2 = { x: 250, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+80 };
 
-    public readonly ORIGINAL_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH-20 };
+    public readonly ORIGINAL_HIP_POSITION : Vec2 = { x: 250, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH-20 };
 
     private CURRENT_HIP_POSITION : Vec2 = this.ORIGINAL_HIP_POSITION;
 
@@ -179,7 +179,7 @@ export default class Bat {
     private currentTime: number = 0;
     
     // For rendering hit text
-    private lastHitStats: {
+    public lastHitStats: {
         regionIndex: number;
         batAngle: number;
         batSpeedX: number;
@@ -189,6 +189,9 @@ export default class Bat {
         ballSpeedAfterX: number;
         ballSpeedAfterY: number;
         relativeImpactSpeed: number;
+        predictedRange?: number;
+        hitPosX?: number;
+        hitPosY?: number;
     } | null = null;
 
     // 1-Frame Dwell/Stick Collision State
@@ -737,6 +740,9 @@ export default class Bat {
                 ballSpeedAfterX: ball.vel.x,
                 ballSpeedAfterY: ball.vel.y,
                 relativeImpactSpeed: Math.hypot(relativeVx, relativeVy),
+                predictedRange: this.calculatePredictedRange(ball.pos, ball.vel),
+                hitPosX: ball.pos.x,
+                hitPosY: ball.pos.y
             };
 
             // Release ball!
@@ -990,7 +996,10 @@ export default class Bat {
                 ballSpeedBeforeY: originalBallVelY,
                 ballSpeedAfterX: ball.vel.x,
                 ballSpeedAfterY: ball.vel.y,
-                relativeImpactSpeed: relativeImpactSpeed
+                relativeImpactSpeed: relativeImpactSpeed,
+                predictedRange: this.calculatePredictedRange(ball.pos, ball.vel),
+                hitPosX: ball.pos.x,
+                hitPosY: ball.pos.y
             };
 
             // Glitch se bachne ke liye ball ko bat se thoda bahar dhakel dena
@@ -1001,6 +1010,20 @@ export default class Bat {
 
         return { hit: hit, hitSubStep: hitSubStep };
     }
+    private calculatePredictedRange(pos: { x: number; y: number }, vel: { x: number; y: number }): number {
+        const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
+        const dy = groundY - pos.y;
+        const g = GRAVITY; // Real game physics gravity (3566 px/s^2)
+        const vy = vel.y;
+        const vx = vel.x;
+        const disc = (vy * vy) + (2 * g * dy);
+        if (disc >= 0) {
+            const flightTime = (-vy + Math.sqrt(disc)) / g;
+            return Math.abs(vx) * flightTime;
+        }
+        return 0;
+    }
+
     private simulateComPhysics(dt: number): void {
         const dx = this.comTarget.x - this.comActual.x;
         const dy = this.comTarget.y - this.comActual.y;
@@ -1621,4 +1644,5 @@ export default class Bat {
         }
         */
     }
+    
 }

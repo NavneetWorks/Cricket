@@ -48,6 +48,7 @@ export default class Renderer{
         this.drawBat();
         this.ball.draw(this.ctx);
         this.drawDebug();
+        this.drawMiniScreen();
     }
     private drawSky(){
         this.ctx.fillStyle = GAME_COLORS.SKY;
@@ -265,9 +266,127 @@ export default class Renderer{
         }
     }
 
+    /**
+     * Draw Top-Left Mini Screen HUD Card (800px scaled representation of 10,000px world range)
+     */
+    private drawMiniScreen(): void {
+        this.ctx.save();
 
+        const boxX = 20;
+        const boxY = 20;
+        const boxW = 800; // 800px scaled width for 10,000px world range
+        const boxH = 210; // Increased height (breadth) for better lob arc headroom
 
+        const minWorldX = -300;
+        const maxWorldX = 10000;
+        const totalWorldX = maxWorldX - minWorldX; // 10,300px total range
+        const scaleX = boxW / totalWorldX; // ~0.07767 (800 / 10300)
 
+        const groundY = CANVAS_HEIGHT - GROUND_HEIGHT; // 753px
+        const miniGroundY = boxY + boxH - 22;
+        const maxFlightHeight = 2200; // px height headroom
+        const scaleY = (boxH - 45) / maxFlightHeight;
 
-    
+        // 1. MINI SCREEN CARD CONTAINER
+        this.ctx.fillStyle = "rgba(15, 23, 42, 0.90)"; // Dark slate background
+        this.ctx.fillRect(boxX, boxY, boxW, boxH);
+        this.ctx.strokeStyle = "rgba(255, 255, 255, 0.7)"; // Clean white border
+        this.ctx.lineWidth = 1.5;
+        this.ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+        // 2. HEADER LABELS ("MINI SCREEN  |  BALL RANGE: 78 px")
+        this.ctx.font = "bold 12px sans-serif";
+        this.ctx.textAlign = "left";
+        this.ctx.textBaseline = "top";
+        
+        // "MINI SCREEN" in white
+        this.ctx.fillStyle = "#ffffff";
+        this.ctx.fillText("MINI SCREEN", boxX + 14, boxY + 12);
+
+        // Integrated Range text right next to "MINI SCREEN" label
+        const lastStats = (this.bat as any).lastHitStats;
+        if (lastStats && lastStats.predictedRange !== undefined) {
+            const rangePx = Math.round(lastStats.predictedRange);
+            this.ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+            this.ctx.fillText("  |  ", boxX + 98, boxY + 12);
+
+            this.ctx.fillStyle = "#fbbf24"; // Bright amber text
+            this.ctx.fillText(`BALL RANGE: ${rangePx} px`, boxX + 124, boxY + 12);
+        }
+
+        // 3. HORIZONTAL GROUND BASELINE
+        this.ctx.strokeStyle = "rgba(74, 222, 128, 0.85)"; // Green ground line
+        this.ctx.lineWidth = 1.5;
+        this.ctx.beginPath();
+        this.ctx.moveTo(boxX, miniGroundY);
+        this.ctx.lineTo(boxX + boxW, miniGroundY);
+        this.ctx.stroke();
+
+        // 4. TINY VERTICAL WICKET LINE (AT WORLD X = 150)
+        const wicketWorldX = this.wicket ? this.wicket.FIXED_X : 150;
+        const miniWicketX = boxX + (wicketWorldX - minWorldX) * scaleX;
+        this.ctx.strokeStyle = "#38bdf8"; // Bright cyan wicket line
+        this.ctx.lineWidth = 2.0;
+        this.ctx.beginPath();
+        this.ctx.moveTo(miniWicketX, miniGroundY);
+        this.ctx.lineTo(miniWicketX, miniGroundY - 14); // 14px height
+        this.ctx.stroke();
+
+        // 5. FULL PARABOLIC TRAJECTORY ARC AFTER HIT (0..10,000 px)
+        if (lastStats && lastStats.ballSpeedAfterX !== undefined) {
+            const vx = lastStats.ballSpeedAfterX;
+            const vy = lastStats.ballSpeedAfterY;
+            const startX = lastStats.hitPosX !== undefined ? lastStats.hitPosX : 350;
+            const startY = lastStats.hitPosY !== undefined ? lastStats.hitPosY : (groundY - 100);
+            const g = 3566; // GRAVITY
+
+            this.ctx.strokeStyle = "rgba(56, 189, 248, 0.85)"; // Cyan trajectory line
+            this.ctx.lineWidth = 1.5;
+            this.ctx.setLineDash([3, 3]); // Dashed arc
+            this.ctx.beginPath();
+
+            const stepDt = 0.015;
+            let firstPoint = true;
+            for (let t = 0; t <= 3.0; t += stepDt) {
+                const px = startX + vx * t;
+                const py = startY + vy * t + 0.5 * g * t * t;
+
+                if (py > groundY + 10 || px > maxWorldX + 500) break;
+
+                const mx = boxX + (px - minWorldX) * scaleX;
+                const my = miniGroundY - (groundY - py) * scaleY;
+
+                if (firstPoint) {
+                    this.ctx.moveTo(mx, my);
+                    firstPoint = false;
+                } else {
+                    this.ctx.lineTo(mx, my);
+                }
+            }
+            this.ctx.stroke();
+            this.ctx.setLineDash([]); // Reset line dash
+        }
+
+        // 6. TINY SOLID BLACK BALL DOT
+        if (this.ball && this.ball.isActive) {
+            const ballWorldX = this.ball.pos.x;
+            const ballWorldY = this.ball.pos.y;
+
+            const miniBallX = boxX + (ballWorldX - minWorldX) * scaleX;
+            const miniBallY = miniGroundY - (groundY - ballWorldY) * scaleY;
+
+            // Render small solid BLACK ball dot matching user diagram
+            this.ctx.fillStyle = "#000000"; // Solid Black
+            this.ctx.beginPath();
+            this.ctx.arc(miniBallX, miniBallY, 2.5, 0, 2 * Math.PI);
+            this.ctx.fill();
+
+            // High contrast white halo ring
+            this.ctx.strokeStyle = "#ffffff";
+            this.ctx.lineWidth = 0.8;
+            this.ctx.stroke();
+        }
+
+        this.ctx.restore();
+    }
 }
