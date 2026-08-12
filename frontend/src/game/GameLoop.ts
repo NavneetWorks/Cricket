@@ -44,11 +44,15 @@ export default class GameLoop{
             this.renderer.wicket.reset();
             this.ball.throwBall(startX, startY, randomSpeed, randomAngle); 
         };
-         // 1. Mouse Click (Left Click) par ball fenkna
-        window.addEventListener("mousedown", throwNewBall);
-        // 2. Keyboard par 'Space' button dabane par ball fenkna
+          // 1. Mouse Click (Left Click) par ball fenkna (Only in BATTING mode)
+        window.addEventListener("mousedown", () => {
+            if (this.renderer.gameMode === 'BATTING') {
+                throwNewBall();
+            }
+        });
+        // 2. Keyboard par 'Space' button dabane par ball fenkna (Only in BATTING mode)
         window.addEventListener("keydown", (event) => {
-            if (event.code === "Space") {
+            if (event.code === "Space" && this.renderer.gameMode === 'BATTING') {
                 throwNewBall();
             }
         });
@@ -76,17 +80,23 @@ export default class GameLoop{
         requestAnimationFrame(this.loop);
     }
     private update(dt: number){
-        const currentCommand = this.input.getHistory().peek();
-        if(currentCommand === null){
-            console.log("No mouse history available to update bat.");
-            return;
+        if (this.renderer.gameMode === 'BATTING') {
+            const currentCommand = this.input.getHistory().peek();
+            if(currentCommand === null){
+                console.log("No mouse history available to update bat.");
+                return;
+            }
+            this.bat.update(this.input.mouseX, this.input.mouseY, dt, this.input);
+            this.ball.update(dt);
+            this.renderer.wicket.update(dt);
+            const batHitResult = this.bat.checkHit(this.ball, dt);
+            this.renderer.wicket.checkHit(this.ball, batHitResult.hit, batHitResult.hitSubStep);
+        } else {
+            // BOWLING MODE: Update bowling area, ball & wicket
+            this.renderer.bowlingArea.update(dt, this.input.mouseX, this.input.mouseY);
+            this.ball.update(dt);
+            this.renderer.wicket.update(dt);
         }
-        //console.log(`Mouse Position: (${currentCommand.x}, ${currentCommand.y})`);
-        this.bat.update(this.input.mouseX, this.input.mouseY, dt, this.input);
-        this.ball.update(dt);
-        this.renderer.wicket.update(dt);
-        const batHitResult = this.bat.checkHit(this.ball, dt);
-        this.renderer.wicket.checkHit(this.ball, batHitResult.hit, batHitResult.hitSubStep);
     }
 
     private render(){

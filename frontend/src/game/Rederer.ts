@@ -1,6 +1,7 @@
 import Bat from "../entities/Bat";
 import Ball from "../entities/Ball";
 import Wicket from "../entities/Wicket";
+import BowlingArea from "../entities/BowlingArea";
 import Input from "./Input";
 import { SoundManager } from "../audio/SoundManager";
 import {
@@ -17,6 +18,7 @@ export default class Renderer{
     private bat:Bat;
     private ball: Ball;
     public wicket: Wicket;
+    public bowlingArea: BowlingArea;
     
     public gameMode: 'BATTING' | 'BOWLING' = 'BATTING';
     public useImageGround: boolean = true;
@@ -28,6 +30,7 @@ export default class Renderer{
         this.input = input;
         this.ball = ball;
         this.wicket = new Wicket(this.bat);
+        this.bowlingArea = new BowlingArea();
         
         this.groundImage = new Image();
         this.groundImage.src = '/assets/cricket_ground_layers_cropped.png';
@@ -51,7 +54,7 @@ export default class Renderer{
         if (this.gameMode === 'BATTING') {
             this.drawBat();
         } else {
-            this.drawBowlingArea();
+            this.bowlingArea.draw(this.ctx);
         }
 
         this.ball.draw(this.ctx);
