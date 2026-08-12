@@ -18,6 +18,7 @@ export default class Renderer{
     private ball: Ball;
     public wicket: Wicket;
     
+    public gameMode: 'BATTING' | 'BOWLING' = 'BATTING';
     public useImageGround: boolean = true;
     private groundImage: HTMLImageElement;
 
@@ -46,7 +47,13 @@ export default class Renderer{
         this.drawSky();
         this.drawGround();
         this.wicket.draw(this.ctx);
-        this.drawBat();
+        
+        if (this.gameMode === 'BATTING') {
+            this.drawBat();
+        } else {
+            this.drawBowlingArea();
+        }
+
         this.ball.draw(this.ctx);
         this.drawDebug();
         this.drawMiniScreen();
@@ -273,6 +280,57 @@ export default class Renderer{
             this.ctx.lineWidth = 0.8;
             this.ctx.stroke();
         }
+
+        this.ctx.restore();
+    }
+
+    /**
+     * Draw Square Bowling Area UI Card (Right side X:1350..1730, Y:240..620)
+     */
+    private drawBowlingArea(): void {
+        this.ctx.save();
+
+        const boxX = 1350;
+        const boxY = 240;
+        const boxW = 380;
+        const boxH = 380;
+
+        // 1. Semi-transparent dark slate background card
+        this.ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
+        this.ctx.fillRect(boxX, boxY, boxW, boxH);
+
+        // 2. Cyan glowing outer border
+        this.ctx.strokeStyle = "#0ea5e9";
+        this.ctx.lineWidth = 2.5;
+        this.ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+        // 3. Inner dashed target box
+        this.ctx.strokeStyle = "rgba(56, 189, 248, 0.4)";
+        this.ctx.lineWidth = 1.0;
+        this.ctx.setLineDash([6, 6]);
+        this.ctx.strokeRect(boxX + 25, boxY + 50, boxW - 50, boxH - 75);
+        this.ctx.setLineDash([]);
+
+        // 4. Header label ("SQUARE BOWLING AREA")
+        this.ctx.font = "bold 15px sans-serif";
+        this.ctx.fillStyle = "#38bdf8"; // Bright cyan
+        this.ctx.textAlign = "center";
+        this.ctx.fillText("SQUARE BOWLING AREA", boxX + boxW / 2, boxY + 28);
+
+        // 5. Instruction Subtext
+        this.ctx.font = "12px sans-serif";
+        this.ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+        this.ctx.fillText("SWING MOUSE IN ARC & WHIP STOP TO RELEASE", boxX + boxW / 2, boxY + boxH - 12);
+
+        // 6. Rest Ball Target Marker (Center of Bowling Square)
+        const centerX = boxX + boxW / 2;
+        const centerY = boxY + boxH / 2 + 10;
+
+        this.ctx.strokeStyle = "rgba(250, 204, 21, 0.5)"; // Amber target circle
+        this.ctx.lineWidth = 1.5;
+        this.ctx.beginPath();
+        this.ctx.arc(centerX, centerY, 22, 0, 2 * Math.PI);
+        this.ctx.stroke();
 
         this.ctx.restore();
     }

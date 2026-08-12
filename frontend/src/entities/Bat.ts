@@ -206,6 +206,9 @@ export default class Bat {
         regionIndex: number;
     } | null = null;
 
+    // Dynamic Swing Arc Accumulator (Long Swing = Massive Acceleration & Velocity)
+    private accumulatedSwingAngle: number = 0;
+
     private stanceOffsetY: number = 0;
 
     public regions: BatRegion[] = [];
@@ -635,6 +638,14 @@ export default class Bat {
             this.handleVelocity.x = (this.handleTop.x - this.prevHandleTop.x) / dt;
             this.handleVelocity.y = (this.handleTop.y - this.prevHandleTop.y) / dt;
             this.angularVelocity = (this.batAngle - this.prevBatAngle) / dt;
+
+            // Track continuous swing arc angle
+            const dAngle = Math.abs(this.batAngle - this.prevBatAngle);
+            if (Math.abs(this.angularVelocity) > 0.4) {
+                this.accumulatedSwingAngle += dAngle;
+            } else {
+                this.accumulatedSwingAngle *= 0.94; // Decay slowly when bat slows down
+            }
         }
     }
     // Check karega ki ball Bat se takrai ya nahi
@@ -718,6 +729,10 @@ export default class Bat {
             const physicsVelY = (v_normal_after * normalY) + v_tangentY;
             const speed_after = Math.hypot(physicsVelX, physicsVelY);
 
+            // Scale exit speed based on cumulative swing arc length & angular speed (Reduced 3x again)
+            const arcDegrees = (this.accumulatedSwingAngle * 180) / Math.PI;
+            const swingArcMultiplier = 1 + Math.min(0.09, (arcDegrees / 90) * 0.07) + Math.min(0.07, (Math.abs(this.angularVelocity) / 10) * 0.05);
+
             if (speed_after > 0.001) {
                 const physicsAngle = Math.atan2(physicsVelY, physicsVelX);
                 const normalAngle = Math.atan2(normalY, normalX);
@@ -730,11 +745,11 @@ export default class Bat {
                 const assistFactor = Math.max(0, Math.min(100, NORMAL_DIRECTION_ASSIST)) / 100;
                 const newAngle = normalAngle + angleDiff * (1 - assistFactor);
 
-                ball.vel.x = batHitSpeedX + Math.cos(newAngle) * speed_after;
-                ball.vel.y = batHitSpeedY + Math.sin(newAngle) * speed_after;
+                ball.vel.x = (batHitSpeedX + Math.cos(newAngle) * speed_after) * swingArcMultiplier;
+                ball.vel.y = (batHitSpeedY + Math.sin(newAngle) * speed_after) * swingArcMultiplier;
             } else {
-                ball.vel.x = batHitSpeedX + physicsVelX;
-                ball.vel.y = batHitSpeedY + physicsVelY;
+                ball.vel.x = (batHitSpeedX + physicsVelX) * swingArcMultiplier;
+                ball.vel.y = (batHitSpeedY + physicsVelY) * swingArcMultiplier;
             }
 
             this.lastHitStats = {
@@ -919,13 +934,13 @@ export default class Bat {
                 let dwellFrames = 1; // Default < 1000 px/s (1 frame)
 
                 if (v_normal_abs >= 5000) {
-                    dwellFrames = 5; // 5000+ -> 5 frames
+                    dwellFrames = 3; // 5000+ -> 5 frames
                 } else if (v_normal_abs >= 3000) {
-                    dwellFrames = 4; // 3000..4999 -> 4 frames
+                    dwellFrames = 2; // 3000..4999 -> 4 frames
                 } else if (v_normal_abs >= 2000) {
-                    dwellFrames = 3; // 2000..2999 -> 3 frames
+                    dwellFrames = 2; // 2000..2999 -> 3 frames
                 } else if (v_normal_abs >= 1000) {
-                    dwellFrames = 2; // 1000..1999 -> 2 frames
+                    dwellFrames = 1; // 1000..1999 -> 2 frames
                 }
 
                 // Single-shot sound on confirmed physical collision
@@ -1055,11 +1070,16 @@ export default class Bat {
         let accelX = totalForceX / this.BAT_MASS;
         let accelY = totalForceY / this.BAT_MASS;
 
-        // Real Bat Inertia: Clamp maximum acceleration so heavy bat doesn't instantly jump to max speed on Frame 1
-        const MAX_ACCEL = 14000; // px/s^2 acceleration ceiling for heavy 1.2kg willow bat
+        // Dynamic Swing Arc Acceleration Scaling (Tuned down 3x again)
+        const arcDegrees = (this.accumulatedSwingAngle * 180) / Math.PI;
+        const arcBonus = 1 + Math.min(0.25, (arcDegrees / 90) * 0.13);
+        const angularBonus = 1 + Math.min(0.20, (Math.abs(this.angularVelocity) / 10) * 0.11);
+
+        const DYNAMIC_MAX_ACCEL = 14000 * arcBonus * angularBonus;
+
         const accelMag = Math.hypot(accelX, accelY);
-        if (accelMag > MAX_ACCEL) {
-            const scale = MAX_ACCEL / accelMag;
+        if (accelMag > DYNAMIC_MAX_ACCEL) {
+            const scale = DYNAMIC_MAX_ACCEL / accelMag;
             accelX *= scale;
             accelY *= scale;
         }

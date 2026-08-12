@@ -8,7 +8,7 @@ export const GAME_COLORS = {
 };
 export const PITCH_WIDTH = 180;
 export const QUEUE_SIZE = 3;
-export const NORMAL_DIRECTION_ASSIST = 50; // 0 to 100 scale. E.g. 10 = bends 10% towards Normal
+export const NORMAL_DIRECTION_ASSIST = 70; // 0 to 100 scale. E.g. 10 = bends 10% towards Normal
 
 export const GLOBAL_RESTITUTION_SCALE = 1.5;
 export const REGION1 = 2;
@@ -51,8 +51,8 @@ export const REGION37 = 24;
 export const REGION38 = 21;
 export const REGION39 = 17;
 export const REGION40 = 15;
-export const REGION41 = 2;
-export const REGION42 = 0;
+export const REGION41 = 9;
+export const REGION42 = 8;
 
 export const BAT_REGIONS_RESTITUTION = [
     REGION1, REGION2, REGION3, REGION4, REGION5, REGION6, REGION7, REGION8, REGION9, REGION10,

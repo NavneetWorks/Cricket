@@ -24,7 +24,7 @@ export default class GameLoop{
         const throwNewBall = () => {
             
             const minSpeed = 3000;
-            const maxSpeed = 3000;
+            const maxSpeed = 4500;
             const randomSpeed = minSpeed + Math.random() * (maxSpeed - minSpeed);
             
             const minAngle = 2;
@@ -46,10 +46,17 @@ export default class GameLoop{
         };
          // 1. Mouse Click (Left Click) par ball fenkna
         window.addEventListener("mousedown", throwNewBall);
-        // 2. Keyboard par 'Backspace' button dabane par ball fenkna
+        // 2. Keyboard par 'Space' button dabane par ball fenkna
         window.addEventListener("keydown", (event) => {
             if (event.code === "Space") {
                 throwNewBall();
+            }
+        });
+
+        // Tab Visibility Change handler: Reset clock on tab focus to prevent dt spike
+        document.addEventListener("visibilitychange", () => {
+            if (!document.hidden) {
+                this.lastFrameTime = performance.now();
             }
         });
 
@@ -58,9 +65,12 @@ export default class GameLoop{
     }
 
     private loop = (currentTime: number) => {
-       //console.log("Frame");
-        const dt = (currentTime - this.lastFrameTime) / 1000;
+        let rawDt = (currentTime - this.lastFrameTime) / 1000;
         this.lastFrameTime = currentTime;
+
+        // Clamp dt to max 0.05s (50ms) to prevent physics explosion when switching tabs
+        const dt = Math.min(Math.max(0.001, rawDt), 0.05);
+
         this.update(dt);
         this.render();
         requestAnimationFrame(this.loop);
@@ -81,6 +91,11 @@ export default class GameLoop{
 
     private render(){
         this.renderer.render();
+    }
+
+    public setGameMode(mode: 'BATTING' | 'BOWLING') {
+        this.renderer.gameMode = mode;
+        console.log("Game Mode set to:", mode);
     }
 
     public toggleGround() {
