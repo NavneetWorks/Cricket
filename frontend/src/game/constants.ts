@@ -51,8 +51,8 @@ export const REGION37 = 24;
 export const REGION38 = 21;
 export const REGION39 = 17;
 export const REGION40 = 15;
-export const REGION41 = 8;
-export const REGION42 = 1;
+export const REGION41 = 2;
+export const REGION42 = 0;
 
 export const BAT_REGIONS_RESTITUTION = [
     REGION1, REGION2, REGION3, REGION4, REGION5, REGION6, REGION7, REGION8, REGION9, REGION10,

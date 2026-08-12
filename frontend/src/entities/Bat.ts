@@ -194,8 +194,9 @@ export default class Bat {
         hitPosY?: number;
     } | null = null;
 
-    // 1-Frame Dwell/Stick Collision State
+    // 144Hz Adaptive Multi-Tier Dwell State
     private isBallStuck: boolean = false;
+    private dwellFramesRemaining: number = 0;
     private stuckInfo: {
         ball: any;
         tRatio: number;
@@ -640,10 +641,31 @@ export default class Bat {
     public checkHit(ball: any, dt: number = 0.016): { hit: boolean; hitSubStep: number } {
         if (!ball.isActive) return { hit: false, hitSubStep: 30 };
 
-        // --- FRAME 2: RELEASE & LAUNCH STUCK BALL ---
+        // --- DWELL HOLD & RELEASE SYSTEM (Multi-Tier 144Hz) ---
         if (this.isBallStuck && this.stuckInfo) {
             const info = this.stuckInfo;
             const regionIndex = info.regionIndex;
+
+            // Keep ball attached to moving bat face during dwell hold
+            let normalX = -Math.sin(this.batAngle);
+            let normalY = Math.cos(this.batAngle);
+            if (info.normalSign < 0) {
+                normalX = -normalX;
+                normalY = -normalY;
+            }
+            const pushOutDist = ball.radius + (this.HANDLE_WIDTH / 2) + 0.1;
+            const L = info.tRatio * this.TOTAL_BAT_LENGTH;
+            ball.pos.x = this.handleTop.x + Math.cos(this.batAngle) * L + (normalX * pushOutDist);
+            ball.pos.y = this.handleTop.y + Math.sin(this.batAngle) * L + (normalY * pushOutDist);
+
+            this.dwellFramesRemaining--;
+
+            // If dwell frames remaining, keep holding ball on bat face
+            if (this.dwellFramesRemaining > 0) {
+                return { hit: true, hitSubStep: 1 };
+            }
+
+            // --- FINAL FRAME: RELEASE BALL WITH FULL ACCUMULATED MOMENTUM ---
             const region = this.regions[regionIndex];
             const queue = region.history;
 
@@ -663,7 +685,6 @@ export default class Bat {
                 if (time_q > 0.0001 && dist_q > 0.0001) {
                     const speed = dist_q / time_q;
 
-                    // Latest direction calculated using latest - secondOldest
                     const dx_dir = latest.x - secondOldest.x;
                     const dy_dir = latest.y - secondOldest.y;
                     const dist_dir = Math.hypot(dx_dir, dy_dir);
@@ -679,7 +700,6 @@ export default class Bat {
                     batHitSpeedY = dirY * speed;
                 }
             } else {
-                const L = info.tRatio * this.TOTAL_BAT_LENGTH;
                 batHitSpeedX = this.handleVelocity.x - (this.angularVelocity * L * Math.sin(this.batAngle));
                 batHitSpeedY = this.handleVelocity.y + (this.angularVelocity * L * Math.cos(this.batAngle));
             }
@@ -687,20 +707,7 @@ export default class Bat {
             const relativeVx = info.originalBallVelX - batHitSpeedX;
             const relativeVy = info.originalBallVelY - batHitSpeedY;
 
-            let normalX = -Math.sin(this.batAngle);
-            let normalY = Math.cos(this.batAngle);
-
-            if (info.normalSign < 0) {
-                normalX = -normalX;
-                normalY = -normalY;
-            }
-
             const v_normal = relativeVx * normalX + relativeVy * normalY;
-
-            const pushOutDist = ball.radius + (this.HANDLE_WIDTH / 2) + 0.1;
-            const L = info.tRatio * this.TOTAL_BAT_LENGTH;
-            ball.pos.x = this.handleTop.x + Math.cos(this.batAngle) * L + (normalX * pushOutDist);
-            ball.pos.y = this.handleTop.y + Math.sin(this.batAngle) * L + (normalY * pushOutDist);
 
             const v_tangentX = relativeVx - v_normal * normalX;
             const v_tangentY = relativeVy - v_normal * normalY;
@@ -749,7 +756,7 @@ export default class Bat {
             ball.isStuck = false;
             this.isBallStuck = false;
             this.stuckInfo = null;
-            return { hit: true, hitSubStep: 1 }; // Exit Frame 2 release cleanly!
+            return { hit: true, hitSubStep: 1 };
         }
 
         let hit = false;
@@ -906,12 +913,26 @@ export default class Bat {
             const v_normal = relativeVx * normalX + relativeVy * normalY;
             if (v_normal > 0) return { hit: false, hitSubStep: 30 }; // No physical impact -> NO sound! NO stick! NO deflection!
 
-            // --- BRANCH 1: HIGH SPEED DWELL COLLISION (relativeImpactSpeed > 2000 on Blade) ---
-            if (relativeImpactSpeed > 2000 && isBladeRegion) {
-                // Single-shot sound on confirmed physical dwell collision
-                SoundManager.getInstance().playBatHit(Math.abs(v_normal), t * this.TOTAL_BAT_LENGTH);
+            // --- MULTI-TIER DWELL FRAME INITIALIZATION (at 144Hz) ---
+            if (isBladeRegion) {
+                const v_normal_abs = Math.abs(v_normal);
+                let dwellFrames = 1; // Default < 1000 px/s (1 frame)
+
+                if (v_normal_abs >= 5000) {
+                    dwellFrames = 5; // 5000+ -> 5 frames
+                } else if (v_normal_abs >= 3000) {
+                    dwellFrames = 4; // 3000..4999 -> 4 frames
+                } else if (v_normal_abs >= 2000) {
+                    dwellFrames = 3; // 2000..2999 -> 3 frames
+                } else if (v_normal_abs >= 1000) {
+                    dwellFrames = 2; // 1000..1999 -> 2 frames
+                }
+
+                // Single-shot sound on confirmed physical collision
+                SoundManager.getInstance().playBatHit(v_normal_abs, t * this.TOTAL_BAT_LENGTH);
 
                 this.isBallStuck = true;
+                this.dwellFramesRemaining = dwellFrames;
                 ball.isStuck = true;
                 this.stuckInfo = {
                     ball,
@@ -929,17 +950,6 @@ export default class Bat {
                 ball.vel.x = batHitSpeedX;
                 ball.vel.y = batHitSpeedY;
 
-                this.lastHitStats = {
-                    regionIndex,
-                    batAngle: (this.batAngle * 180) / Math.PI,
-                    batSpeedX: batHitSpeedX,
-                    batSpeedY: batHitSpeedY,
-                    ballSpeedBeforeX: originalBallVelX,
-                    ballSpeedBeforeY: originalBallVelY,
-                    ballSpeedAfterX: 0,
-                    ballSpeedAfterY: 0,
-                    relativeImpactSpeed,
-                };
                 return { hit: true, hitSubStep: hitSubStep };
             }
 
@@ -1042,8 +1052,17 @@ export default class Bat {
         const totalForceX = springForceX + dampingForceX;
         const totalForceY = springForceY + dampingForceY + gravityForceY;
 
-        const accelX = totalForceX / this.BAT_MASS;
-        const accelY = totalForceY / this.BAT_MASS;
+        let accelX = totalForceX / this.BAT_MASS;
+        let accelY = totalForceY / this.BAT_MASS;
+
+        // Real Bat Inertia: Clamp maximum acceleration so heavy bat doesn't instantly jump to max speed on Frame 1
+        const MAX_ACCEL = 14000; // px/s^2 acceleration ceiling for heavy 1.2kg willow bat
+        const accelMag = Math.hypot(accelX, accelY);
+        if (accelMag > MAX_ACCEL) {
+            const scale = MAX_ACCEL / accelMag;
+            accelX *= scale;
+            accelY *= scale;
+        }
 
         this.comVelocity.x += accelX * dt;
         this.comVelocity.y += accelY * dt;
