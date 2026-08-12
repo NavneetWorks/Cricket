@@ -71,7 +71,7 @@ export const GROUND_HEIGHT = 72;
 
 export const BAT_CENTER_OF_MASS_RATIO = 0.75;
 
-export const GRAVITY = 3566;
+export const GRAVITY = 3966;
 
 //export const RESTITUTION_BAT = 0.1; // Bat aur Ball ki takkar ka bounce
 export const RESTITUTION_GROUND = 0.6; // Zameen aur Ball ki takkar ka bounce

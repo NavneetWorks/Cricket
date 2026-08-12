@@ -7,7 +7,8 @@ import {
     CANVAS_WIDTH,
     CANVAS_HEIGHT,
     GAME_COLORS,
-    GROUND_HEIGHT
+    GROUND_HEIGHT,
+    GRAVITY
 } from "./constants";
 
 export default class Renderer{
@@ -17,7 +18,7 @@ export default class Renderer{
     private ball: Ball;
     public wicket: Wicket;
     
-    public useImageGround: boolean = false;
+    public useImageGround: boolean = true;
     private groundImage: HTMLImageElement;
 
     constructor(ctx:CanvasRenderingContext2D,bat:Bat,input:Input,ball: Ball){
@@ -65,146 +66,32 @@ export default class Renderer{
     private drawGround(){
         const groundY = CANVAS_HEIGHT - GROUND_HEIGHT; 
         
-        // Draw Image Ground if enabled
-        if (this.useImageGround && this.groundImage.complete && this.groundImage.naturalWidth !== 0) {
+        // Draw Image Ground (Fast 60 FPS GPU Rendering)
+        if (this.groundImage.complete && this.groundImage.naturalWidth !== 0) {
             const imgWidth = this.groundImage.naturalWidth;
             const imgHeight = this.groundImage.naturalHeight;
-            // Scale vertically to fit the ground height, keep aspect ratio horizontally
             const scaleY = GROUND_HEIGHT / imgHeight;
             const scaleX = scaleY; 
             const scaledWidth = imgWidth * scaleX;
             const scaledHeight = GROUND_HEIGHT;
             
-            // Repeat the image side-by-side until the canvas is covered
-            for(let x = 0; x < CANVAS_WIDTH; x += scaledWidth) {
+            for (let x = 0; x < CANVAS_WIDTH; x += scaledWidth) {
                 this.ctx.drawImage(this.groundImage, x, groundY, scaledWidth, scaledHeight);
             }
-            return; // Skip the pixel rendering
+            return; // Skip procedural loops for maximum performance
         }
 
+        // Fallback fill if image is loading
+        this.ctx.fillStyle = "#3CB043";
+        this.ctx.fillRect(0, groundY, CANVAS_WIDTH, GROUND_HEIGHT);
+
+        /* PROCEDURAL GROUND LOOPS COMMENTED OUT FOR 60 FPS PERFORMANCE
         const blockW = 4;
         const blockH = 4;
-        
         for (let y = groundY; y < CANVAS_HEIGHT; y += blockH) {
-            for (let x = 0; x < CANVAS_WIDTH; x += blockW) {
-                const depthIndex = (y - groundY) / blockH;
-                
-                let baseR, baseG, baseB;
-                let noiseMultiplier = 1;
-                
-                // Small jagged noise to keep layers mostly flat but slightly organic
-                const jaggedNoise = this.getStaticNoise(x, 0);
-                const effectiveDepth = depthIndex + (jaggedNoise - 0.5) * 1.5;
-                
-                if (effectiveDepth < 5.5) {
-                    // 1. Top Soil (Darkest blackish-brown) - decreased depth
-                    baseR = 30; baseG = 20; baseB = 15;
-                    noiseMultiplier = 1.0; 
-                } else if (effectiveDepth < 9.5) {
-                    // 2. Loam Layer (Dark chocolate brown) - increased depth
-                    baseR = 50; baseG = 30; baseB = 20;
-                    noiseMultiplier = 0.9;
-                } else if (effectiveDepth < 13.0) {
-                    // 3. Compacted Clay (Reddish rich brown) - increased depth
-                    baseR = 90; baseG = 45; baseB = 25;
-                    noiseMultiplier = 0.8; 
-                } else if (effectiveDepth < 15.5) {
-                    // 4. Base layer (Orange/Tan brown with pebbles)
-                    baseR = 130; baseG = 75; baseB = 40;
-                    noiseMultiplier = 1.0; 
-                } else {
-                    // 5. Light Sandy Pebbles
-                    baseR = 160; baseG = 100; baseB = 50;
-                    noiseMultiplier = 1.2; 
-                }
-                
-                // Texture: noise amplitude reduced so it's not overly noisy, creating a finer texture
-                const noise = (this.getStaticNoise(x, y) - 0.5) * 35 * noiseMultiplier;
-                
-                const finalR = Math.min(255, Math.max(0, Math.floor(baseR + noise)));
-                const finalG = Math.min(255, Math.max(0, Math.floor(baseG + noise)));
-                const finalB = Math.min(255, Math.max(0, Math.floor(baseB + noise)));
-                
-                this.ctx.fillStyle = `rgb(${finalR}, ${finalG}, ${finalB})`;
-                this.ctx.fillRect(x, y, blockW, blockH);
-            }
+            for (let x = 0; x < CANVAS_WIDTH; x += blockW) { ... }
         }
-
-        // Draw top layer grass spikes and roots
-        // Step every 1 pixel for maximum dense coverage
-        for (let x = 0; x < CANVAS_WIDTH; x += 1) {
-            const staticNoise = this.getStaticNoise(x, 2);
-            
-            // 1. Draw Roots (Solid golden web)
-            // Almost every pixel has a root (very dense)
-            if (staticNoise > 0.1) { 
-                const rootDepth = 3 + (this.getStaticNoise(x, 5) * 5); // 3 to 8 pixels deep
-                
-                this.ctx.lineWidth = 1.5;
-                this.ctx.strokeStyle = `rgba(170, 130, 60, 0.8)`; // Golden brown
-                this.ctx.beginPath();
-                this.ctx.moveTo(x, groundY);
-                
-                // Curve heavily left or right
-                const dir = (this.getStaticNoise(x, 7) > 0.5) ? 1 : -1;
-                const spread = 3 + this.getStaticNoise(x, 8) * 8; // Spread wide horizontally
-                
-                const cpX = x + dir * spread * 0.5;
-                const cpY = groundY + rootDepth * 0.8;
-                
-                const endX = x + dir * spread;
-                const endY = groundY + rootDepth * (0.3 + this.getStaticNoise(x, 9) * 0.7);
-                
-                this.ctx.quadraticCurveTo(cpX, cpY, endX, endY);
-                this.ctx.stroke();
-            }
-
-            // 2. Draw Grass Spikes 
-            const spikeHeight = 6 + (staticNoise * 8); // 6 to 14
-            
-            const rawAngleNoise = this.getStaticNoise(x, 3) * 2 - 1; 
-            const bendFactor = Math.sign(rawAngleNoise) * Math.pow(Math.abs(rawAngleNoise), 0.5); 
-            
-            const maxAngle = Math.PI / 2.5; 
-            const angle = bendFactor * maxAngle;
-            
-            const endX = x + Math.sin(angle) * spikeHeight;
-            const endY = groundY - Math.cos(angle) * (spikeHeight * 0.7); 
-            
-            const cpX = x + Math.sin(angle * 1.5) * (spikeHeight * 0.6);
-            const cpY = groundY - (spikeHeight * 0.5);
-            
-            // Vibrant Green grass (from image)
-            const colorNoise = this.getStaticNoise(x, 4);
-            const grassR = 60 + Math.floor(colorNoise * 40); // 60-100
-            const grassG = 140 + Math.floor(colorNoise * 50); // 140-190
-            const grassB = 20 + Math.floor(colorNoise * 20); // 20-40
-            
-            this.ctx.lineWidth = 1.2;
-            this.ctx.strokeStyle = `rgb(${grassR}, ${grassG}, ${grassB})`;
-            this.ctx.beginPath();
-            this.ctx.moveTo(x, groundY);
-            // quadraticCurveTo creates the smooth bending/sloggy effect
-            this.ctx.quadraticCurveTo(cpX, cpY, endX, endY);
-            this.ctx.stroke();
-        }
-
-        /* CREASE LINES - DISABLED FOR NOW
-        // Add 2 thin horizontal white crease lines
-        this.ctx.strokeStyle = "#ffffff";
-        this.ctx.lineWidth = 1.5;
-        
-        // 1. Pop Crease Line (at X = 320)
-        this.ctx.beginPath();
-        this.ctx.moveTo(320, groundY);
-        this.ctx.lineTo(320, CANVAS_HEIGHT);
-        this.ctx.stroke();
-        
-        // 2. Bowling Crease Line (at X = 380)
-        this.ctx.beginPath();
-        this.ctx.moveTo(380, groundY);
-        this.ctx.lineTo(380, CANVAS_HEIGHT);
-        this.ctx.stroke();
+        for (let x = 0; x < CANVAS_WIDTH; x += 1) { ... }
         */
     }
     private drawBat(){
@@ -338,7 +225,7 @@ export default class Renderer{
             const vy = lastStats.ballSpeedAfterY;
             const startX = lastStats.hitPosX !== undefined ? lastStats.hitPosX : 350;
             const startY = lastStats.hitPosY !== undefined ? lastStats.hitPosY : (groundY - 100);
-            const g = 3566; // GRAVITY
+            const g = GRAVITY; // GRAVITY
 
             this.ctx.strokeStyle = "rgba(56, 189, 248, 0.85)"; // Cyan trajectory line
             this.ctx.lineWidth = 1.5;
