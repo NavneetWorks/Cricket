@@ -10,8 +10,8 @@ export const PITCH_WIDTH = 180;
 export const QUEUE_SIZE = 3;
 export const NORMAL_DIRECTION_ASSIST = 70; // 0 to 100 scale. E.g. 10 = bends 10% towards Normal
 
-export const GLOBAL_RESTITUTION_SCALE = 1.5;
-export const REGION1 = 2;
+export const GLOBAL_RESTITUTION_SCALE = .9;
+export const REGION1 = 1;
 export const REGION2 = REGION1;
 export const REGION3 = REGION1;
 export const REGION4 = REGION1;
@@ -100,7 +100,8 @@ export const OUTER_ARC_SCALE = 1;
 export const INNER_ARC_SCALE = 1.2;
 export const HORIZONTAL_TILT_SPEED_SCALE = 0.002;
 
-
+export const BOWLING_FROM_ANGLE = 160;
+export const BOWLING_TO_ANGLE = 320;
 
 
 

@@ -57,6 +57,13 @@ export default class GameLoop{
             }
         });
 
+        // 3. Keyboard par 'R' button dabane par Bowling ball reset karna
+        window.addEventListener("keydown", (event) => {
+            if (event.code === "KeyR" || event.key.toLowerCase() === 'r') {
+                this.renderer.bowlingArea.reset(this.ball);
+            }
+        });
+
         // Tab Visibility Change handler: Reset clock on tab focus to prevent dt spike
         document.addEventListener("visibilitychange", () => {
             if (!document.hidden) {
@@ -93,8 +100,8 @@ export default class GameLoop{
             this.renderer.wicket.checkHit(this.ball, batHitResult.hit, batHitResult.hitSubStep);
         } else {
             // BOWLING MODE: Update bowling area, ball & wicket
-            this.renderer.bowlingArea.update(dt, this.input.mouseX, this.input.mouseY);
-            this.ball.update(dt);
+            this.renderer.bowlingArea.update(dt, this.input.mouseX, this.input.mouseY, this.ball);
+            this.ball.update(dt); // Integrate ball velocity into position for flight!
             this.renderer.wicket.update(dt);
         }
     }
