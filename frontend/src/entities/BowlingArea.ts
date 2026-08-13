@@ -274,6 +274,7 @@ export default class BowlingArea {
         if (this.isMouseInside(mouseX, mouseY)) {
             // Record black pencil line for mouse path
             this.mouseDebugTrail.push({ x: mouseX, y: mouseY });
+            let firstFrame = false;
             if (this.isFirstFrameInBox) {
                 this.prevMouseX = mouseX;
                 this.prevMouseY = mouseY;
@@ -281,6 +282,7 @@ export default class BowlingArea {
                 this.currentArmAngleRad = Math.atan2(mouseY - this.shoulderPos.y, mouseX - this.shoulderPos.x);
                 this.armAngularVelocity = 0;
                 this.isFirstFrameInBox = false;
+                firstFrame = true;
                 this.mouseDebugTrail = [];
                 this.ballDebugTrajectory = [];
                 this.isMouseIntersected = false;
@@ -323,10 +325,15 @@ export default class BowlingArea {
             while (deltaMouseAngle > Math.PI) deltaMouseAngle -= Math.PI * 2;
             while (deltaMouseAngle < -Math.PI) deltaMouseAngle += Math.PI * 2;
 
+            if (firstFrame) {
+                deltaMouseAngle = 0; // Prevent huge jump from previous swing's release angle
+            }
+
             // Shift Rules:
-            // Anti-Clockwise (deltaMouseAngle > 0) -> Move Center RIGHT (+X)
-            // Clockwise (deltaMouseAngle < 0) -> Move Center LEFT (-X)
-            if (Math.abs(deltaMouseAngle) > 0.003) {
+            // In canvas, Anti-Clockwise means angle decreases (deltaMouseAngle < 0).
+            // A negative delta * shiftSpeed creates a negative shiftStep, which subtracts from centerShiftX, moving it LEFT.
+            // Clockwise rotation (delta > 0) creates positive shiftStep, moving it RIGHT.
+            if (Math.abs(deltaMouseAngle) > 0.001) {
                 const shiftStep = deltaMouseAngle * this.centerShiftSpeed * (dt > 0 ? dt : 0.016);
                 this.centerShiftX = Math.max(-this.MAX_CENTER_SHIFT_X, Math.min(this.MAX_CENTER_SHIFT_X, this.centerShiftX + shiftStep));
                 this.updateJointsFromShoulder();
