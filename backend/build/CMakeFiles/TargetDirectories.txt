@@ -1,0 +1,4 @@
+/var/home/navneet/Documents/Cricket_Game/backend/build/CMakeFiles/uSockets.dir
+/var/home/navneet/Documents/Cricket_Game/backend/build/CMakeFiles/CricketServer.dir
+/var/home/navneet/Documents/Cricket_Game/backend/build/CMakeFiles/edit_cache.dir
+/var/home/navneet/Documents/Cricket_Game/backend/build/CMakeFiles/rebuild_cache.dir

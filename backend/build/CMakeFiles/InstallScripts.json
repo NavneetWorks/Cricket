@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/var/home/navneet/Documents/Cricket_Game/backend/build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

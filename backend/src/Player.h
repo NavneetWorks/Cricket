@@ -1,0 +1,26 @@
+#pragma once
+#include <iostream>
+#include <string>
+
+
+
+enum class PlayerRole{
+    NONE,
+    BATSMAN,
+    BOWLER
+};
+
+class Player{
+    public:
+        Player(int id):playerId(id),role(PlayerRole::NONE){
+            std::cout << "[Player] Naya Object Bana, ID : " << playerId << "\n";
+        }
+        ~Player(){
+        std::cout << "[Player] Player Object Destroy Hua, ID: " << playerId  << "\n";
+        }
+
+        int playerId;
+        PlayerRole role;
+        std::string name;
+
+};
