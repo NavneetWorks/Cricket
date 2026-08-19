@@ -33,62 +33,113 @@
     <button onclick="sendMessage()">Server Ko Bhejo (Send)</button>
 
     <div id="log"></div>
-
     <script>
         const logDiv = document.getElementById('log');
         function printLog(msg) {
             logDiv.innerHTML += `<div>${msg}</div>`;
-            logDiv.scrollTop = logDiv.scrollHeight; // Auto-scroll
+            logDiv.scrollTop = logDiv.scrollHeight; 
         }
 
-        // 1. C++ Server se connect hone ki koshish (Port 9001)
         const socket = new WebSocket('ws://localhost:9001');
-
         socket.binaryType = "arraybuffer"; 
 
-        // 2. Jab Server connect ho jaye
-         socket.onopen = function(event) {
-            printLog("🟢 Server se connection successful!");
+        // WebRTC ke global variables
+        let rtcConnection;
+        let dataChannel;
+
+        // --- 1. JAB WEBSOCKET CONNECT HO JAYE (WebRTC Start) ---
+        socket.onopen = async function(event) {
+            printLog("🟢 WebSocket (TCP) Connected! Ab WebRTC shuru kar rahe hain...");
             
-            // JSON hata diya! Ab ArrayBuffer (Raw Bytes) banayenge
-            // 1 Byte memory book ki
-            const buffer = new ArrayBuffer(1); 
-            const view = new DataView(buffer);
-            
-            // Uske 0th index par '1' likha (1 = PLAYER_JOIN)
-            view.setUint8(0, 1); 
-            
-            socket.send(buffer);
-            printLog("📤 Maine Binary Bheja: [Message Type 1]");
+        rtcConnection = new RTCPeerConnection({
+            iceServers: [
+                { urls: "stun:stun.l.google.com:19302" },
+                { 
+                    urls: "turn:openrelay.metered.ca:80", 
+                    username: "openrelay", 
+                    credential: "openrelay" 
+                }
+            ]
+        });           
+        dataChannel = rtcConnection.createDataChannel("physics");
+
+            dataChannel.onopen = () => {
+                printLog("🚀🔥 WebRTC (UDP) DATA CHANNEL OPEN! Zero Lag Mode ON!");
+            };
+
+            // JAB BROWSER APNA IP DHOONDH LE
+            rtcConnection.onicecandidate = (e) => {
+                if (e.candidate) {
+                    // NAYA: 'candidate' object me se actual string aur 'sdpMid' nikal kar bhejo
+                    sendSignalingData({ 
+                        type: "candidate", 
+                        candidate: e.candidate.candidate, 
+                        mid: e.candidate.sdpMid 
+                    });
+                }
+            };
+
+            const offer = await rtcConnection.createOffer();
+            await rtcConnection.setLocalDescription(offer);
+            sendSignalingData({ type: "offer", sdp: offer.sdp });
         };
 
-        // 3. Jab Server se koi reply aaye
-        socket.onmessage = function(event) {
-            printLog("📩 Server se kuch aaya!");
-        };
-
-        // 4. Agar server band ho jaye
-        socket.onclose = function(event) {
-            printLog("🔴 Server disconnect ho gaya.");
-        };
-
-        // 5. Button click hone par server ko JSON message bhejna
+        // --- NAYA: Send UDP Binary Data ---
         function sendMessage() {
-            const input = document.getElementById('messageBox');
-            if(socket.readyState === WebSocket.OPEN) {
-                
-                const buffer = new ArrayBuffer(9);
-                const view  = new DataView(buffer);
-                view.setUint8(0, 2); // 2 = CHAT_MESSAGE
-                view.setFloat32(1,34.3,true);
-                view.setFloat32(5,89.9,true);//power
-                +
-                socket.send(buffer);
-                   printLog("📤 Maine Binary Shot Bheja: Angle 45.5, Power 80.0");
+            // Hum ek test Binary message bhejenge (BAT_SWING)
+            let buffer = new ArrayBuffer(13);
+            let view = new DataView(buffer);
+            view.setUint8(0, 2); // Message Type 2 (BAT_SWING)
+            view.setUint32(1, 1, true); // Player ID 1
+            view.setFloat32(5, 45.5, true); // Bat Angle 45.5
+            view.setFloat32(9, 80.0, true); // Power 80
 
+            if (dataChannel && dataChannel.readyState === "open") {
+                dataChannel.send(buffer);
+                printLog("🏏 UDP se Bat Ghumaya (Sent Binary Data)!");
             } else {
-                printLog("⚠️ Server abhi connected nahi hai.");
+                printLog("⚠️ UDP Channel abhi open nahi hai!");
             }
+        }
+
+        // --- Helper Function: JSON data ko Binary (Type 99) banakar bhejna ---
+        socket.onmessage = async function(event) {
+            const data = event.data;
+            const view = new DataView(data);
+            const messageType = view.getUint8(0);
+
+            if (messageType === 99) { // WEBRTC SIGNALING
+                const textDecoder = new TextDecoder();
+                const jsonString = textDecoder.decode(new Uint8Array(data, 1));
+                
+                try {
+                    const msg = JSON.parse(jsonString);
+                    printLog("📥 C++ se Reply Aaya: " + msg.type);
+
+                    if (msg.type === "answer") {
+                        await rtcConnection.setRemoteDescription(new RTCSessionDescription(msg));
+                    } else if (msg.type === "candidate") {
+                        await rtcConnection.addIceCandidate(new RTCIceCandidate(msg));
+                    }
+                } catch (e) {
+                    console.error("Signaling Error:", e);
+                }
+            } else if (messageType === 2) { // BAT_SWING_UPDATE
+                const playerId = view.getUint32(1, true);
+                const angle = view.getFloat32(5, true);
+                printLog(`🏏 Server se Player ${playerId} ka Bat aaya: Angle ${angle.toFixed(1)}`);
+            }
+        };
+
+        // --- 3. HELPER FUNCTION (C++ KO JSON BHEJNE KE LIYE) ---
+        function sendSignalingData(dataObj) {
+            const jsonString = JSON.stringify(dataObj);
+            const textBytes = new TextEncoder().encode(jsonString);
+            const buffer = new Uint8Array(1 + textBytes.length);
+            buffer[0] = 99; // WEBRTC_SIGNALING
+            buffer.set(textBytes, 1);
+            socket.send(buffer.buffer);
+            printLog("📤 Bheja Signaling Data (Type 99): " + dataObj.type);
         }
     </script>
 </body>

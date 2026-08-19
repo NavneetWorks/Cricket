@@ -1,1 +1,0 @@
-/usr/lib64/ccache/c++ -Wl,--dependency-file=CMakeFiles/CricketServer.dir/link.d CMakeFiles/CricketServer.dir/src/GameServer.cpp.o CMakeFiles/CricketServer.dir/src/NetworkManager.cpp.o CMakeFiles/CricketServer.dir/src/main.cpp.o -o CricketServer  libuSockets.a -lz

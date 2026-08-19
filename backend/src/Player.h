@@ -1,7 +1,8 @@
 #pragma once
 #include <iostream>
 #include <string>
-
+#include "RTCManager.h"
+#include <memory>
 
 
 enum class PlayerRole{
@@ -22,5 +23,7 @@ class Player{
         int playerId;
         PlayerRole role;
         std::string name;
+        std::shared_ptr<RTCManager> rtc;
+
 
 };
