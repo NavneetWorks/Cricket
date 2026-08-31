@@ -72,38 +72,45 @@ export default class Renderer{
         t = ((t ^ (t >>> 13)) * 3266489917) >>> 0;
         return ((t ^ (t >>> 16)) >>> 0) / 4294967296; // Returns 0.0 to 1.0
     }
-
-    private drawGround(){
+        private drawGround(){
         const groundY = CANVAS_HEIGHT - GROUND_HEIGHT; 
         
-        // Draw Image Ground (Fast 60 FPS GPU Rendering)
-        if (this.groundImage.complete && this.groundImage.naturalWidth !== 0) {
-            const imgWidth = this.groundImage.naturalWidth;
-            const imgHeight = this.groundImage.naturalHeight;
-            const scaleY = GROUND_HEIGHT / imgHeight;
-            const scaleX = scaleY; 
-            const scaledWidth = imgWidth * scaleX;
-            const scaledHeight = GROUND_HEIGHT;
-            
-            for (let x = 0; x < CANVAS_WIDTH; x += scaledWidth) {
-                this.ctx.drawImage(this.groundImage, x, groundY, scaledWidth, scaledHeight);
-            }
-            return; // Skip procedural loops for maximum performance
-        }
-
-        // Fallback fill if image is loading
-        this.ctx.fillStyle = "#3CB043";
+        // Fast 60-144 FPS Solid Ground Fill (Zero Image/Loop Overhead)
+        this.ctx.fillStyle = GAME_COLORS.GROUND; // "#3CB043" (Solid Green)
         this.ctx.fillRect(0, groundY, CANVAS_WIDTH, GROUND_HEIGHT);
-
-        /* PROCEDURAL GROUND LOOPS COMMENTED OUT FOR 60 FPS PERFORMANCE
-        const blockW = 4;
-        const blockH = 4;
-        for (let y = groundY; y < CANVAS_HEIGHT; y += blockH) {
-            for (let x = 0; x < CANVAS_WIDTH; x += blockW) { ... }
-        }
-        for (let x = 0; x < CANVAS_WIDTH; x += 1) { ... }
-        */
     }
+
+    // private drawGround(){
+    //     const groundY = CANVAS_HEIGHT - GROUND_HEIGHT; 
+        
+    //     // Draw Image Ground (Fast 60 FPS GPU Rendering)
+    //     if (this.groundImage.complete && this.groundImage.naturalWidth !== 0) {
+    //         const imgWidth = this.groundImage.naturalWidth;
+    //         const imgHeight = this.groundImage.naturalHeight;
+    //         const scaleY = GROUND_HEIGHT / imgHeight;
+    //         const scaleX = scaleY; 
+    //         const scaledWidth = imgWidth * scaleX;
+    //         const scaledHeight = GROUND_HEIGHT;
+            
+    //         for (let x = 0; x < CANVAS_WIDTH; x += scaledWidth) {
+    //             this.ctx.drawImage(this.groundImage, x, groundY, scaledWidth, scaledHeight);
+    //         }
+    //         return; // Skip procedural loops for maximum performance
+    //     }
+
+    //     // Fallback fill if image is loading
+    //     this.ctx.fillStyle = "#3CB043";
+    //     this.ctx.fillRect(0, groundY, CANVAS_WIDTH, GROUND_HEIGHT);
+
+    //     /* PROCEDURAL GROUND LOOPS COMMENTED OUT FOR 60 FPS PERFORMANCE
+    //     const blockW = 4;
+    //     const blockH = 4;
+    //     for (let y = groundY; y < CANVAS_HEIGHT; y += blockH) {
+    //         for (let x = 0; x < CANVAS_WIDTH; x += blockW) { ... }
+    //     }
+    //     for (let x = 0; x < CANVAS_WIDTH; x += 1) { ... }
+    //     */
+    // }
     private drawBat(){
         this.bat.draw(this.ctx);
     }

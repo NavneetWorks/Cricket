@@ -1,0 +1,3 @@
+/var/home/navneet/Documents/Cricket_Game/backend/build/_deps/libdatachannel-subbuild/CMakeFiles/libdatachannel-populate.dir
+/var/home/navneet/Documents/Cricket_Game/backend/build/_deps/libdatachannel-subbuild/CMakeFiles/edit_cache.dir
+/var/home/navneet/Documents/Cricket_Game/backend/build/_deps/libdatachannel-subbuild/CMakeFiles/rebuild_cache.dir

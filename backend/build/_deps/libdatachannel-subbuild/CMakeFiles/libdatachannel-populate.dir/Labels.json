@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/var/home/navneet/Documents/Cricket_Game/backend/build/_deps/libdatachannel-subbuild/CMakeFiles/libdatachannel-populate"
+		},
+		{
+			"file" : "/var/home/navneet/Documents/Cricket_Game/backend/build/_deps/libdatachannel-subbuild/CMakeFiles/libdatachannel-populate.rule"
+		},
+		{
+			"file" : "/var/home/navneet/Documents/Cricket_Game/backend/build/_deps/libdatachannel-subbuild/CMakeFiles/libdatachannel-populate-complete.rule"
+		},
+		{
+			"file" : "/var/home/navneet/Documents/Cricket_Game/backend/build/_deps/libdatachannel-subbuild/libdatachannel-populate-prefix/src/libdatachannel-populate-stamp/libdatachannel-populate-build.rule"
+		},
+		{
+			"file" : "/var/home/navneet/Documents/Cricket_Game/backend/build/_deps/libdatachannel-subbuild/libdatachannel-populate-prefix/src/libdatachannel-populate-stamp/libdatachannel-populate-configure.rule"
+		},
+		{
+			"file" : "/var/home/navneet/Documents/Cricket_Game/backend/build/_deps/libdatachannel-subbuild/libdatachannel-populate-prefix/src/libdatachannel-populate-stamp/libdatachannel-populate-download.rule"
+		},
+		{
+			"file" : "/var/home/navneet/Documents/Cricket_Game/backend/build/_deps/libdatachannel-subbuild/libdatachannel-populate-prefix/src/libdatachannel-populate-stamp/libdatachannel-populate-install.rule"
+		},
+		{
+			"file" : "/var/home/navneet/Documents/Cricket_Game/backend/build/_deps/libdatachannel-subbuild/libdatachannel-populate-prefix/src/libdatachannel-populate-stamp/libdatachannel-populate-mkdir.rule"
+		},
+		{
+			"file" : "/var/home/navneet/Documents/Cricket_Game/backend/build/_deps/libdatachannel-subbuild/libdatachannel-populate-prefix/src/libdatachannel-populate-stamp/libdatachannel-populate-patch.rule"
+		},
+		{
+			"file" : "/var/home/navneet/Documents/Cricket_Game/backend/build/_deps/libdatachannel-subbuild/libdatachannel-populate-prefix/src/libdatachannel-populate-stamp/libdatachannel-populate-test.rule"
+		},
+		{
+			"file" : "/var/home/navneet/Documents/Cricket_Game/backend/build/_deps/libdatachannel-subbuild/libdatachannel-populate-prefix/src/libdatachannel-populate-stamp/libdatachannel-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"libdatachannel-populate"
+		],
+		"name" : "libdatachannel-populate"
+	}
+}

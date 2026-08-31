@@ -1,0 +1,12 @@
+{
+	"InstallScripts" : 
+	[
+		"/var/home/navneet/Documents/Cricket_Game/backend/build/cmake_install.cmake",
+		"/var/home/navneet/Documents/Cricket_Game/backend/build/_deps/libdatachannel-build/cmake_install.cmake",
+		"/var/home/navneet/Documents/Cricket_Game/backend/build/_deps/libdatachannel-build/deps/plog/cmake_install.cmake",
+		"/var/home/navneet/Documents/Cricket_Game/backend/build/_deps/libdatachannel-build/deps/usrsctp/cmake_install.cmake",
+		"/var/home/navneet/Documents/Cricket_Game/backend/build/_deps/libdatachannel-build/deps/usrsctp/usrsctplib/cmake_install.cmake",
+		"/var/home/navneet/Documents/Cricket_Game/backend/build/_deps/libdatachannel-build/deps/libjuice/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
