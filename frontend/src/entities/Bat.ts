@@ -22,8 +22,10 @@ import {
 type Vec2 = { x: number; y: number };
 
 export interface BatRegion {
-    restitution: number;
     history: { x: number; y: number; time: number }[];
+    front: number;
+    rear: number;
+    count: number;
 }
 
 export default class Bat {
@@ -215,11 +217,21 @@ export default class Bat {
 
     constructor() {
         for (let i = 0; i < 42; i++) {
+            const historySlots: { x: number; y: number; time: number }[] = [];
+            for (let q = 0; q < QUEUE_SIZE; q++) {
+                historySlots.push({ x: 0, y: 0, time: 0 });
+            }
             this.regions.push({
-                restitution: ((BAT_REGIONS_RESTITUTION[i] || 30) * GLOBAL_RESTITUTION_SCALE) / 100,
-                history: []
+                history: historySlots,
+                front: 0,
+                rear: 0,
+                count: 0
             });
         }
+    }
+
+    private getRegionRestitution(regionIndex: number): number {
+        return ((BAT_REGIONS_RESTITUTION[regionIndex] || 30) * GLOBAL_RESTITUTION_SCALE) / 100;
     }
 
     private getInterpolatedRadius(pts: { angle: number, radius: number }[], targetAngle: number, scaleDivisor: number = 200): number {
@@ -362,7 +374,7 @@ export default class Bat {
 
         this.updateBatPose(dt, targetShoulderMid);
         
-        // --- 42 REGIONS QUEUE UPDATE ---
+        // --- 42 REGIONS CIRCULAR QUEUE OVERWRITE (0 Memory Allocations) ---
         const px = this.handleTop.x;
         const py = this.handleTop.y;
         for (let i = 0; i < 42; i++) {
@@ -370,10 +382,23 @@ export default class Bat {
             const regionX = px + Math.cos(this.batAngle) * L;
             const regionY = py + Math.sin(this.batAngle) * L;
             
-            const queue = this.regions[i].history;
-            queue.push({ x: regionX, y: regionY, time: this.currentTime });
-            if (queue.length > QUEUE_SIZE) {
-                queue.shift(); // Remove oldest
+            const region = this.regions[i];
+            if (region.count < QUEUE_SIZE) {
+                const slot = region.history[region.count];
+                slot.x = regionX;
+                slot.y = regionY;
+                slot.time = this.currentTime;
+
+                region.front = region.count;
+                region.count++;
+            } else {
+                const slot = region.history[region.rear];
+                slot.x = regionX;
+                slot.y = regionY;
+                slot.time = this.currentTime;
+                
+                region.front = region.rear;
+                region.rear = (region.rear + 1) % QUEUE_SIZE;
             }
         }
 
@@ -683,10 +708,11 @@ export default class Bat {
             let batHitSpeedX = 0;
             let batHitSpeedY = 0;
 
-            if (queue.length > 1) {
-                const oldest = queue[0];
-                const latest = queue[queue.length - 1];
-                const secondOldest = queue.length > 2 ? queue[1] : queue[0];
+            if (region.count > 1) {
+                const oldest = queue[region.rear];
+                const latest = queue[region.front];
+                const secondOldestIndex = (region.rear + 1) % QUEUE_SIZE;
+                const secondOldest = region.count > 2 ? queue[secondOldestIndex] : queue[region.rear];
 
                 const dx_q = latest.x - oldest.x;
                 const dy_q = latest.y - oldest.y;
@@ -723,7 +749,7 @@ export default class Bat {
             const v_tangentX = relativeVx - v_normal * normalX;
             const v_tangentY = relativeVy - v_normal * normalY;
 
-            const v_normal_after = -v_normal * region.restitution;
+            const v_normal_after = -v_normal * this.getRegionRestitution(regionIndex);
 
             const physicsVelX = (v_normal_after * normalX) + v_tangentX;
             const physicsVelY = (v_normal_after * normalY) + v_tangentY;
@@ -874,10 +900,11 @@ export default class Bat {
             let batHitSpeedX = 0;
             let batHitSpeedY = 0;
 
-            if (queue.length > 1) {
-                const oldest = queue[0];
-                const latest = queue[queue.length - 1];
-                const secondOldest = queue.length > 2 ? queue[1] : queue[0];
+            if (region.count > 1) {
+                const oldest = queue[region.rear];
+                const latest = queue[region.front];
+                const secondOldestIndex = (region.rear + 1) % QUEUE_SIZE;
+                const secondOldest = region.count > 2 ? queue[secondOldestIndex] : queue[region.rear];
 
                 const dx_q = latest.x - oldest.x;
                 const dy_q = latest.y - oldest.y;
@@ -980,7 +1007,7 @@ export default class Bat {
             const v_tangentX = relativeVx - v_normal * normalX;
             const v_tangentY = relativeVy - v_normal * normalY;
 
-            const v_normal_after = -v_normal * region.restitution;
+            const v_normal_after = -v_normal * this.getRegionRestitution(regionIndex);
 
             const physicsVelX = (v_normal_after * normalX) + v_tangentX;
             const physicsVelY = (v_normal_after * normalY) + v_tangentY;
@@ -1030,7 +1057,7 @@ export default class Bat {
             // Glitch se bachne ke liye ball ko bat se thoda bahar dhakel dena
             ball.pos.x += 10; 
             
-            console.log(`HIT! Region: ${regionIndex}, Bounce: ${region.restitution}, Speed X: ${Math.floor(batHitSpeedX)}, Y: ${Math.floor(batHitSpeedY)}`);
+            console.log(`HIT! Region: ${regionIndex}, Bounce: ${this.getRegionRestitution(regionIndex)}, Speed X: ${Math.floor(batHitSpeedX)}, Y: ${Math.floor(batHitSpeedY)}`);
         }
 
         return { hit: hit, hitSubStep: hitSubStep };
