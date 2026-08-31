@@ -23,19 +23,19 @@ export default class GameLoop{
         this.lastFrameTime = performance.now();
         const throwNewBall = () => {
             
-            const minSpeed = 3500;
+            const minSpeed = 3000;
             const maxSpeed = 4000;
             const randomSpeed = minSpeed + Math.random() * (maxSpeed - minSpeed);
             
             const minAngle = 2;
-            const maxAngle = 10
+            const maxAngle = 22;
             
             // RIGHT se LEFT fenkne ke liye changes:
             
             // 1. Bowler screen ke Right side (jaise X = 1200) se fenkega
             const startX = CANVAS_WIDTH;
             const startY = (CANVAS_HEIGHT - GROUND_HEIGHT) - 350;
-            
+             
             // 2. Angle ko Left ki taraf modne ke liye (180 degree mein se minus karna)
             // Isse ball right ki jagah left ki taraf travel karegi
             const randomAngle = 180 - (minAngle + Math.random() * (maxAngle - minAngle));

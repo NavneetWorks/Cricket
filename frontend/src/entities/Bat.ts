@@ -777,7 +777,7 @@ export default class Bat {
         let hit = false;
         let t = 0;
         let hitSubStep = 0;
-        const subSteps = 30;
+        const subSteps = 15;
         
         let finalBx = ball.pos.x;
         let finalBy = ball.pos.y;
