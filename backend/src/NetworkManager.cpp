@@ -99,9 +99,24 @@ void NetworkManager::runServer(int port) {
             }
         },
 
-        .close = [](auto *ws, int code, std::string_view message) {
-            std::cout << "❌ Player Disconnect Ho Gaya!\n";
+        .close = [this](auto *ws, int code, std::string_view message) {
+            auto it = connectedPlayers.find(ws);
+            if( it != connectedPlayers.end()){
+                Player* p = it -> second;
+                std::cout << "Player ID " << p->playerId << " disconnect ho gaya. Cleaning Ram\n";
+
+                if(p->rtc && p->rtc->peerConnection){
+                p->rtc->peerConnection->close();
+
+                delete p;
+
+                connectedPlayers.erase(it);
+            }
+            std::cout << "🌐 Remaining Connected Players: " << connectedPlayers.size() << "\n";
+            }
+         
         }
+        
     }).listen(port, [port](auto *listen_socket) {
         if (listen_socket) {
             std::cout << "[NetworkManager] Successfully listening on port " << port << "!\n";

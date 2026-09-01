@@ -13,7 +13,7 @@ void GameServer::start(){
         isRunning = true;
 
         serverThread = std::thread(&GameServer::runTickLoop,this);
-        std::cout << "Game Server started 128 Hz physics loop .\n";
+        std::cout << "Game Server started 60 Hz physics loop .\n";
     }
 
 }
