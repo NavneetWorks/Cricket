@@ -9,7 +9,12 @@ import {
     CANVAS_HEIGHT,
 } from "../game/constants";
 
-function GameCanvas() {
+interface GameCanvasProps {
+    isOnline?:boolean;
+    onBackToHome?: () => void;
+}
+
+function GameCanvas({ isOnline = false,onBackToHome }: GameCanvasProps) {
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const gameLoopRef = useRef<GameLoop | null>(null);
@@ -29,7 +34,7 @@ function GameCanvas() {
 
         const bat = new Bat();
 
-        const gameLoop = new GameLoop(ctx, bat,input);
+        const gameLoop = new GameLoop(ctx, bat,input,isOnline);
         gameLoopRef.current = gameLoop;
 
         gameLoop.start();
@@ -45,51 +50,74 @@ function GameCanvas() {
 
     return (
         <div style={{ position: "relative", width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}>
-            {/* Top-Right Mode Switcher Buttons */}
-            <div style={{
-                position: "absolute",
-                top: "18px",
-                right: "20px",
-                display: "flex",
-                gap: "10px",
-                zIndex: 10
-            }}>
-                <button
-                    onClick={() => handleModeSwitch('BATTING')}
-                    style={{
-                        padding: "8px 16px",
-                        backgroundColor: gameMode === 'BATTING' ? "#0ea5e9" : "rgba(15, 23, 42, 0.85)",
-                        color: gameMode === 'BATTING' ? "#ffffff" : "#94a3b8",
-                        border: `1.5px solid ${gameMode === 'BATTING' ? "#38bdf8" : "rgba(255,255,255,0.2)"}`,
-                        borderRadius: "6px",
-                        cursor: "pointer",
-                        fontWeight: "bold",
-                        fontSize: "13px",
-                        boxShadow: gameMode === 'BATTING' ? "0 0 12px rgba(14, 165, 233, 0.5)" : "none",
-                        transition: "all 0.2s ease"
-                    }}
-                >
-                    🏏 BATTING MODE
-                </button>
+            {/* Top-Left Back To Home Button */}
+            {onBackToHome && (
+                <div style={{ position: "absolute", top: "18px", left: "20px", zIndex: 10 }}>
+                    <button
+                        onClick={onBackToHome}
+                        style={{
+                            padding: "8px 16px",
+                            backgroundColor: "rgba(15, 23, 42, 0.85)",
+                            color: "#38bdf8",
+                            border: "1.5px solid #38bdf8",
+                            borderRadius: "6px",
+                            cursor: "pointer",
+                            fontWeight: "bold",
+                            fontSize: "13px"
+                        }}
+                    >
+                        ⬅️ HOME MENU
+                    </button>
+                </div>
+            )}
 
-                <button
-                    onClick={() => handleModeSwitch('BOWLING')}
-                    style={{
-                        padding: "8px 16px",
-                        backgroundColor: gameMode === 'BOWLING' ? "#0ea5e9" : "rgba(15, 23, 42, 0.85)",
-                        color: gameMode === 'BOWLING' ? "#ffffff" : "#94a3b8",
-                        border: `1.5px solid ${gameMode === 'BOWLING' ? "#38bdf8" : "rgba(255,255,255,0.2)"}`,
-                        borderRadius: "6px",
-                        cursor: "pointer",
-                        fontWeight: "bold",
-                        fontSize: "13px",
-                        boxShadow: gameMode === 'BOWLING' ? "0 0 12px rgba(14, 165, 233, 0.5)" : "none",
-                        transition: "all 0.2s ease"
-                    }}
-                >
-                    ⚾ BOWLING MODE
-                </button>
-            </div>
+            {/* Top-Right Mode Switcher Buttons */}
+            {!isOnline && (
+                <div style={{
+                    position: "absolute",
+                    top: "18px",
+                    right: "20px",
+                    display: "flex",
+                    gap: "10px",
+                    zIndex: 10
+                }}>
+                    <button
+                        onClick={() => handleModeSwitch('BATTING')}
+                        style={{
+                            padding: "8px 16px",
+                            backgroundColor: gameMode === 'BATTING' ? "#0ea5e9" : "rgba(15, 23, 42, 0.85)",
+                            color: gameMode === 'BATTING' ? "#ffffff" : "#94a3b8",
+                            border: `1.5px solid ${gameMode === 'BATTING' ? "#38bdf8" : "rgba(255,255,255,0.2)"}`,
+                            borderRadius: "6px",
+                            cursor: "pointer",
+                            fontWeight: "bold",
+                            fontSize: "13px",
+                            boxShadow: gameMode === 'BATTING' ? "0 0 12px rgba(14, 165, 233, 0.5)" : "none",
+                            transition: "all 0.2s ease"
+                        }}
+                    >
+                        🏏 BATTING MODE
+                    </button>
+
+                    <button
+                        onClick={() => handleModeSwitch('BOWLING')}
+                        style={{
+                            padding: "8px 16px",
+                            backgroundColor: gameMode === 'BOWLING' ? "#0ea5e9" : "rgba(15, 23, 42, 0.85)",
+                            color: gameMode === 'BOWLING' ? "#ffffff" : "#94a3b8",
+                            border: `1.5px solid ${gameMode === 'BOWLING' ? "#38bdf8" : "rgba(255,255,255,0.2)"}`,
+                            borderRadius: "6px",
+                            cursor: "pointer",
+                            fontWeight: "bold",
+                            fontSize: "13px",
+                            boxShadow: gameMode === 'BOWLING' ? "0 0 12px rgba(14, 165, 233, 0.5)" : "none",
+                            transition: "all 0.2s ease"
+                        }}
+                    >
+                        ⚾ BOWLING MODE
+                    </button>
+                </div>
+            )}
 
             <canvas
                 ref={canvasRef}

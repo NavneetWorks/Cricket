@@ -51,9 +51,9 @@ export default class Renderer{
         this.drawGround();
         this.wicket.draw(this.ctx);
         
-        if (this.gameMode === 'BATTING') {
-            this.drawBat();
-        } else {
+        this.drawBat();
+        // ⚾ BOWLING Mode me Bowling Arc Overlay bhi draw hoga:
+        if (this.gameMode === 'BOWLING') {
             this.bowlingArea.draw(this.ctx);
         }
 

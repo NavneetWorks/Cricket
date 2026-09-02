@@ -3,17 +3,25 @@
 #include <iostream>
 #include <memory>
 #include <functional>
+#include "NetworkProtocol.h"
 #include "../libs/json/json.hpp"
 
 using json = nlohmann::json;
 
 class RTCManager{
     public:
-        RTCManager(int playerId,std::function<void(std::string)> sendWsMsg) : id(playerId), sendSignalingMessage(sendWsMsg){
+        using PacketCallback = std::function<void(const rtc::binary&)>;
+
+        RTCManager(int playerId,std::function<void(std::string)> sendWsMsg,PacketCallback packetForward = nullptr) : id(playerId), sendSignalingMessage(sendWsMsg),onPacketForward(packetForward) {
+          
             rtc::Configuration config;
             config.iceServers.emplace_back("stun:stun.l.google.com:19302");
-            config.iceServers.emplace_back("turn:openrelay.metered.ca:80", "openrelay", "openrelay");
 
+            // TURN Server configuration with Username & Password:
+            rtc::IceServer turnServer("turn:openrelay.metered.ca:80");
+            turnServer.username = "openrelay";
+            turnServer.password = "openrelay";
+            config.iceServers.push_back(turnServer);
 
             peerConnection = std::make_shared<rtc::PeerConnection>(config);
 
@@ -33,20 +41,15 @@ class RTCManager{
                 dataChannel = dc;
             
                 // Jab UDP se message aayega
-                 dc->onMessage([](std::variant<rtc::binary, rtc::string> data) {
+                 dc->onMessage([this](std::variant<rtc::binary, rtc::string> data) {
                     if (std::holds_alternative<rtc::binary>(data)) {
                         auto binaryData = std::get<rtc::binary>(data);
-                        uint8_t* rawData = reinterpret_cast<uint8_t*>(binaryData.data());
-                        
-                        if (binaryData.size() >= 13 && rawData[0] == 2) {
-                            uint32_t playerId = *reinterpret_cast<uint32_t*>(rawData + 1);
-                            float angle = *reinterpret_cast<float*>(rawData + 5);
-                            float power = *reinterpret_cast<float*>(rawData + 9);
-                            
-                            std::cout << "🏏 UDP FAST MESSAGE: Player " << playerId 
-                                      << " ne Bat Ghumaya! Angle: " << angle 
-                                      << " Power: " << power << "\n";
-                        }
+                        if(binaryData.size() >= sizeof(PacketHeader)){
+                            if(onPacketForward){
+                                onPacketForward(binaryData);
+                            }
+                        }                        
+                      
                     }
                 });
             });
@@ -55,13 +58,19 @@ class RTCManager{
                 std::cout << "WebRTC State: " << state << "\n";
             });
         }
-        ~RTCManager() {
-        if (peerConnection) peerConnection->close();
-    }
-    int id;
-    std::shared_ptr<rtc::PeerConnection> peerConnection;
-    std::function<void(std::string)> sendSignalingMessage;
-    std::shared_ptr<rtc::DataChannel> dataChannel;
 
+        ~RTCManager() {
+            if (peerConnection) peerConnection->close();
+        }
+        void sendUDP(const rtc::binary& data) {
+            if (dataChannel && dataChannel->isOpen()) {
+                dataChannel->send(data);
+            }
+        }
+        int id;
+        std::shared_ptr<rtc::PeerConnection> peerConnection;
+        std::function<void(std::string)> sendSignalingMessage;
+        PacketCallback onPacketForward;
+        std::shared_ptr<rtc::DataChannel> dataChannel;
 
 };

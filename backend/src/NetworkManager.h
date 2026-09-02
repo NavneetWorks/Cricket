@@ -15,9 +15,8 @@ public:
 
 private:
     void runServer(int port); 
-    
     std::thread networkThread; 
-
     std::unordered_map<void*,Player*> connectedPlayers;
+    Player* waitingPlayer = nullptr;
     int nextPlayerId = 1;
 };

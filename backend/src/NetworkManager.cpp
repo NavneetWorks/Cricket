@@ -25,17 +25,67 @@ void NetworkManager::runServer(int port) {
     
     uWS::App().ws<int>("/*", { 
         .open = [this](auto *ws) {
+               if (connectedPlayers.size() >= 2) {
+                    std::cout << "🚫 Server Full (2 Players active)! Rejecting new connection.\n";
+                    ws->close();
+                    return;
+                }
             Player* newPlayer = new Player(nextPlayerId++);
             auto* loop = uWS::Loop::get();
             auto sendSignaling = [ws,loop](std::string msg){
                 std::string outMsg = "\x63" + msg;
                  loop->defer([ws, outMsg]() {
                     ws->send(outMsg, uWS::OpCode::BINARY);
-                });
+                }); 
             };
-            newPlayer->rtc = std::make_shared<RTCManager>(newPlayer->playerId, sendSignaling);
+            auto packetForward = [this,newPlayer](const rtc::binary& binaryData){
+                if(newPlayer->opponent && newPlayer->opponent->rtc){
+                    newPlayer->opponent->rtc->sendUDP(binaryData);
+                }
+            };
+            newPlayer->rtc = std::make_shared<RTCManager>(newPlayer->playerId, sendSignaling,packetForward);
             connectedPlayers[ws] = newPlayer;
             std::cout << "🌐 Naya Player Connect Hua! Total Players : " << connectedPlayers.size() << "\n";
+
+            if (waitingPlayer == nullptr) {
+                newPlayer->role = PlayerRole::BATSMAN;
+                waitingPlayer = newPlayer;
+                std::cout << "🏏 Player " << newPlayer->playerId << " (BATSMAN) waiting...\n";
+            }else{
+                Player* p1 = waitingPlayer; // Batter
+                Player* p2 = newPlayer;     // Bowler
+                p2->role = PlayerRole::BOWLER;
+                // Cross-link opponent pointers
+                p1->opponent = p2;
+                p2->opponent = p1;
+                waitingPlayer = nullptr; // Queue clear
+                std::cout << "⚔️ MATCH PAIRING COMPLETE!\n";
+                std::cout << "   -> Player " << p1->playerId << ": BATSMAN\n";
+                std::cout << "   -> Player " << p2->playerId << ": BOWLER\n";
+
+                // MATCH_START Signal with Relative Tick Rate Syncing:
+                json msgP1 = {
+                    {"type", "MATCH_START"}, 
+                    {"role", "BATSMAN"}, 
+                    {"playerId", p1->playerId}, 
+                    {"opponentId", p2->playerId},
+                    {"tickRate", 60},          // 60 Hz Target Tick Rate
+                    {"tickIntervalMs", 16.66}   // 16.66ms Network Interval
+                };
+
+                json msgP2 = {
+                    {"type", "MATCH_START"}, 
+                    {"role", "BOWLER"},  
+                    {"playerId", p2->playerId}, 
+                    {"opponentId", p1->playerId},
+                    {"tickRate", 60},          // 60 Hz Target Tick Rate
+                    {"tickIntervalMs", 16.66}   // 16.66ms Network Interval
+                };
+
+                p1->rtc->sendSignalingMessage(msgP1.dump());
+                p2->rtc->sendSignalingMessage(msgP2.dump());
+            }
+
         },
 
         .message = [this](auto *ws, std::string_view message, uWS::OpCode opCode) {
@@ -105,18 +155,24 @@ void NetworkManager::runServer(int port) {
                 Player* p = it -> second;
                 std::cout << "Player ID " << p->playerId << " disconnect ho gaya. Cleaning Ram\n";
 
+                 if (waitingPlayer == p) {
+                    waitingPlayer = nullptr;
+                }
+                 if (p->opponent) {
+                    p->opponent->opponent = nullptr;
+                }
                 if(p->rtc && p->rtc->peerConnection){
-                p->rtc->peerConnection->close();
-
+                     p->rtc->peerConnection->close();
+                }
                 delete p;
 
                 connectedPlayers.erase(it);
-            }
+            
             std::cout << "🌐 Remaining Connected Players: " << connectedPlayers.size() << "\n";
             }
          
         }
-        
+
     }).listen(port, [port](auto *listen_socket) {
         if (listen_socket) {
             std::cout << "[NetworkManager] Successfully listening on port " << port << "!\n";

@@ -71,10 +71,10 @@ export const GROUND_HEIGHT = 72;
 
 export const BAT_CENTER_OF_MASS_RATIO = 0.75;
 
-export const GRAVITY = 3966;
+export const GRAVITY = 3566;
 
 //export const RESTITUTION_BAT = 0.1; // Bat aur Ball ki takkar ka bounce
-export const RESTITUTION_GROUND = 0.6; // Zameen aur Ball ki takkar ka bounce
+export const RESTITUTION_GROUND = 0.5; // Zameen aur Ball ki takkar ka bounce
 
 export const TARGET_ANGLE_THRESHOLD = 0.02;
 
@@ -200,3 +200,11 @@ export const BAT_THICKNESS_PROFILE: number[] = [
     // 78..83 (Toe End: 20mm to 18mm)
     20, 19, 18, 18, 18, 18
 ];
+
+// 🌐 CENTRALIZED NETWORK SERVER CONFIG:
+export const SERVER_CONFIG = {
+    // Vite .env se URL read karega, agar nahi mila to localhost default fallback rahega:
+    SIGNALING_URL: import.meta.env.VITE_SIGNALING_URL || `ws://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:9001`,
+    TARGET_TICK_RATE: 60,
+    NETWORK_INTERVAL_MS: 16.66
+};

@@ -208,6 +208,15 @@ export default class Bat {
         regionIndex: number;
     } | null = null;
 
+    // Bat.ts ke class ke andar public getters add karein:
+    public getHandleTop(): { x: number; y: number } {
+        return this.handleTop;
+    }
+
+    public getBatAngle(): number {
+        return this.batAngle;
+    }
+
     // Dynamic Swing Arc Accumulator (Long Swing = Massive Acceleration & Velocity)
     private accumulatedSwingAngle: number = 0;
 
@@ -475,7 +484,10 @@ export default class Bat {
             "right"
         );
     }
-
+        public setBatPoseFromMouse(mouseX: number, mouseY: number) {
+            // 🚀 Built-in IK solver se Full Body Hips, Spine, Shoulders, Arms & Legs update:
+            this.update(mouseX, mouseY, 0.016);
+        }
     // ---------------------------------------------------------------
     // STEP 1: bat orientation + COM + wrist targets, driven by mouse
     // ---------------------------------------------------------------

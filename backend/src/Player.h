@@ -21,6 +21,7 @@ class Player{
         }
 
         int playerId;
+        Player* opponent = nullptr;
         PlayerRole role;
         std::string name;
         std::shared_ptr<RTCManager> rtc;

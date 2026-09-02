@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 project(CricketGameServer C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -11,7 +12,7 @@ set(NO_EXAMPLES ON CACHE BOOL "" FORCE)
 FetchContent_Declare(
     libdatachannel
     GIT_REPOSITORY https://github.com/paullouisageneau/libdatachannel.git
-    GIT_TAG        v0.21.2
+    GIT_TAG        v0.22.4
 )
 FetchContent_MakeAvailable(libdatachannel)
 
