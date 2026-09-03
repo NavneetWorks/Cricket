@@ -67,7 +67,7 @@ export const CANVAS_WIDTH = 1800;
 
 export const CANVAS_HEIGHT = 825;
 
-export const GROUND_HEIGHT = 72;
+export const GROUND_HEIGHT = 100;
 
 export const BAT_CENTER_OF_MASS_RATIO = 0.75;
 
@@ -208,3 +208,5 @@ export const SERVER_CONFIG = {
     TARGET_TICK_RATE: 60,
     NETWORK_INTERVAL_MS: 16.66
 };
+
+export const PLAYER_LENGTH_FACTOR = 32;

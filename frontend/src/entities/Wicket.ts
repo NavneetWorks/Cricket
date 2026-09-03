@@ -1,14 +1,14 @@
-import { CANVAS_HEIGHT, GROUND_HEIGHT } from "../game/constants";
+import { CANVAS_HEIGHT, GROUND_HEIGHT,PLAYER_LENGTH_FACTOR } from "../game/constants";
 import Bat from "./Bat";
 
 export default class Wicket {
     private bat: Bat;
 
     // ICC Wicket Specification Constants (True 2D Side-View Single Stump)
-    public readonly WICKET_HEIGHT = 125; // 125px total height
-    public readonly STUMP_DIAMETER = 6.5; // 6.5px diameter for stump post
-    public readonly BAIL_BARREL_DIAMETER = 5.0; // 5.0px diameter for bail barrel
-    public readonly BAIL_SPIGOT_DIAMETER = 2.5; // 2.5px diameter for inner spigot seating
+    public readonly WICKET_HEIGHT = 3.7*PLAYER_LENGTH_FACTOR; // 125px total height
+    public readonly STUMP_DIAMETER = 0.2*PLAYER_LENGTH_FACTOR; // 6.5px diameter for stump post
+    public readonly BAIL_BARREL_DIAMETER = 0.05*PLAYER_LENGTH_FACTOR; // 5.0px diameter for bail barrel
+    public readonly BAIL_SPIGOT_DIAMETER = 0.025*PLAYER_LENGTH_FACTOR; // 2.5px diameter for inner spigot seating
     public readonly FIXED_X = 50; // Fixed X = 150 position
 
     // Wicket Hit / OUT State
