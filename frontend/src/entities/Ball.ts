@@ -1,4 +1,4 @@
-import { CANVAS_HEIGHT, GROUND_HEIGHT, GRAVITY, RESTITUTION_GROUND } from "../game/constants";
+import { CANVAS_HEIGHT, GROUND_HEIGHT, GRAVITY, RESTITUTION_GROUND,PLAYER_LENGTH_FACTOR } from "../game/constants";
 import { SoundManager } from "../audio/SoundManager";
 
 type Vec2 = { x: number; y: number };
@@ -8,7 +8,7 @@ export default class Ball {
     public prevPos: Vec2 = { x: -100, y: -100 };
     public vel: Vec2 = { x: 0, y: 0 };
     
-    public readonly radius = 9;
+    public readonly radius = .27*PLAYER_LENGTH_FACTOR;
     private readonly friction = 0.98; // Zameen par ragad (Friction)
 
     public isActive = false; // Check karne ke liye ki ball hawa mein hai ya nahi

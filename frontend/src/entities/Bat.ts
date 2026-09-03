@@ -16,7 +16,8 @@ import {
     OUTER_ARC_SCALE,
     INNER_ARC_SCALE,
     HORIZONTAL_TILT_SPEED_SCALE,
-    k_values
+    k_values,
+    PLAYER_LENGTH_FACTOR
 } from "../game/constants";
 
 type Vec2 = { x: number; y: number };
@@ -59,11 +60,11 @@ export default class Bat {
     private handleVelocity: Vec2 = { x: 0, y: 0 };
     private readonly HANDLE_STIFFNESS_Y = 30; // Increased so it hits speed limit!for now
     // --- BAT BREAKDOWN ---
-    private readonly HANDLE_LENGTH = 56;  // 33% of the bat
-    private readonly BLADE_LENGTH = 112; // 67% of the bat
-    private readonly TOTAL_BAT_LENGTH = 168;
-    private readonly TOTAL_RIGHT_ARM_LENGTH  =  this.TOTAL_BAT_LENGTH*0.7;
-    private readonly TOTAL_LEFT_ARM_LENGTH = this.TOTAL_BAT_LENGTH*0.7;
+    private readonly HANDLE_LENGTH = 1.5 * PLAYER_LENGTH_FACTOR; // 1.5x of player length factor
+    private readonly BLADE_LENGTH = 3*PLAYER_LENGTH_FACTOR;
+    private readonly TOTAL_BAT_LENGTH = 4.7*PLAYER_LENGTH_FACTOR;
+    private readonly TOTAL_RIGHT_ARM_LENGTH  =  3.4*PLAYER_LENGTH_FACTOR;
+    private readonly TOTAL_LEFT_ARM_LENGTH = 3.4*PLAYER_LENGTH_FACTOR;
     // --- WIDTHS ---
 
     private readonly HANDLE_WIDTH = this.TOTAL_BAT_LENGTH*.0388888888;
@@ -92,26 +93,26 @@ export default class Bat {
 
     private readonly EPS = 0.01;
 
-    private readonly FULL_LEG_LENGTH = 160; // 43 % thigh;
+    private readonly FULL_LEG_LENGTH = 4.7*PLAYER_LENGTH_FACTOR; 
 
-    private readonly THIGH_LENGTH = this.FULL_LEG_LENGTH*.53;// 43 % thigh;
+    private readonly THIGH_LENGTH = this.FULL_LEG_LENGTH*.53;
     private readonly SHIN_LENGTH = this.FULL_LEG_LENGTH-this.THIGH_LENGTH;
 
 
-    private readonly NECT_TO_HIP_LENGTH = 97;
+    private readonly NECT_TO_HIP_LENGTH = 2.6*PLAYER_LENGTH_FACTOR;
 
   
 
 
         
-    private readonly MAX_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH-20 };
+    private readonly MAX_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH-60 };
     private readonly MIN_HIP_POSITION : Vec2 = { x: 250, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+80 };
 
-    public readonly ORIGINAL_HIP_POSITION : Vec2 = { x: 250, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH-20 };
+    public readonly ORIGINAL_HIP_POSITION : Vec2 = { x: 250, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH-50 };
 
     private CURRENT_HIP_POSITION : Vec2 = this.ORIGINAL_HIP_POSITION;
 
-    private readonly LEG_WIDTH_AT_HIP = 30;
+    private readonly LEG_WIDTH_AT_HIP = 1.2*PLAYER_LENGTH_FACTOR;
 
     private CURRENT_LEFT_HIP_POSITION : Vec2  = {x:this.CURRENT_HIP_POSITION.x-this.LEG_WIDTH_AT_HIP/2,y:this.CURRENT_HIP_POSITION.y};
     private CURRENT_RIGHT_HIP_POSITION : Vec2  = {x:this.CURRENT_HIP_POSITION.x+this.LEG_WIDTH_AT_HIP/2,y:this.CURRENT_HIP_POSITION.y};
@@ -130,7 +131,7 @@ export default class Bat {
 
     private readonly MIN_LEG_WIDTH_AT_GROUND = 80;
 
-    private CURRENT_LEG_WIDTH_AT_GROUND = 80;
+    private CURRENT_LEG_WIDTH_AT_GROUND = 2*PLAYER_LENGTH_FACTOR;
 
     private CURRENT_LEFT_LEG_POSTION_AT_GROUND : Vec2 = {x:this.ORIGINAL_HIP_POSITION.x-40,y:CANVAS_HEIGHT - GROUND_HEIGHT}
 
@@ -1505,8 +1506,8 @@ export default class Bat {
         ctx.fill();
 
         // Draw Head Ellipse (Smaller radius in X axis: 14px, Longer radius in Y axis: 20px)
-        const headRadiusX = 14;
-        const headRadiusY = 20;
+        const headRadiusX = .6*PLAYER_LENGTH_FACTOR;
+        const headRadiusY = .9*PLAYER_LENGTH_FACTOR;
         ctx.beginPath();
         ctx.ellipse(headCenterX, headCenterY, headRadiusX, headRadiusY, 0, 0, 2 * Math.PI);
         ctx.strokeStyle = "cyan";
