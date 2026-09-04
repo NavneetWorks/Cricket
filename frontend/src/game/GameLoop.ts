@@ -20,6 +20,15 @@ export default class GameLoop{
     private readonly NETWORK_INTERVAL = 1 / 60;
     private hasSentReleasePacket: boolean = false;
 
+    // ===== FIXED-STEP PHYSICS (accumulator pattern) =====
+    // Physics ka apna clock: hamesha FIXED_DT (16.67ms) ke exact steps me chalta hai,
+    // display fps (60/144/240) se bilkul independent. Isse friction/bounce/gravity
+    // dono machines par identical hote hain → ball same distance jaati hai.
+    private physicsAccumulator: number = 0;
+    private renderAlpha: number = 0;                 // 0..1 — pichle physics step se kitna aage render karna hai
+    private readonly FIXED_DT: number = 1 / 60;      // Physics tick = 16.67ms
+    private readonly MAX_PHYSICS_STEPS: number = 5;  // Spiral-of-death guard: slow machine par accumulator kabhi grow nahi karega
+
     constructor(ctx:CanvasRenderingContext2D,bat:Bat,input:Input,isOnline:boolean = false){
         this.ctx = ctx;
         this.bat = bat;
@@ -57,6 +66,10 @@ export default class GameLoop{
                 this.ball.pos.y = exitY;
                 this.ball.vel.x = exitVx;
                 this.ball.vel.y = exitVy;
+                // prevPos bhi sync karo — warna render interpolation ball ko purani
+                // position se naye hit position tak 1 frame me "smear" karke dikhayega
+                this.ball.prevPos.x = exitX;
+                this.ball.prevPos.y = exitY;
 
                 // Bowler screen par bhi mini-screen ka dotted trajectory arc dikhane ke liye
                 // lastHitStats manually set karte hain. Ye object wahi shape hai jo Bat.checkHit()
@@ -142,7 +155,26 @@ export default class GameLoop{
         // Clamp dt to max 0.05s (50ms) to prevent physics explosion when switching tabs
         const dt = Math.min(Math.max(0.001, rawDt), 0.05);
 
-        this.update(dt);
+        // ===== FIXED-STEP ACCUMULATOR (industry standard: Unity FixedUpdate, CS tickrate) =====
+        // Display frame ka time piggy-bank (accumulator) me jama karo. Jaise hi 16.67ms
+        // ka poora coin jama ho → ek physics step chalao. Adhoora coin agle frame ke liye bacha.
+        this.physicsAccumulator += dt;
+
+        let steps = 0;
+        while (this.physicsAccumulator >= this.FIXED_DT && steps < this.MAX_PHYSICS_STEPS) {
+            this.update(this.FIXED_DT);              // Physics HAMESHA exact 1/60 dt ke saath
+            this.physicsAccumulator -= this.FIXED_DT;
+            steps++;
+        }
+        if (steps === this.MAX_PHYSICS_STEPS) {
+            // Slow machine guard: backlog phenko, warna spiral of death (freeze) ho jata
+            this.physicsAccumulator = 0;
+        }
+
+        // Interpolation factor: physics steps ke beech ke display frames me
+        // prevPos↔pos blend ka hisaab (144Hz par ball smooth slide karegi)
+        this.renderAlpha = Math.min(1, this.physicsAccumulator / this.FIXED_DT);
+
         this.render();
         requestAnimationFrame(this.loop);
     }
@@ -215,7 +247,7 @@ export default class GameLoop{
     }
 
     private render(){
-        this.renderer.render();
+        this.renderer.render(this.renderAlpha);
     }
 
     public setGameMode(mode: 'BATTING' | 'BOWLING') {

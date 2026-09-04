@@ -42,7 +42,7 @@ export default class Renderer{
             }
         });
     }
-    public render(){
+    public render(alpha: number = 1){
         this.ctx.clearRect(
             0,0,CANVAS_WIDTH,CANVAS_HEIGHT
         );
@@ -50,16 +50,16 @@ export default class Renderer{
         this.drawSky();
         this.drawGround();
         this.wicket.draw(this.ctx);
-        
+
         this.drawBat();
         // ⚾ BOWLING Mode me Bowling Arc Overlay bhi draw hoga:
         if (this.gameMode === 'BOWLING') {
             this.bowlingArea.draw(this.ctx);
         }
 
-        this.ball.draw(this.ctx);
+        this.ball.draw(this.ctx, alpha);
         this.drawDebug();
-        this.drawMiniScreen();
+        this.drawMiniScreen(alpha);
     }
     private drawSky(){
         this.ctx.fillStyle = GAME_COLORS.SKY;
@@ -173,7 +173,7 @@ export default class Renderer{
     /**
      * Draw Top-Left Mini Screen HUD Card (800px scaled representation of 10,000px world range)
      */
-    private drawMiniScreen(): void {
+    private drawMiniScreen(alpha: number = 1): void {
         this.ctx.save();
 
         const boxX = 20;
@@ -273,8 +273,9 @@ export default class Renderer{
 
         // 6. TINY SOLID BLACK BALL DOT
         if (this.ball && this.ball.isActive) {
-            const ballWorldX = this.ball.pos.x;
-            const ballWorldY = this.ball.pos.y;
+            // Interpolated render position (main canvas ball ke saath sync me dikhe)
+            const ballWorldX = this.ball.getRenderPos(alpha).x;
+            const ballWorldY = this.ball.getRenderPos(alpha).y;
 
             const miniBallX = boxX + (ballWorldX - minWorldX) * scaleX;
             const miniBallY = miniGroundY - (groundY - ballWorldY) * scaleY;

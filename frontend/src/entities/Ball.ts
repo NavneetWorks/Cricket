@@ -34,12 +34,24 @@ export default class Ball {
         this.isActive = true;
     }
 
+    // Fixed-timestep render interpolation:
+    // Physics ab 60Hz fixed steps par chalti hai, lekin display 60/144/240Hz kuch bhi ho sakta hai.
+    // Beech ke display frames me pichli physics position (prevPos) aur current (pos) ke beech
+    // blend karke smooth motion dikhte hain — warna 144Hz par ball 2-3 frame chipak kar kudegi (stutter).
+    public getRenderPos(alpha: number): Vec2 {
+        return {
+            x: this.prevPos.x + (this.pos.x - this.prevPos.x) * alpha,
+            y: this.prevPos.y + (this.pos.y - this.prevPos.y) * alpha
+        };
+    }
+
     // Ball ko Canvas par draw karna (Ek Red color ki cricket ball)
-    public draw(ctx: CanvasRenderingContext2D): void {
+    public draw(ctx: CanvasRenderingContext2D, alpha: number = 1): void {
         if (!this.isActive) return; // Agar active nahi hai toh draw mat karo
-        
+
+        const rp = this.getRenderPos(alpha); // Interpolated position (alpha=1 → exact physics pos)
         ctx.save();
-        ctx.translate(this.pos.x, this.pos.y);
+        ctx.translate(rp.x, rp.y);
 
         const gradient = ctx.createRadialGradient(
             -this.radius * 0.4, -this.radius * 0.4, this.radius * 0.1,
