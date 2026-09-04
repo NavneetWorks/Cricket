@@ -57,6 +57,26 @@ export default class GameLoop{
                 this.ball.pos.y = exitY;
                 this.ball.vel.x = exitVx;
                 this.ball.vel.y = exitVy;
+
+                // Bowler screen par bhi mini-screen ka dotted trajectory arc dikhane ke liye
+                // lastHitStats manually set karte hain. Ye object wahi shape hai jo Bat.checkHit()
+                // batter ke client par banata hai — Renderer (drawMiniScreen) isi ko padhta hai.
+                // checkHit() sirf BATTING branch me chalta hai, isliye bowler ke client par
+                // ye data kabhi banta hi nahi tha — HIT_RESULT ke exit values se khud bana dete hain.
+                (this.bat as any).lastHitStats = {
+                    regionIndex: -1,
+                    batAngle: 0,
+                    batSpeedX: 0,
+                    batSpeedY: 0,
+                    ballSpeedBeforeX: 0,
+                    ballSpeedBeforeY: 0,
+                    ballSpeedAfterX: exitVx,
+                    ballSpeedAfterY: exitVy,
+                    relativeImpactSpeed: 0,
+                    predictedRange: this.bat.calculatePredictedRange(this.ball.pos, this.ball.vel),
+                    hitPosX: exitX,
+                    hitPosY: exitY
+                };
             }
         }
         const throwNewBall = () => {
@@ -172,6 +192,7 @@ export default class GameLoop{
             this.renderer.wicket.checkHit(this.ball, batHitResult.hit, batHitResult.hitSubStep);
         } else {
             // BOWLING MODE: Update bowling area, ball & wicket
+            this.renderer.bowlingArea.releaseDelaySeconds = (this.isOnlineMode && this.network) ? this.network.getRTT() / 1000 : 0;
             this.renderer.bowlingArea.update(dt, this.input.mouseX, this.input.mouseY, this.ball);
             this.ball.update(dt); // Integrate ball velocity into position for flight!
             this.renderer.wicket.update(dt);

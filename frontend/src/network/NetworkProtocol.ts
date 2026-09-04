@@ -3,7 +3,9 @@
 export const PacketType = {
     BOWLER_RELEASE: 0x01,   // 23 Bytes: Release Pos & Velocity
     BAT_SWING_STREAM: 0x02, // 19 Bytes: 60Hz Bat pose
-    HIT_RESULT: 0x03        // 23 Bytes: Collision Exit Pos & Velocity
+    HIT_RESULT: 0x03,
+    PING:0x04,
+    PONG:0x05        
 } as const;
 
 export type PacketType = typeof PacketType[keyof typeof PacketType];
@@ -72,5 +74,23 @@ export function serializeHitResult(
     view.setFloat32(15, exitVelX, true);
     view.setFloat32(19, exitVelY, true);
     
+    return buffer;
+}
+
+export function serializePing(senderId:number,sequeneceNumber:number):ArrayBuffer{
+    const buffer = new ArrayBuffer(7);
+    const view = new DataView(buffer);
+    view.setUint8(0,PacketType.PING);
+    view.setUint32(1,senderId,true);
+    view.setUint16(5,sequeneceNumber,true);
+    return buffer;
+}
+
+export function serializePong(senderId:number,sequeneceNumber:number):ArrayBuffer{
+    const buffer  = new ArrayBuffer(7);
+    const view = new DataView(buffer);
+    view.setUint8(0,PacketType.PONG);
+    view.setUint32(1,senderId,true);
+    view.setUint16(5,sequeneceNumber,true);
     return buffer;
 }

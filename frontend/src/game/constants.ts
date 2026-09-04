@@ -202,9 +202,15 @@ export const BAT_THICKNESS_PROFILE: number[] = [
 ];
 
 // 🌐 CENTRALIZED NETWORK SERVER CONFIG:
+// export const SERVER_CONFIG = {
+//     // Vite .env se URL read karega, agar nahi mila to localhost default fallback rahega:
+//     SIGNALING_URL: import.meta.env.VITE_SIGNALING_URL || `ws://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:9001`,
+//     TARGET_TICK_RATE: 60,
+//     NETWORK_INTERVAL_MS: 16.66
+// };
+
 export const SERVER_CONFIG = {
-    // Vite .env se URL read karega, agar nahi mila to localhost default fallback rahega:
-    SIGNALING_URL: import.meta.env.VITE_SIGNALING_URL || `ws://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:9001`,
+    SIGNALING_URL: "wss://z4h6j16q-9001.inc1.devtunnels.ms",
     TARGET_TICK_RATE: 60,
     NETWORK_INTERVAL_MS: 16.66
 };

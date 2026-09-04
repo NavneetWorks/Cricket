@@ -127,6 +127,11 @@ export default class BowlingArea {
     public armAngularVelocity: number = 0; // Arm angular velocity (rad/s)
     public accumulatedMomentum: number = 0;
     public isBallReleased: boolean = false;
+
+    public releaseDelaySeconds: number = 0;
+    public releaseDelayTimer: number = 0;
+    public pendingThrow: { x: number; y: number; speed: number; angle: number } | null = null;
+
     
     // Circular Mouse Queue Buffer (Capacity = 100) & Path Traversal Index
     public circularMouseQueue: CircularMouseQueue = new CircularMouseQueue(1000);
@@ -187,6 +192,8 @@ export default class BowlingArea {
 
     public reset(ball: Ball): void {
         this.isBallReleased = false;
+         this.pendingThrow = null;   
+        this.releaseDelayTimer = 0;
         this.isMouseIntersected = false;
         this.savedReleaseSpeed = 0;
         this.savedReleaseAngleDeg = 0;
@@ -263,9 +270,26 @@ export default class BowlingArea {
     public update(dt: number, mouseX: number, mouseY: number, ball: Ball): void {
         this.updateJointsFromShoulder();
 
-        // Once ball is released, record red trajectory path
-        if (this.isBallReleased) {
+            if (this.isBallReleased) {
+           
+            if (this.pendingThrow) {
+                this.releaseDelayTimer -= dt;
+
+                if (this.releaseDelayTimer <= 0) {
+                    ball.throwBall(this.pendingThrow.x, this.pendingThrow.y, this.pendingThrow.speed, this.pendingThrow.angle);
+                    this.pendingThrow = null; // Ek baar throw ho gaya, pending clear
+                } else {
+                    ball.pos.x = this.pendingThrow.x;
+                    ball.pos.y = this.pendingThrow.y;
+                    ball.prevPos.x = this.pendingThrow.x;
+                    ball.prevPos.y = this.pendingThrow.y;
+                    ball.vel.x = 0;
+                    ball.vel.y = 0;
+                    ball.isActive = true;
+                }
+            }
             if (ball.isActive) {
+
                 this.ballDebugTrajectory.push({ x: ball.pos.x, y: ball.pos.y });
             }
             return;
@@ -429,7 +453,13 @@ export default class BowlingArea {
                 if (releaseAngleDeg < 0) releaseAngleDeg += 360;
 
                 this.savedReleaseAngleDeg = releaseAngleDeg;
-                ball.throwBall(this.handPos.x, this.handPos.y, this.savedReleaseSpeed, releaseAngleDeg);
+                this.pendingThrow = {
+                    x: this.handPos.x,
+                    y: this.handPos.y,
+                    speed: this.savedReleaseSpeed,
+                    angle: releaseAngleDeg
+                };
+                this.releaseDelayTimer = this.releaseDelaySeconds; // Abhi ke RTT ko is ball ke liye FIX
                 this.ballDebugTrajectory.push({ x: this.handPos.x, y: this.handPos.y });
 
                 this.lastReleaseInfo = {

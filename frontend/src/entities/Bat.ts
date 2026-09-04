@@ -1075,7 +1075,9 @@ export default class Bat {
 
         return { hit: hit, hitSubStep: hitSubStep };
     }
-    private calculatePredictedRange(pos: { x: number; y: number }, vel: { x: number; y: number }): number {
+    // public kiya gaya (pehle private tha): bowler ke client par checkHit() chalta hi nahi,
+    // isliye GameLoop onHitResult me predictedRange khud calculate karne ke liye isko call karta hai
+    public calculatePredictedRange(pos: { x: number; y: number }, vel: { x: number; y: number }): number {
         const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
         const dy = groundY - pos.y;
         const g = GRAVITY; // Real game physics gravity (3566 px/s^2)

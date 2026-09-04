@@ -1,5 +1,5 @@
 
-import {serializeBatSwing,serializeBowlerRelease,serializeHitResult,PacketType} from './NetworkProtocol';
+import {serializeBatSwing,serializeBowlerRelease,serializeHitResult,PacketType,serializePing,serializePong} from './NetworkProtocol';
 export default class NetWorkManager{
     private ws:WebSocket | null = null;
     private pc: RTCPeerConnection | null = null;
@@ -15,12 +15,36 @@ export default class NetWorkManager{
     public onBowlerRelease?: (startX: number, startY: number, startVx: number, startVy: number) => void;
     public onHitResult?: (exitX: number, exitY: number, exitVx: number, exitVy: number) => void;
 
+    private heartbeatTimer: any = null;
+
+    private rttSamples : number[] = [];
+    private pingSequence  : number = 0;
+    private pendingPings:Map<number,number> = new Map();
+    private rttPingTimer: any = null;
+    public lastRTT:number = 0;
+    private readonly RTT_CLAMP_MIN = 20;
+    private readonly RTT_WINDOW_SIZE = 8;
+
     public connect(serverUrl:string = "ws://localhost:9001"){
         this.ws = new WebSocket(serverUrl);
         this.ws.binaryType = "arraybuffer";
         this.ws.onopen = () => {
             console.log("🟢 WebSocket Connected! Initializing WebRTC Engine...");
             this.setupWebRTC();
+
+            // 💓 5-Second Keep-Alive Heartbeat to prevent idle disconnect
+            if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+            this.heartbeatTimer = setInterval(() => {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    const pingJson = JSON.stringify({ type: "PING" });
+                    const encoder = new TextEncoder();
+                    const textBuf = encoder.encode(pingJson);
+                    const pkt = new Uint8Array(1 + textBuf.byteLength);
+                    pkt[0] = 0x63;
+                    pkt.set(textBuf, 1);
+                    this.ws.send(pkt.buffer);
+                }
+            }, 5000);
         };
         this.ws.onmessage = async(event:MessageEvent) => {
             if(event.data instanceof ArrayBuffer){
@@ -38,6 +62,11 @@ export default class NetWorkManager{
         this.ws.onclose = () => {
             console.warn(" WebSocket Disconnected from Server");
             this.isConnected=false;
+            this.stopRttHeartbeat();
+            if (this.heartbeatTimer) {
+                clearInterval(this.heartbeatTimer);
+                this.heartbeatTimer = null;
+            }
         };
     }
 
@@ -54,6 +83,7 @@ export default class NetWorkManager{
         this.dataChannel.onopen = () => {
             console.log("UPDT data channel is now open and active")
             this.isConnected = true;
+             this.startRttHeartbeat();
         };
         this.dataChannel.onmessage = (dcEvent:MessageEvent) => {
             if(dcEvent.data instanceof ArrayBuffer){
@@ -98,6 +128,7 @@ export default class NetWorkManager{
             this.dataChannel.onopen = () => {
                 console.log("UPDT data channel is now open and active")
                 this.isConnected = true;
+                this.startRttHeartbeat();
             };
             this.dataChannel.onmessage = (dcEvent:MessageEvent) => {
                 if(dcEvent.data instanceof ArrayBuffer){
@@ -165,6 +196,24 @@ export default class NetWorkManager{
             if (this.onHitResult) {
                 this.onHitResult(exitX, exitY, exitVx, exitVy);
             }
+        }else if(opcode === PacketType.PING){
+            const senderId = view.getUint32(1,true);
+            const seq = view.getUint16(5,true);
+            this.dataChannel!.send(serializePong(senderId,seq));
+        }else if(opcode === PacketType.PONG){
+            const seq = view.getUint16(5,true);
+            const sendTime = this.pendingPings.get(seq);
+            if(sendTime !== undefined){
+                const sample = performance.now() - sendTime;
+                this.pendingPings.delete(seq);
+                this.rttSamples.push(sample);
+                if(this.rttSamples.length > this.RTT_WINDOW_SIZE){
+                    this.rttSamples.shift();
+                }
+                this.lastRTT = this.calculateMedianRTT();
+                 console.log(`💓 RTT sample: ${sample.toFixed(1)}ms | Median RTT: ${this.lastRTT.toFixed(1)}ms`);
+            }
+
         }
     }
     public sendBowlerRelease(tick: number, startX: number, startY: number, startVx: number, startVy: number) {
@@ -185,5 +234,44 @@ export default class NetWorkManager{
             const buffer = serializeHitResult(this.myPlayerId, tick, exitX, exitY, exitVx, exitVy);
             this.dataChannel.send(buffer);
         }
+    }
+
+    private startRttHeartbeat(){
+        if(this.rttPingTimer) return;
+        this.rttPingTimer = setInterval(()=>{
+            if(this.dataChannel && this.dataChannel.readyState === "open"){
+                const now = performance.now();
+                this.pendingPings.forEach((sendTime,seq)=>{
+                    if(now - sendTime > 3000){ 
+                        this.pendingPings.delete(seq);
+                    }
+                });
+                const seq = this.pingSequence; 
+                this.pingSequence = (this.pingSequence + 1) % 65536;
+                this.pendingPings.set(seq,performance.now());
+                this.dataChannel!.send(serializePing(this.myPlayerId, seq));            }
+        },500)
+    }
+    private stopRttHeartbeat(){
+        if(this.rttPingTimer){
+            clearInterval(this.rttPingTimer);
+            this.rttPingTimer = null;
+        }
+        this.pendingPings.clear();
+        this.rttSamples = [];
+        this.lastRTT = 0;
+    }
+
+    private calculateMedianRTT(): number {
+        if (this.rttSamples.length === 0) return 0;
+        const sorted = [...this.rttSamples].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        const median = sorted.length % 2 === 0
+            ? (sorted[mid - 1] + sorted[mid]) / 2
+            : sorted[mid];
+        return Math.max(median, this.RTT_CLAMP_MIN); // Minimum clamp 20ms
+    }
+      public getRTT(): number {
+        return this.lastRTT;
     }
 }
