@@ -3,7 +3,14 @@ import Ball from "../entities/Ball";
 import Renderer from "./Rederer";
 import Input from "./Input";
 import NetworkManager from "../network/NetworkManager";
-import { CANVAS_HEIGHT, CANVAS_WIDTH, GROUND_HEIGHT ,k_values, SERVER_CONFIG} from "./constants";
+import { CANVAS_HEIGHT, CANVAS_WIDTH, GROUND_HEIGHT ,k_values, SERVER_CONFIG, BAT_SNAPSHOT_QUEUE_SIZE, BAT_INTERP_BUFFER_TICKS, BAT_MAX_EXTRAPOLATION_TICKS } from "./constants";
+
+// Ek remote bat snapshot: batter ke client par kya pose tha, kis tick par
+interface BatSnapshot {
+    tick: number;      // batter ke networkTickNumber ka value (uniform 60Hz grid)
+    mouseX: number;
+    mouseY: number;
+}
 
 export default class GameLoop{
     private ctx:CanvasRenderingContext2D;
@@ -26,6 +33,13 @@ export default class GameLoop{
     // dono machines par identical hote hain → ball same distance jaati hai.
     private physicsAccumulator: number = 0;
     private renderAlpha: number = 0;                 // 0..1 — pichle physics step se kitna aage render karna hai
+
+    // ===== STEP 2: REMOTE BAT SNAPSHOT INTERPOLATION (jitter buffer) =====
+    // Batter 60Hz snapshots bhejta hai (uniform tick grid). Bowler playhead ko
+    // latest se BAT_INTERP_BUFFER_TICKS peeche rakh kar do snapshots ke beech
+    // LERP karta hai → network jitter render me pahunch hi nahi pata.
+    private batPoseQueue: BatSnapshot[] = [];        // time-sorted snapshots (naye end me)
+    private batInterpTick: number = 0;               // playhead (float tick-space me)
     private readonly FIXED_DT: number = 1 / 60;      // Physics tick = 16.67ms
     private readonly MAX_PHYSICS_STEPS: number = 5;  // Spiral-of-death guard: slow machine par accumulator kabhi grow nahi karega
 
@@ -46,7 +60,10 @@ export default class GameLoop{
             this.network.onMatchStart = (role) =>{
                 console.log("match started assigned role : ",role);
                 this.setGameMode(role === 'BATSMAN' ? 'BATTING' : 'BOWLING');
-                this.networkTickNumber = 0; 
+                this.networkTickNumber = 0;
+                // Naya match — purane snapshots/playhead clear karo (Step 2)
+                this.batPoseQueue = [];
+                this.batInterpTick = 0; 
             };
             this.network.onBowlerRelease = (startX,startY,speed,angleDegrees) =>{
                 this.renderer.wicket.reset();
@@ -58,8 +75,18 @@ export default class GameLoop{
             // }
             // GameLoop.ts start() me:
             this.network.onOpponentBatSwing = (tick, mouseX, mouseY, angle) => {
-                // 🟢 Bowler screen par Mouse coordinates se poora body skeleton update ho jayega:
-                this.bat.setBatPoseFromMouse(mouseX, mouseY);
+                // 🟢 STEP 2: Snapshot QUEUE me daalo, apply abhi NAHI.
+                // Pehle wala direct setBatPoseFromMouse() har packet par jump karata tha
+                // (packet kabhi 10ms me aata kabhi 40ms me) → bat stutter karti thi.
+                // Ab updateRemoteBatPose() har render frame par playhead ke hisaab se
+                // do snapshots ke beech LERP karke smooth pose lagayega.
+                const q = this.batPoseQueue;
+                // Out-of-order/duplicate packets ignore karo (UDP reorder ho sakta hai)
+                if (q.length > 0 && tick <= q[q.length - 1].tick) return;
+                q.push({ tick, mouseX, mouseY });
+                if (q.length > BAT_SNAPSHOT_QUEUE_SIZE) {
+                    q.shift(); // Sabse purana snapshot phenko (queue size cap)
+                }
             };
             this.network.onHitResult = (exitX,exitY,exitVx,exitVy) =>{
                 this.ball.pos.x = exitX;
@@ -97,8 +124,8 @@ export default class GameLoop{
             const maxSpeed = 4000;
             const randomSpeed = minSpeed + Math.random() * (maxSpeed - minSpeed);
             
-            const minAngle = 2;
-            const maxAngle = 22;
+            const minAngle = 0;
+            const maxAngle = 12;
             
             // RIGHT se LEFT fenkne ke liye changes:
             
@@ -175,8 +202,94 @@ export default class GameLoop{
         // prevPos↔pos blend ka hisaab (144Hz par ball smooth slide karegi)
         this.renderAlpha = Math.min(1, this.physicsAccumulator / this.FIXED_DT);
 
+        // STEP 2: Remote bat pose har RENDER frame par interpolate karke apply karo
+        // (60Hz snapshots ke beech ki 144fps frames smooth bharti hain)
+        this.updateRemoteBatPose(dt);
+
         this.render();
         requestAnimationFrame(this.loop);
+    }
+
+    // ============================================================
+    // STEP 2: REMOTE BAT SNAPSHOT INTERPOLATION (jitter buffer)
+    // ============================================================
+    // Har render frame par chalta hai (fixed steps se INDEPENDENT — smoothness
+    // display-fps ke hisaab se hi to chahiye). Playhead sender-tick space me
+    // local dt se aage badhta hai, aur us tick ko wrap karne wale 2 snapshots
+    // ke beech LERP karke bat pose lagata hai.
+    private updateRemoteBatPose(frameDt: number){
+        if (!this.isOnlineMode || !this.network) return;
+        const q = this.batPoseQueue;
+        if (q.length === 0) return; // Batter client / match start se pehle — no-op
+
+        // Sirf 1 snapshot hai → hold karo (buffer abhi bhar raha hai)
+        if (q.length === 1) {
+            this.bat.setBatPoseFromMouse(q[0].mouseX, q[0].mouseY);
+            return;
+        }
+
+        const latest = q[q.length - 1].tick;
+        const oldest = q[0].tick;
+
+        // 1. Playhead hamesha REAL-TIME speed se aage badhega (60 ticks/sec).
+        //    🐛 FIX: pehle drift correction dono taraf kheenchta tha — bursty arrival me
+        //    latest stale rehta hai → desired peeche → correction playhead SLOW kar deta
+        //    tha = SLOW MOTION BUG. Ab playback clock kabhi slow nahi hogi.
+        this.batInterpTick += frameDt * SERVER_CONFIG.TARGET_TICK_RATE;
+
+        // 2. CATCH-UP-ONLY drift correction:
+        //    Agar playhead desired se kaafi PEECHE hai (clock drift / stall recovery),
+        //    to thoda FAST chalao taaki buffer wapas ban jaye. KABHI SLOW MAT KARO —
+        //    slow-down ka ilaaj kabhi playback slow karna nahi hota.
+        const desired = latest - BAT_INTERP_BUFFER_TICKS;
+        const lag = desired - this.batInterpTick;
+        if (lag > 0.5) {
+            this.batInterpTick += lag * Math.min(0.5, frameDt * 3); // max ~2x speed catch-up
+        }
+
+        // 3. Safety clamps:
+        //    (a) Playhead kabhi oldest snapshot se peeche na jaye (queue ne usse evict kar diya)
+        if (this.batInterpTick < oldest) this.batInterpTick = oldest;
+        //    (b) Kabhi latest + MAX_EXTRAP se aage na jaye — underrun par bat HOLD hogi
+        //        (freeze), slow motion NAHI. Jaise hi naye packets aayenge, resume.
+        const maxTick = latest + BAT_MAX_EXTRAPOLATION_TICKS;
+        if (this.batInterpTick > maxTick) this.batInterpTick = maxTick;
+
+        // 4. Playhead ko wrap karne wale do snapshots dhoondo (queue sorted hai)
+        let a = q[0];
+        let b = q[q.length - 1];
+        for (let i = 0; i < q.length - 1; i++) {
+            if (q[i].tick <= this.batInterpTick && q[i + 1].tick >= this.batInterpTick) {
+                a = q[i];
+                b = q[i + 1];
+                break;
+            }
+        }
+
+        let x: number, y: number;
+        if (this.batInterpTick >= b.tick) {
+            // 5a. EXTRAPOLATION: playhead last snapshot ke AAGE hai — matlab agla packet
+            //     abhi tak nahi aaya (jitter/loss). Last 2 snapshots se velocity estimate
+            //     karke aage guess karo, MAX_EXTRAP ticks tak hi (uske baad hold).
+            const prev = q[q.length - 2];
+            const tickSpan = Math.max(1, b.tick - prev.tick);
+            const vx = (b.mouseX - prev.mouseX) / tickSpan;
+            const vy = (b.mouseY - prev.mouseY) / tickSpan;
+            const over = this.batInterpTick - b.tick;
+            x = b.mouseX + vx * over;
+            y = b.mouseY + vy * over;
+        } else {
+            // 5b. INTERPOLATION: dono endpoints KNOWN hain — koi guess nahi, pure math.
+            //     alpha = playhead is tick-interval me kitna aage hai (0..1)
+            const tickSpan = Math.max(1e-6, b.tick - a.tick);
+            const alpha = (this.batInterpTick - a.tick) / tickSpan;
+            x = a.mouseX + (b.mouseX - a.mouseX) * alpha;
+            y = a.mouseY + (b.mouseY - a.mouseY) * alpha;
+        }
+
+        // 6. Smooth pose ko poore skeleton par apply karo (jaise pehle hota tha,
+        //    bas ab values raw packets se nahi — LERP se aayi hui hain)
+        this.bat.setBatPoseFromMouse(x, y);
     }
     private update(dt: number){
         if (this.renderer.gameMode === 'BATTING') {

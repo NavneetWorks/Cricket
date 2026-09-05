@@ -1021,6 +1021,7 @@ export default class Bat {
             const v_tangentY = relativeVy - v_normal * normalY;
 
             const v_normal_after = -v_normal * this.getRegionRestitution(regionIndex);
+            
 
             const physicsVelX = (v_normal_after * normalX) + v_tangentX;
             const physicsVelY = (v_normal_after * normalY) + v_tangentY;

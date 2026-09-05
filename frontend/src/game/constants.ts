@@ -8,9 +8,9 @@ export const GAME_COLORS = {
 };
 export const PITCH_WIDTH = 180;
 export const QUEUE_SIZE = 3;
-export const NORMAL_DIRECTION_ASSIST = 70; // 0 to 100 scale. E.g. 10 = bends 10% towards Normal
+export const NORMAL_DIRECTION_ASSIST = 80; // 0 to 100 scale. E.g. 10 = bends 10% towards Normal
 
-export const GLOBAL_RESTITUTION_SCALE = .9;
+export const GLOBAL_RESTITUTION_SCALE = .5;
 export const REGION1 = 1;
 export const REGION2 = REGION1;
 export const REGION3 = REGION1;
@@ -71,10 +71,10 @@ export const GROUND_HEIGHT = 100;
 
 export const BAT_CENTER_OF_MASS_RATIO = 0.75;
 
-export const GRAVITY = 3566;
+export const GRAVITY = 5566;
 
 //export const RESTITUTION_BAT = 0.1; // Bat aur Ball ki takkar ka bounce
-export const RESTITUTION_GROUND = 0.5; // Zameen aur Ball ki takkar ka bounce
+export const RESTITUTION_GROUND = 0.7; // Zameen aur Ball ki takkar ka bounce
 
 export const TARGET_ANGLE_THRESHOLD = 0.02;
 
@@ -215,4 +215,11 @@ export const SERVER_CONFIG = {
     NETWORK_INTERVAL_MS: 16.66
 };
 
-export const PLAYER_LENGTH_FACTOR = 32;
+export const PLAYER_LENGTH_FACTOR = 31;
+
+// 🏏 STEP 2: Bat pose snapshot interpolation (bowler screen par smooth remote bat)
+// Batter 60Hz snapshots bhejta hai (tickNumber ke saath); bowler unhe playhead se
+// BUFFER ticks peeche render karta hai — LERP se butter-smooth, jitter absorb.
+export const BAT_SNAPSHOT_QUEUE_SIZE = 12;      // ~200ms ka snapshot history rakho
+export const BAT_INTERP_BUFFER_TICKS = 2;       // Playhead latest se 2 ticks (≈33ms) peeche chalega
+export const BAT_MAX_EXTRAPOLATION_TICKS = 3;   // Packet loss par max 3 ticks (≈50ms) aage guess, phir hold
