@@ -54,18 +54,24 @@ export function serializeBatSwing(
     return buffer;
 }
 
-// 3. Serialize Hit Result Packet (23 Bytes) - RELIABLE
+// 3. Serialize Hit Result Packet (31 Bytes) - RELIABLE
+// 🟢 STEP 3: 2 naye Float32 (offset 23 & 27) — sound sync ke liye:
+//    impactSpeed   = v_normal (closing speed jo sound ke gain/pitch ko drive karti hai)
+//    hitPixelOffset = bat par kis point par lagi (16-region MP3 selection)
+// In dono se bowler ka fallback sound batter wali sound ke EXACT barabar bajta hai.
 export function serializeHitResult(
     senderId: number,
     tickNumber: number,
     exitPosX: number,
     exitPosY: number,
     exitVelX: number,
-    exitVelY: number
+    exitVelY: number,
+    impactSpeed: number,
+    hitPixelOffset: number
 ): ArrayBuffer {
-    const buffer = new ArrayBuffer(23);
+    const buffer = new ArrayBuffer(31);
     const view = new DataView(buffer);
-    
+
     view.setUint8(0, PacketType.HIT_RESULT);
     view.setUint32(1, senderId, true);
     view.setUint16(5, tickNumber, true);
@@ -73,7 +79,9 @@ export function serializeHitResult(
     view.setFloat32(11, exitPosY, true);
     view.setFloat32(15, exitVelX, true);
     view.setFloat32(19, exitVelY, true);
-    
+    view.setFloat32(23, impactSpeed, true);
+    view.setFloat32(27, hitPixelOffset, true);
+
     return buffer;
 }
 

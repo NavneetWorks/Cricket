@@ -1,9 +1,11 @@
 import Bat from "../entities/Bat";
 import Ball from "../entities/Ball";
+import BowlingArea from "../entities/BowlingArea";
 import Renderer from "./Rederer";
 import Input from "./Input";
 import NetworkManager from "../network/NetworkManager";
-import { CANVAS_HEIGHT, CANVAS_WIDTH, GROUND_HEIGHT ,k_values, SERVER_CONFIG, BAT_SNAPSHOT_QUEUE_SIZE, BAT_INTERP_BUFFER_TICKS, BAT_MAX_EXTRAPOLATION_TICKS } from "./constants";
+import { SoundManager } from "../audio/SoundManager";
+import {GRAVITY,RESTITUTION_GROUND, CANVAS_HEIGHT, CANVAS_WIDTH, GROUND_HEIGHT ,k_values, SERVER_CONFIG, BAT_SNAPSHOT_QUEUE_SIZE, BAT_INTERP_BUFFER_TICKS, BAT_MAX_EXTRAPOLATION_TICKS } from "./constants";
 
 // Ek remote bat snapshot: batter ke client par kya pose tha, kis tick par
 interface BatSnapshot {
@@ -16,7 +18,7 @@ export default class GameLoop{
     private ctx:CanvasRenderingContext2D;
     private bat:Bat;
     private ball: Ball;
-    private renderer:Renderer;
+    public renderer:Renderer;
     private input: Input;
     private lastFrameTime = 0;
 
@@ -27,17 +29,16 @@ export default class GameLoop{
     private readonly NETWORK_INTERVAL = 1 / 60;
     private hasSentReleasePacket: boolean = false;
 
-    // ===== FIXED-STEP PHYSICS (accumulator pattern) =====
-    // Physics ka apna clock: hamesha FIXED_DT (16.67ms) ke exact steps me chalta hai,
-    // display fps (60/144/240) se bilkul independent. Isse friction/bounce/gravity
-    // dono machines par identical hote hain → ball same distance jaati hai.
+   
     private physicsAccumulator: number = 0;
     private renderAlpha: number = 0;                 // 0..1 — pichle physics step se kitna aage render karna hai
 
-    // ===== STEP 2: REMOTE BAT SNAPSHOT INTERPOLATION (jitter buffer) =====
-    // Batter 60Hz snapshots bhejta hai (uniform tick grid). Bowler playhead ko
-    // latest se BAT_INTERP_BUFFER_TICKS peeche rakh kar do snapshots ke beech
-    // LERP karta hai → network jitter render me pahunch hi nahi pata.
+    
+    private localPredictedHit: boolean = false;      // Kya is ball par local hit fire hua?
+    private suppressNextPacketSound: boolean = false; // 🟢 MULTI-HIT FIX (one-shot): local
+  
+    private hasAuthoritativeResult: boolean = false; // 🐛 DOUBLE-COLLISION FIX: HIT_RESULT
+   
     private batPoseQueue: BatSnapshot[] = [];        // time-sorted snapshots (naye end me)
     private batInterpTick: number = 0;               // playhead (float tick-space me)
     private readonly FIXED_DT: number = 1 / 60;      // Physics tick = 16.67ms
@@ -63,23 +64,24 @@ export default class GameLoop{
                 this.networkTickNumber = 0;
                 // Naya match — purane snapshots/playhead clear karo (Step 2)
                 this.batPoseQueue = [];
-                this.batInterpTick = 0; 
+                this.batInterpTick = 0;
+                // Step 3: prediction flags bhi fresh
+                this.localPredictedHit = false;
+                this.suppressNextPacketSound = false;
+                this.hasAuthoritativeResult = false;
             };
             this.network.onBowlerRelease = (startX,startY,speed,angleDegrees) =>{
                 this.renderer.wicket.reset();
                 this.ball.throwBall(startX,startY,speed,angleDegrees);
+                // 🟢 STEP 3: naya ball aaya — per-ball prediction flags reset
+                // (nayi ball par sound dobara baj sakti hai, isliye guard refresh)
+                this.localPredictedHit = false;
+                this.suppressNextPacketSound = false;
+                this.hasAuthoritativeResult = false;
             }
-            // this.network.onOpponentBatSwing = (tick,handleX,handleY,batAngle) =>{
-            //     this.bat.setBatPose(handleX, handleY, batAngle);
-
-            // }
-            // GameLoop.ts start() me:
+        
             this.network.onOpponentBatSwing = (tick, mouseX, mouseY, angle) => {
-                // 🟢 STEP 2: Snapshot QUEUE me daalo, apply abhi NAHI.
-                // Pehle wala direct setBatPoseFromMouse() har packet par jump karata tha
-                // (packet kabhi 10ms me aata kabhi 40ms me) → bat stutter karti thi.
-                // Ab updateRemoteBatPose() har render frame par playhead ke hisaab se
-                // do snapshots ke beech LERP karke smooth pose lagayega.
+               
                 const q = this.batPoseQueue;
                 // Out-of-order/duplicate packets ignore karo (UDP reorder ho sakta hai)
                 if (q.length > 0 && tick <= q[q.length - 1].tick) return;
@@ -88,21 +90,37 @@ export default class GameLoop{
                     q.shift(); // Sabse purana snapshot phenko (queue size cap)
                 }
             };
-            this.network.onHitResult = (exitX,exitY,exitVx,exitVy) =>{
-                this.ball.pos.x = exitX;
-                this.ball.pos.y = exitY;
-                this.ball.vel.x = exitVx;
-                this.ball.vel.y = exitVy;
-                // prevPos bhi sync karo — warna render interpolation ball ko purani
-                // position se naye hit position tak 1 frame me "smear" karke dikhayega
+            this.network.onHitResult = (exitX,exitY,exitVx,exitVy,impactSpeed,hitPixelOffset,tick) =>{
+                const elapsedTicks = Math.max(0, this.networkTickNumber - tick);
+                const { finalX, finalY, finalVx, finalVy } = this.getProjectileStateWithBounce(
+                    exitX,
+                    exitY,
+                    exitVx,
+                    exitVy,
+                    elapsedTicks
+                );
+                // dikhata hai — perfect.
+                this.ball.pos.x = finalX;
+                this.ball.pos.y = finalY;
+                this.ball.vel.x = finalVx;
+                this.ball.vel.y = finalVy;
+      
                 this.ball.prevPos.x = exitX;
                 this.ball.prevPos.y = exitY;
+    
+                this.bat.clearStuckState();
+                this.ball.isStuck = false;
+      
+                this.hasAuthoritativeResult = true;
+                this.localPredictedHit = false;
 
-                // Bowler screen par bhi mini-screen ka dotted trajectory arc dikhane ke liye
-                // lastHitStats manually set karte hain. Ye object wahi shape hai jo Bat.checkHit()
-                // batter ke client par banata hai — Renderer (drawMiniScreen) isi ko padhta hai.
-                // checkHit() sirf BATTING branch me chalta hai, isliye bowler ke client par
-                // ye data kabhi banta hi nahi tha — HIT_RESULT ke exit values se khud bana dete hain.
+                if (this.suppressNextPacketSound) {
+                    this.suppressNextPacketSound = false; // Echo consume — one-shot
+                } else {
+                  
+                    SoundManager.getInstance().playBatHit(impactSpeed, hitPixelOffset);
+                }
+
                 (this.bat as any).lastHitStats = {
                     regionIndex: -1,
                     batAngle: 0,
@@ -120,8 +138,8 @@ export default class GameLoop{
             }
         }
         const throwNewBall = () => {
-            const minSpeed = 3000;
-            const maxSpeed = 4000;
+            const minSpeed = 2000;
+            const maxSpeed = 4500;
             const randomSpeed = minSpeed + Math.random() * (maxSpeed - minSpeed);
             
             const minAngle = 0;
@@ -133,8 +151,7 @@ export default class GameLoop{
             const startX = CANVAS_WIDTH;
             const startY = (CANVAS_HEIGHT - GROUND_HEIGHT) - 350;
              
-            // 2. Angle ko Left ki taraf modne ke liye (180 degree mein se minus karna)
-            // Isse ball right ki jagah left ki taraf travel karegi
+           
             const randomAngle = 180 - (minAngle + Math.random() * (maxAngle - minAngle));
             
             // Ball ko naye X aur naye Angle ke sath release karein
@@ -161,6 +178,10 @@ export default class GameLoop{
                 this.renderer.bowlingArea.reset(this.ball);
                 this.renderer.wicket.reset();
                 this.hasSentReleasePacket = false;
+                // 🟢 STEP 3: naye ball cycle ke liye prediction flags fresh
+                this.localPredictedHit = false;
+                this.suppressNextPacketSound = false;
+                this.hasAuthoritativeResult = false;
             }
         });
 
@@ -182,9 +203,7 @@ export default class GameLoop{
         // Clamp dt to max 0.05s (50ms) to prevent physics explosion when switching tabs
         const dt = Math.min(Math.max(0.001, rawDt), 0.05);
 
-        // ===== FIXED-STEP ACCUMULATOR (industry standard: Unity FixedUpdate, CS tickrate) =====
-        // Display frame ka time piggy-bank (accumulator) me jama karo. Jaise hi 16.67ms
-        // ka poora coin jama ho → ek physics step chalao. Adhoora coin agle frame ke liye bacha.
+        
         this.physicsAccumulator += dt;
 
         let steps = 0;
@@ -210,13 +229,7 @@ export default class GameLoop{
         requestAnimationFrame(this.loop);
     }
 
-    // ============================================================
-    // STEP 2: REMOTE BAT SNAPSHOT INTERPOLATION (jitter buffer)
-    // ============================================================
-    // Har render frame par chalta hai (fixed steps se INDEPENDENT — smoothness
-    // display-fps ke hisaab se hi to chahiye). Playhead sender-tick space me
-    // local dt se aage badhta hai, aur us tick ko wrap karne wale 2 snapshots
-    // ke beech LERP karke bat pose lagata hai.
+
     private updateRemoteBatPose(frameDt: number){
         if (!this.isOnlineMode || !this.network) return;
         const q = this.batPoseQueue;
@@ -231,16 +244,8 @@ export default class GameLoop{
         const latest = q[q.length - 1].tick;
         const oldest = q[0].tick;
 
-        // 1. Playhead hamesha REAL-TIME speed se aage badhega (60 ticks/sec).
-        //    🐛 FIX: pehle drift correction dono taraf kheenchta tha — bursty arrival me
-        //    latest stale rehta hai → desired peeche → correction playhead SLOW kar deta
-        //    tha = SLOW MOTION BUG. Ab playback clock kabhi slow nahi hogi.
         this.batInterpTick += frameDt * SERVER_CONFIG.TARGET_TICK_RATE;
 
-        // 2. CATCH-UP-ONLY drift correction:
-        //    Agar playhead desired se kaafi PEECHE hai (clock drift / stall recovery),
-        //    to thoda FAST chalao taaki buffer wapas ban jaye. KABHI SLOW MAT KARO —
-        //    slow-down ka ilaaj kabhi playback slow karna nahi hota.
         const desired = latest - BAT_INTERP_BUFFER_TICKS;
         const lag = desired - this.batInterpTick;
         if (lag > 0.5) {
@@ -268,9 +273,7 @@ export default class GameLoop{
 
         let x: number, y: number;
         if (this.batInterpTick >= b.tick) {
-            // 5a. EXTRAPOLATION: playhead last snapshot ke AAGE hai — matlab agla packet
-            //     abhi tak nahi aaya (jitter/loss). Last 2 snapshots se velocity estimate
-            //     karke aage guess karo, MAX_EXTRAP ticks tak hi (uske baad hold).
+           
             const prev = q[q.length - 2];
             const tickSpan = Math.max(1, b.tick - prev.tick);
             const vx = (b.mouseX - prev.mouseX) / tickSpan;
@@ -291,6 +294,50 @@ export default class GameLoop{
         //    bas ab values raw packets se nahi — LERP se aayi hui hain)
         this.bat.setBatPoseFromMouse(x, y);
     }
+
+private getProjectileStateWithBounce(
+    initialX: number, 
+    initialY: number, 
+    initialVx: number, 
+    initialVy: number, 
+    t: number,
+    ballRadius: number = 10
+) {
+    
+    let currX = initialX;
+    let currY = initialY;
+    let currVx = initialVx;
+    let currVy = initialVy;
+
+    const groundY = CANVAS_HEIGHT - GROUND_HEIGHT - ballRadius;
+    const stepDt = 0.001; // 1ms precision step
+    let elapsedTime = 0;
+
+    while (elapsedTime < t/60) {
+        const dt = Math.min(stepDt, t - elapsedTime);
+
+        // Gravity & Velocity update
+        currVy += GRAVITY * dt;
+        currX += currVx * dt;
+        currY += currVy * dt;
+
+        // Ground Bounce check
+        if (currY >= groundY) {
+            currY = groundY;
+            currVy = -currVy * RESTITUTION_GROUND;
+            currVx *= 0.98; // Friction
+        }
+
+        elapsedTime += dt;
+    }
+
+    return { 
+        finalX: currX, 
+        finalY: currY, 
+        finalVx: currVx, 
+        finalVy: currVy 
+    };
+}
     private update(dt: number){
         if (this.renderer.gameMode === 'BATTING') {
             const currentCommand = this.input.getHistory().peek();
@@ -302,36 +349,56 @@ export default class GameLoop{
             this.ball.update(dt);
             this.renderer.wicket.update(dt);
             
-            if(this.isOnlineMode && this.network && this.network.isConnected){
-                this.networkTimer += dt;
-                if(this.networkTimer >= this.NETWORK_INTERVAL){
-                    this.networkTimer -= this.NETWORK_INTERVAL;
-                    this.networkTickNumber++;
-
-                    // 60Hz UDP par Bat pose bhejo:
-                    // this.network.sendBatSwingUDP(
-                    //     this.networkTickNumber,
-                    //     this.bat.getHandleTop().x,
-                    //     this.bat.getHandleTop().y,
-                    //     this.bat.getBatAngle()
-                    // );   
-                    this.network.sendBatSwingUDP(
-                        this.networkTickNumber,
-                        this.input.mouseX,
-                        this.input.mouseY,
-                        0
-                    );           
-                
-                }
+            this.networkTimer += dt;
+            if (this.networkTimer >= this.NETWORK_INTERVAL) {
+                this.networkTimer -= this.NETWORK_INTERVAL;
+                this.networkTickNumber++;
             }
+
+            if (this.isOnlineMode && this.network && this.network.isConnected) {
+                this.network.sendBatSwingUDP(
+                    this.networkTickNumber,
+                    this.input.mouseX,
+                    this.input.mouseY,
+                    0
+                );
+             }
+            
+            // if(this.isOnlineMode && this.network && this.network.isConnected){
+            //     this.networkTimer += dt;
+            //     if(this.networkTimer >= this.NETWORK_INTERVAL){
+            //         this.networkTimer -= this.NETWORK_INTERVAL;
+            //         this.networkTickNumber++;
+
+            //         // 60Hz UDP par Bat pose bhejo:
+            //         // this.network.sendBatSwingUDP(
+            //         //     this.networkTickNumber,
+            //         //     this.bat.getHandleTop().x,
+            //         //     this.bat.getHandleTop().y,
+            //         //     this.bat.getBatAngle()
+            //         // );   
+            //         this.network.sendBatSwingUDP(
+            //             this.networkTickNumber,
+            //             this.input.mouseX,
+            //             this.input.mouseY,
+            //             0
+            //         );           
+                
+            //     }
+            // }
             const batHitResult = this.bat.checkHit(this.ball, dt);
-             if (batHitResult.hit && this.isOnlineMode && this.network && this.network.isConnected) {
+           
+            if (batHitResult.hit && !this.ball.isStuck && this.isOnlineMode && this.network && this.network.isConnected) {
+           
+                const si = this.bat.lastSoundImpact;
                 this.network.sendHitResult(
                     this.networkTickNumber,
                     this.ball.pos.x,
                     this.ball.pos.y,
                     this.ball.vel.x,
-                    this.ball.vel.y
+                    this.ball.vel.y,
+                    si?.speed ?? 1000,      // fallback: threshold-ke-paas default
+                    si?.offset ?? 100       // fallback: mid-blade
                 );
             }
             this.renderer.wicket.checkHit(this.ball, batHitResult.hit, batHitResult.hitSubStep);
@@ -342,6 +409,16 @@ export default class GameLoop{
             this.ball.update(dt); // Integrate ball velocity into position for flight!
             this.renderer.wicket.update(dt);
             this.renderer.wicket.checkHit(this.ball, false);
+
+         
+            if (this.isOnlineMode && this.ball.isActive && !this.hasAuthoritativeResult) {
+                const predicted = this.bat.checkHit(this.ball, dt);
+                if (predicted.hit && !this.ball.isStuck) {
+              
+                    this.localPredictedHit = true;
+                    this.suppressNextPacketSound = true;
+                }
+            }
 
             if (this.isOnlineMode && this.renderer.bowlingArea.isBallReleased && !this.hasSentReleasePacket && this.renderer.bowlingArea.lastReleaseInfo) {
                 const info = this.renderer.bowlingArea.lastReleaseInfo;

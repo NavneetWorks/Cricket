@@ -93,6 +93,8 @@ export default class BowlingArea {
     public width: number = 380;
     public height: number = 380;
 
+    public static trajectoryColor: string = "#ff0000"; // Default Red
+
     // Skeletal Joint Parameters (Derived from Batter Arm Length = 150px)
     public readonly TOTAL_ARM_LENGTH: number = 150;
     public upperArmLength: number = 150 * 0.4366; // 65.49px
@@ -209,6 +211,7 @@ export default class BowlingArea {
         this.currentArmAngleRad = -Math.PI / 2;
         this.armAngularVelocity = 0;
         this.isFirstFrameInBox = true;
+        BowlingArea.trajectoryColor = "#ff0000";
 
         this.updateJointsFromShoulder();
         ball.pos.x = this.handPos.x;
@@ -698,20 +701,20 @@ export default class BowlingArea {
         }
 
         // 11. DRAW RED BALL TRAJECTORY TRAIL ON RELEASE
-        if (this.ballDebugTrajectory.length >= 2) {
-            ctx.save();
-            ctx.strokeStyle = "#ff0000"; // Red ball trajectory line
-            ctx.lineWidth = 3.0;
-            ctx.lineCap = "round";
-            ctx.lineJoin = "round";
-            ctx.beginPath();
-            ctx.moveTo(this.ballDebugTrajectory[0].x, this.ballDebugTrajectory[0].y);
-            for (let i = 1; i < this.ballDebugTrajectory.length; i++) {
-                ctx.lineTo(this.ballDebugTrajectory[i].x, this.ballDebugTrajectory[i].y);
-            }
-            ctx.stroke();
-            ctx.restore();
-        }
+        // if (this.ballDebugTrajectory.length >= 2) {
+        //     ctx.save();
+        //     ctx.strokeStyle = BowlingArea.trajectoryColor; // Red ball trajectory line
+        //     ctx.lineWidth = 3.0;
+        //     ctx.lineCap = "round";
+        //     ctx.lineJoin = "round";
+        //     ctx.beginPath();
+        //     ctx.moveTo(this.ballDebugTrajectory[0].x, this.ballDebugTrajectory[0].y);
+        //     for (let i = 1; i < this.ballDebugTrajectory.length; i++) {
+        //         ctx.lineTo(this.ballDebugTrajectory[i].x, this.ballDebugTrajectory[i].y);
+        //     }
+        //     ctx.stroke();
+        //     ctx.restore();
+        // }
 
         // 12. DRAW RELEASE SPEED HUD DISPLAY BANNER
         if (this.lastReleaseInfo) {

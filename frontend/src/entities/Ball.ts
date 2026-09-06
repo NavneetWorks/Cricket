@@ -118,9 +118,9 @@ export default class Ball {
         
         if (this.pos.y + this.radius >= groundY) {
             // Play hard pitch bounce sound ONLY on real downward impact (>120px/s)
-            if (this.vel.y > 120) {
+        
                 SoundManager.getInstance().playPitchBounce(this.vel.y, this.pos.x);
-            }
+        
 
             // Ball ko zameen ke andar ghusne se rokna
             this.pos.y = groundY - this.radius;

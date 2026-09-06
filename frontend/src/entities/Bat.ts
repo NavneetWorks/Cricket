@@ -3,6 +3,7 @@ import Input from "../game/Input";
 import { SoundManager } from "../audio/SoundManager";
 import outerArcJson from "../config/outer_handle_arc.json";
 import innerArcJson from "../config/inner_handle_arc.json";
+import BowlingArea from "./BowlingArea";
 import {
     CANVAS_WIDTH,
     CANVAS_HEIGHT,
@@ -208,6 +209,15 @@ export default class Bat {
         originalBallVelY: number;
         regionIndex: number;
     } | null = null;
+
+    public lastSoundImpact: { speed: number; offset: number } | null = null;
+
+
+    public clearStuckState(): void {
+        this.isBallStuck = false;
+        this.dwellFramesRemaining = 0;
+        this.stuckInfo = null;
+    }
 
     // Bat.ts ke class ke andar public getters add karein:
     public getHandleTop(): { x: number; y: number } {
@@ -985,6 +995,8 @@ export default class Bat {
 
                 // Single-shot sound on confirmed physical collision
                 SoundManager.getInstance().playBatHit(v_normal_abs, t * this.TOTAL_BAT_LENGTH);
+                // 🟢 EXACT sound params capture — HIT_RESULT packet me jayenge (sound sync)
+                this.lastSoundImpact = { speed: v_normal_abs, offset: t * this.TOTAL_BAT_LENGTH };
 
                 this.isBallStuck = true;
                 this.dwellFramesRemaining = dwellFrames;
@@ -1011,6 +1023,8 @@ export default class Bat {
             // --- BRANCH 2: NORMAL IMMEDIATE BOUNCE COLLISION ---
             // Single-shot sound on confirmed physical bounce deflection
             SoundManager.getInstance().playBatHit(Math.abs(v_normal), t * this.TOTAL_BAT_LENGTH);
+            // 🟢 EXACT sound params capture — HIT_RESULT packet me jayenge (sound sync)
+            this.lastSoundImpact = { speed: Math.abs(v_normal), offset: t * this.TOTAL_BAT_LENGTH };
 
             // FIX: PROPER PUSH-OUT
             const pushOutDist = ball.radius + (this.HANDLE_WIDTH / 2) + 0.1;

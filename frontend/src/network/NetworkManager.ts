@@ -13,7 +13,7 @@ export default class NetWorkManager{
     public onMatchStart?:(role:'BATSMAN' | 'BOWLER' | 'NONE' , myId:number,oppId:number)=>void;
     public onOpponentBatSwing?:(tick:number,handleX:number,handleY:number,angle:number)=>void;
     public onBowlerRelease?: (startX: number, startY: number, startVx: number, startVy: number) => void;
-    public onHitResult?: (exitX: number, exitY: number, exitVx: number, exitVy: number) => void;
+    public onHitResult?: (exitX: number, exitY: number, exitVx: number, exitVy: number, impactSpeed: number, hitPixelOffset: number,tick:number) => void;
 
     private heartbeatTimer: any = null;
 
@@ -193,8 +193,11 @@ export default class NetWorkManager{
             const exitY = view.getFloat32(11, true);
             const exitVx = view.getFloat32(15, true);
             const exitVy = view.getFloat32(19, true);
+            // 🟢 STEP 3: sound sync params (31-byte packet ke naye fields)
+            const impactSpeed = view.getFloat32(23, true);
+            const hitPixelOffset = view.getFloat32(27, true);
             if (this.onHitResult) {
-                this.onHitResult(exitX, exitY, exitVx, exitVy);
+                this.onHitResult(exitX, exitY, exitVx, exitVy, impactSpeed, hitPixelOffset,tick);
             }
         }else if(opcode === PacketType.PING){
             const senderId = view.getUint32(1,true);
@@ -229,9 +232,10 @@ export default class NetWorkManager{
             this.dataChannel.send(buffer);
         }
     }
-    public sendHitResult(tick: number, exitX: number, exitY: number, exitVx: number, exitVy: number) {
+    // 🟢 STEP 3: impactSpeed + hitPixelOffset bhi bhejo (sound sync ke liye)
+    public sendHitResult(tick: number, exitX: number, exitY: number, exitVx: number, exitVy: number, impactSpeed: number, hitPixelOffset: number) {
         if (this.dataChannel && this.dataChannel.readyState === "open") {
-            const buffer = serializeHitResult(this.myPlayerId, tick, exitX, exitY, exitVx, exitVy);
+            const buffer = serializeHitResult(this.myPlayerId, tick, exitX, exitY, exitVx, exitVy, impactSpeed, hitPixelOffset);
             this.dataChannel.send(buffer);
         }
     }
