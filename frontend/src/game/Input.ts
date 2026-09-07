@@ -7,8 +7,9 @@ export interface MouseSample {
 }
 
 export default class Input {
-    public mouseX: number = 0;
-    public mouseY: number = 0;
+    public mouseX: number = 300;
+    public mouseY: number = 300;
+    public isMouseActive: boolean = false;
     public pressedKeys: Set<string> = new Set();
     private readonly MAX_HISTORY = 1000;
 
@@ -16,6 +17,8 @@ export default class Input {
 
     constructor(canvas: HTMLCanvasElement) {
         const updatePointer = (clientX: number, clientY: number) => {
+            if (!this.isMouseActive) return;
+
             const rect = canvas.getBoundingClientRect();
             if (rect.width === 0 || rect.height === 0) return;
 
@@ -43,11 +46,14 @@ export default class Input {
 
         // Non-blocking keyboard tracking for all keys
         window.addEventListener("keydown", (event: KeyboardEvent) => {
+            if (event.code === "Enter" || event.key === "Enter") {
+                this.isMouseActive = true;
+            }
             this.pressedKeys.add(event.code);
             this.pressedKeys.add(event.key.toLowerCase());
 
-            // Prevent default page scroll for navigation/WASD/Space keys
-            if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD"].includes(event.code)) {
+            // Prevent default page scroll for navigation/WASD/Space/Enter keys
+            if (["Space", "Enter", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD"].includes(event.code)) {
                 if (!(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)) {
                     event.preventDefault();
                 }

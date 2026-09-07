@@ -96,7 +96,7 @@ export const LEG_WIDTH_AT_GROUND = 100;
 
 export const LEG_WIDTH_AT_HIP = 40;
 
-export const OUTER_ARC_SCALE = 1;
+export const OUTER_ARC_SCALE = 1.3;
 export const INNER_ARC_SCALE = 1.2;
 export const HORIZONTAL_TILT_SPEED_SCALE = 0.002;
 

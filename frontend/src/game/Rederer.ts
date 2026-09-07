@@ -59,7 +59,36 @@ export default class Renderer{
 
         this.ball.draw(this.ctx, alpha);
         this.drawDebug();
+        this.drawOverlay();
         this.drawMiniScreen(alpha);
+    }
+    private drawOverlay() {
+        if (!this.input.isMouseActive) {
+            this.ctx.save();
+            const badgeW = 380;
+            const badgeH = 40;
+            const badgeX = (CANVAS_WIDTH - badgeW) / 2;
+            const badgeY = 20;
+
+            // Semi-transparent pill background
+            this.ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+            this.ctx.beginPath();
+            this.ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 8);
+            this.ctx.fill();
+
+            // Accent border
+            this.ctx.strokeStyle = "#38bdf8";
+            this.ctx.lineWidth = 1.5;
+            this.ctx.stroke();
+
+            // Text
+            this.ctx.font = "bold 15px sans-serif";
+            this.ctx.fillStyle = "#ffffff";
+            this.ctx.textAlign = "center";
+            this.ctx.textBaseline = "middle";
+            this.ctx.fillText("Press ENTER to Control Bat with Mouse", CANVAS_WIDTH / 2, badgeY + badgeH / 2);
+            this.ctx.restore();
+        }
     }
     private drawSky(){
         this.ctx.fillStyle = GAME_COLORS.SKY;

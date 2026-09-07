@@ -49,15 +49,15 @@ export default class Bat {
     private debug_dy = 0;
     private prevHandlePos: Vec2 | null = null;
     
-    private comTarget: Vec2 = { x: 300, y: 550 };   // where mouse wants it
-    private comActual: Vec2 = { x: 700, y: 350 }; // where it PHYSICALLY is (start near shoulder)
+    private comTarget: Vec2 = { x: 300, y: 300 };   // where mouse wants it
+    private comActual: Vec2 = { x: 300, y: 300 }; // where it PHYSICALLY is (start near stance)
     private comVelocity: Vec2 = { x: 0, y: 0 };
 
     private batAngleActual = 0;
     private prevBatAngle = 0;
-    private prevHandleTop: Vec2 = { x: 700, y: 350 };
+    private prevHandleTop: Vec2 = { x: 300, y: 300 };
     private prevComTarget: Vec2 | null = null;
-    private handleActual: Vec2 = { x: 700, y: 350 };
+    private handleActual: Vec2 = { x: 300, y: 300 };
     private handleVelocity: Vec2 = { x: 0, y: 0 };
     private readonly HANDLE_STIFFNESS_Y = 30; // Increased so it hits speed limit!for now
     // --- BAT BREAKDOWN ---
@@ -106,12 +106,14 @@ export default class Bat {
 
 
         
-    private readonly MAX_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH-60 };
-    private readonly MIN_HIP_POSITION : Vec2 = { x: 250, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+80 };
+    private readonly MAX_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH };
+    private readonly MIN_HIP_POSITION : Vec2 = { x: 250, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+30 };
 
-    public readonly ORIGINAL_HIP_POSITION : Vec2 = { x: 250, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH-50 };
+    public readonly ORIGINAL_HIP_POSITION : Vec2 = { x: 250, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH };
 
-    private CURRENT_HIP_POSITION : Vec2 = this.ORIGINAL_HIP_POSITION;
+    private CURRENT_HIP_POSITION : Vec2 = { ...this.ORIGINAL_HIP_POSITION };
+    private targetHipPos : Vec2 = { ...this.ORIGINAL_HIP_POSITION };
+    private hipVel : Vec2 = { x: 0, y: 0 };
 
     private readonly LEG_WIDTH_AT_HIP = 1.2*PLAYER_LENGTH_FACTOR;
 
@@ -263,6 +265,9 @@ export default class Bat {
         this.headImage.onload = () => {
             this.headImageLoaded = true;
         };
+
+        // Initialize full body skeleton & bat pose to resting stance (300, 300) on frame 0
+        this.update(300, 300, 0.016);
     }
 
     private getRegionRestitution(regionIndex: number): number {
@@ -306,29 +311,39 @@ export default class Bat {
         const handleDeltaX = this.handleActual.x - (this as any).prevHandleActualForHip.x;
         const handleDeltaY = this.handleActual.y - (this as any).prevHandleActualForHip.y;
 
-        // 3. Move the hips in that same direction (Both X & Y axis movements set to 0.4)
-        this.CURRENT_HIP_POSITION.x += handleDeltaX * 0.4;
-        this.CURRENT_HIP_POSITION.y += handleDeltaY * 0.2;
+        // 3. Update TARGET hip position (X & Y axis follow with 0.35 Y follow speed)
+        this.targetHipPos.x += handleDeltaX * 0.4;
+        this.targetHipPos.y += handleDeltaY * 0.35;
 
-        // 4. Add subtle COM movement influence on Hips if COM is right of Hip or left by at most 10px
+        // 3b. Inverse Speed Horizontal-to-Vertical Hip Coupling (Slowed down 3.5x):
+        // Handle Right (handleDeltaX > 0) -> Hip DOWN (+Y)
+        // Handle Left (handleDeltaX < 0) -> Hip UP (-Y)
+        const MIN_SPEED_THRESHOLD = 0.05;
+        const speedX = Math.abs(handleDeltaX);
+        if (speedX >= MIN_SPEED_THRESHOLD) {
+            const MAX_RATIO = 0.35;  // Slow movement max ratio (Slowed down 3.5x)
+            const MIN_RATIO = 0.04;  // Fast movement min ratio
+            const DAMPING = 0.05;
+            const ratio = MIN_RATIO + (MAX_RATIO - MIN_RATIO) / (1 + speedX * DAMPING);
+            this.targetHipPos.y += handleDeltaX * ratio;
+        }
+
+        // 4. Add subtle COM movement influence on Target Hip
         if (!(this as any).prevComActualForHip) {
             (this as any).prevComActualForHip = { x: this.comActual.x, y: this.comActual.y };
         }
         const comDeltaX = this.comActual.x - (this as any).prevComActualForHip.x;
         const comDeltaY = this.comActual.y - (this as any).prevComActualForHip.y;
 
-        const comHipDistX = this.comActual.x - this.CURRENT_HIP_POSITION.x;
+        const comHipDistX = this.comActual.x - this.targetHipPos.x;
         if (comHipDistX >= -10) {
-            this.CURRENT_HIP_POSITION.x += comDeltaX * 0.075;
-            this.CURRENT_HIP_POSITION.y += comDeltaY * 0.075;
+            this.targetHipPos.x += comDeltaX * 0.075;
+            this.targetHipPos.y += comDeltaY * 0.03;
         } else {
-            // When COM is >10px to the left of hips:
             if (comDeltaY < 0) {
-                // Moving UP: 3x of right part (0.075 * 3 = 0.225)
-                this.CURRENT_HIP_POSITION.y += comDeltaY * 0.1125;
+                this.targetHipPos.y += comDeltaY * 0.045;
             } else if (comDeltaY > 0) {
-                // Moving DOWN: Half of upward momentum (0.225 / 2 = 0.1125)
-                this.CURRENT_HIP_POSITION.y += comDeltaY * 0.1125;
+                this.targetHipPos.y += comDeltaY * 0.045;
             }
         }
 
@@ -336,23 +351,40 @@ export default class Bat {
         (this as any).prevHandleActualForHip = { x: this.handleActual.x, y: this.handleActual.y };
         (this as any).prevComActualForHip = { x: this.comActual.x, y: this.comActual.y };
 
-        // 5. Manual Stance Height Adjustment (W = UP, S = DOWN) - Speed halved to 75
+        // 5. Manual Stance Height Adjustment (W = UP, S = DOWN) - Speed slowed to 35 px/s
         if (input) {
-            const stanceSpeedY = 75; // Halved speed px/s
+            const stanceSpeedY = 35; // Slowed stance speed px/s
             if (input.isKeyPressed("w") || input.isKeyPressed("KeyW")) {
-                this.CURRENT_HIP_POSITION.y -= stanceSpeedY * dt; // UP
+                this.targetHipPos.y -= stanceSpeedY * dt; // UP
                 this.stanceOffsetY -= stanceSpeedY * dt;
             }
             if (input.isKeyPressed("s") || input.isKeyPressed("KeyS")) {
-                this.CURRENT_HIP_POSITION.y += stanceSpeedY * dt; // DOWN
+                this.targetHipPos.y += stanceSpeedY * dt; // DOWN
                 this.stanceOffsetY += stanceSpeedY * dt;
             }
         }
 
-        // 6. Clamp the final hip position to ensure it stays within physical limits
-        this.CURRENT_HIP_POSITION.x = Math.max(this.MIN_HIP_POSITION.x, Math.min(this.MAX_HIP_POSITION.x, this.CURRENT_HIP_POSITION.x));
+        // 6. Clamp Target Hip position
+        this.targetHipPos.x = Math.max(this.MIN_HIP_POSITION.x, Math.min(this.MAX_HIP_POSITION.x, this.targetHipPos.x));
         const highestHipY = this.MAX_HIP_POSITION.y; // smaller value
         const lowestHipY = this.MIN_HIP_POSITION.y;  // larger value
+        this.targetHipPos.y = Math.max(highestHipY, Math.min(lowestHipY, this.targetHipPos.y));
+
+        // 🟢 7. TIGHT SPRING-DAMPING PHYSICS (Mass-Spring-Damper for human body inertia)
+        const springStiffness = 240; // Responsive body spring
+        const springDamping = 28;    // Tight critical damping (smooth, no oscillations)
+
+        const forceX = springStiffness * (this.targetHipPos.x - this.CURRENT_HIP_POSITION.x) - springDamping * this.hipVel.x;
+        const forceY = springStiffness * (this.targetHipPos.y - this.CURRENT_HIP_POSITION.y) - springDamping * this.hipVel.y;
+
+        this.hipVel.x += forceX * dt;
+        this.hipVel.y += forceY * dt;
+
+        this.CURRENT_HIP_POSITION.x += this.hipVel.x * dt;
+        this.CURRENT_HIP_POSITION.y += this.hipVel.y * dt;
+
+        // Final Clamp on Actual CURRENT_HIP_POSITION
+        this.CURRENT_HIP_POSITION.x = Math.max(this.MIN_HIP_POSITION.x, Math.min(this.MAX_HIP_POSITION.x, this.CURRENT_HIP_POSITION.x));
         this.CURRENT_HIP_POSITION.y = Math.max(highestHipY, Math.min(lowestHipY, this.CURRENT_HIP_POSITION.y));
         
         // 6. Calculate Spine Angle based on Hip displacement and stretch (halved again per request)
@@ -472,10 +504,21 @@ export default class Bat {
         this.CURRENT_RIGHT_HIP_POSITION.x = this.CURRENT_HIP_POSITION.x + this.hipRx * Math.cos(rightHipAngle);
         this.CURRENT_RIGHT_HIP_POSITION.y = this.CURRENT_HIP_POSITION.y + this.hipRy * Math.sin(rightHipAngle);
 
-        // Dynamic Right Foot Ground Position (moves 2x of hip X displacement)
-        const originalRightFootX = (this.ORIGINAL_HIP_POSITION.x - 40) + this.CURRENT_LEG_WIDTH_AT_GROUND;
-        const hipShiftX = this.CURRENT_HIP_POSITION.x - this.ORIGINAL_HIP_POSITION.x;
-        this.CURRENT_RIGHT_LEG_POSTION_AT_GROUND.x = originalRightFootX + (hipShiftX * 2.0);
+        // 1. Left foot stays 100% FIXED on ground (Stationary back-foot anchor)
+        this.CURRENT_LEFT_LEG_POSTION_AT_GROUND.x = this.ORIGINAL_HIP_POSITION.x - 35;
+
+        // 2. Right foot moves forward, constrained by exact leg length (Pythagorean reach limit)
+        const dyRight = (CANVAS_HEIGHT - GROUND_HEIGHT) - this.CURRENT_RIGHT_HIP_POSITION.y;
+        const maxLegReach = this.FULL_LEG_LENGTH - 15; // Natural knee bend headroom
+        const maxDxAllowed = Math.sqrt(Math.max(0, maxLegReach ** 2 - dyRight ** 2));
+
+        const desiredRightFootX = this.CURRENT_RIGHT_HIP_POSITION.x + 35;
+        const maxRightFootX = this.CURRENT_RIGHT_HIP_POSITION.x + maxDxAllowed;
+        const targetRightFootX = Math.min(maxRightFootX, desiredRightFootX);
+
+        const legSpeedFactor = 0.15;
+        this.CURRENT_RIGHT_LEG_POSTION_AT_GROUND.x += 
+            (targetRightFootX - this.CURRENT_RIGHT_LEG_POSTION_AT_GROUND.x) * legSpeedFactor;
 
         this.updateArm(
             this.FRONT_SHOULDER,
@@ -1255,11 +1298,16 @@ export default class Bat {
         const candidateA = this.pointOnCircle(hip, upperLen, baseAngle + hipAngle);
         const candidateB = this.pointOnCircle(hip, upperLen, baseAngle - hipAngle);
 
-        const knee = this.sideOfLine(hip, clampedTarget, candidateA) === bendSide
+        let knee = this.sideOfLine(hip, clampedTarget, candidateA) === bendSide
             ? candidateA
             : candidateB;
 
         if (which === "left") {
+            // Natural stance knee clamp: prevent left knee from popping out too far to the left when crouching
+            const maxLeftKneeOffset = hip.x - 42;
+            if (knee.x < maxLeftKneeOffset) {
+                knee.x = maxLeftKneeOffset;
+            }
             this.leftKnee = knee;
         } else {
             this.rightKnee = knee;
