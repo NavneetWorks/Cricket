@@ -609,6 +609,28 @@ export default class Bat {
         const targetVelocityX = (this.comTarget.x - this.prevComTarget.x) / dt;
         this.prevComTarget = { x: this.comTarget.x, y: this.comTarget.y };
 
+        // 🟢 DYNAMIC SWING ARC MOMENTUM & CENTRIFUGAL OVERTAKE ACCELERATION
+        if (targetVelocityX !== 0) {
+            const isSameDirection = (targetVelocityX > 0 && this.accumulatedSwingAngle >= 0) || 
+                                    (targetVelocityX < 0 && this.accumulatedSwingAngle <= 0);
+            if (isSameDirection) {
+                this.accumulatedSwingAngle += targetVelocityX * dt * 0.005;
+            } else {
+                this.accumulatedSwingAngle = targetVelocityX * dt * 0.005;
+            }
+        } else {
+            this.accumulatedSwingAngle *= 0.90; // Natural momentum decay when stationary
+        }
+
+        // Clamp max accumulated swing arc angle (approx ±180 degrees equivalent in radians factor)
+        const maxArcLimit = 2.2;
+        this.accumulatedSwingAngle = Math.max(-maxArcLimit, Math.min(maxArcLimit, this.accumulatedSwingAngle));
+
+        // Centrifugal lead offset: Bat accelerates ahead of raw cursor during long continuous swings
+        const swingLeadMultiplier = 38; // Pixels ahead of cursor at full swing momentum
+        const swingLeadX = Math.sin(this.accumulatedSwingAngle) * swingLeadMultiplier;
+        this.comTarget.x += swingLeadX;
+
         this.simulateComPhysics(dt);
 
         const dtClamp = Math.min(dt, 0.05);
@@ -639,7 +661,7 @@ export default class Bat {
             let tiltSpeed = comUpSpeed * this.WRIST_TILT_SPEED_SCALE;
             // Straight up is -PI/2. Tilting right means angle increases towards 0.
             currentAngle += tiltSpeed * dtClamp*k; 
-        } 
+        }
         
         // Horizontal tilt based on smooth Target (Mouse) X velocity (0.7x scaled)
         let horizontalTiltSpeed = targetVelocityX * HORIZONTAL_TILT_SPEED_SCALE * 0.7;

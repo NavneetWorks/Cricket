@@ -143,7 +143,7 @@ export default class GameLoop{
             const randomSpeed = minSpeed + Math.random() * (maxSpeed - minSpeed);
             
             const minAngle = 0;
-            const maxAngle = 12;
+            const maxAngle = 8;
             
             // RIGHT se LEFT fenkne ke liye changes:
             
