@@ -94,7 +94,7 @@ export default class Bat {
 
     private readonly EPS = 0.01;
 
-    private readonly FULL_LEG_LENGTH = 4.7*PLAYER_LENGTH_FACTOR; 
+    private readonly FULL_LEG_LENGTH = 4.9*PLAYER_LENGTH_FACTOR; 
 
     private readonly THIGH_LENGTH = this.FULL_LEG_LENGTH*.53;
     private readonly SHIN_LENGTH = this.FULL_LEG_LENGTH-this.THIGH_LENGTH;
@@ -134,7 +134,7 @@ export default class Bat {
 
     private readonly MIN_LEG_WIDTH_AT_GROUND = 80;
 
-    private CURRENT_LEG_WIDTH_AT_GROUND = 2*PLAYER_LENGTH_FACTOR;
+    private CURRENT_LEG_WIDTH_AT_GROUND = 2.8*PLAYER_LENGTH_FACTOR;
 
     private CURRENT_LEFT_LEG_POSTION_AT_GROUND : Vec2 = {x:this.ORIGINAL_HIP_POSITION.x-40,y:CANVAS_HEIGHT - GROUND_HEIGHT}
 
@@ -311,9 +311,18 @@ export default class Bat {
         const handleDeltaX = this.handleActual.x - (this as any).prevHandleActualForHip.x;
         const handleDeltaY = this.handleActual.y - (this as any).prevHandleActualForHip.y;
 
-        // 3. Update TARGET hip position (X & Y axis follow with 0.35 Y follow speed)
+        // 3. Calculate clockwise angle of line connecting SHOULDER_MID to handleActual relative to positive X-axis
+        const shoulderToHandleDx = this.handleActual.x - this.SHOULDER_MID.x;
+        const shoulderToHandleDy = this.handleActual.y - this.SHOULDER_MID.y;
+        const shoulderHandleAngleRad = Math.atan2(shoulderToHandleDy, shoulderToHandleDx); // clockwise angle from +X axis
+
+        // Linearly decreases from 2.0x at 0° down to 1.0x at 180° (Math.PI)
+        const normalizedAngle = Math.max(0, Math.min(Math.PI, shoulderHandleAngleRad));
+        const angleAttenuation = 2.0 - (normalizedAngle / Math.PI);
+
+        // Update TARGET hip position (X follow = 0.4, Y follow scaled dynamically by angle attenuation)
         this.targetHipPos.x += handleDeltaX * 0.4;
-        this.targetHipPos.y += handleDeltaY * 0.35;
+        this.targetHipPos.y += handleDeltaY * 0.35 * angleAttenuation;
 
         // 3b. Inverse Speed Horizontal-to-Vertical Hip Coupling (Slowed down 3.5x):
         // Handle Right (handleDeltaX > 0) -> Hip DOWN (+Y)
@@ -323,7 +332,7 @@ export default class Bat {
         if (speedX >= MIN_SPEED_THRESHOLD) {
             const MAX_RATIO = 0.35;  // Slow movement max ratio (Slowed down 3.5x)
             const MIN_RATIO = 0.04;  // Fast movement min ratio
-            const DAMPING = 0.05;
+            const DAMPING = 0.005;
             const ratio = MIN_RATIO + (MAX_RATIO - MIN_RATIO) / (1 + speedX * DAMPING);
             this.targetHipPos.y += handleDeltaX * ratio;
         }
@@ -477,7 +486,7 @@ export default class Bat {
         const frontDx = this.frontWristTarget.x - this.CURRENT_HIP_POSITION.x;
         const frontDy = this.frontWristTarget.y - this.CURRENT_HIP_POSITION.y;
         const frontShiftAngle = (frontDx * 0.0147) + (frontDy * 0.0098);
-        const scale = 1.2 // 0.7x rate of change
+        const scale = 1 // 0.7x rate of change
         const frontAngle = Math.PI - frontShiftAngle*scale;
 
         this.FRONT_SHOULDER.x = this.SHOULDER_MID.x + this.shoulderRx * Math.cos(frontAngle);
@@ -505,18 +514,18 @@ export default class Bat {
         this.CURRENT_RIGHT_HIP_POSITION.y = this.CURRENT_HIP_POSITION.y + this.hipRy * Math.sin(rightHipAngle);
 
         // 1. Left foot stays 100% FIXED on ground (Stationary back-foot anchor)
-        this.CURRENT_LEFT_LEG_POSTION_AT_GROUND.x = this.ORIGINAL_HIP_POSITION.x - 35;
+        this.CURRENT_LEFT_LEG_POSTION_AT_GROUND.x = this.ORIGINAL_HIP_POSITION.x - 55;
 
         // 2. Right foot moves forward, constrained by exact leg length (Pythagorean reach limit)
         const dyRight = (CANVAS_HEIGHT - GROUND_HEIGHT) - this.CURRENT_RIGHT_HIP_POSITION.y;
-        const maxLegReach = this.FULL_LEG_LENGTH - 15; // Natural knee bend headroom
+        const maxLegReach = this.FULL_LEG_LENGTH - 10; // Natural knee bend headroom
         const maxDxAllowed = Math.sqrt(Math.max(0, maxLegReach ** 2 - dyRight ** 2));
 
         const desiredRightFootX = this.CURRENT_RIGHT_HIP_POSITION.x + 35;
         const maxRightFootX = this.CURRENT_RIGHT_HIP_POSITION.x + maxDxAllowed;
         const targetRightFootX = Math.min(maxRightFootX, desiredRightFootX);
 
-        const legSpeedFactor = 0.15;
+        const legSpeedFactor = 0.25;
         this.CURRENT_RIGHT_LEG_POSTION_AT_GROUND.x += 
             (targetRightFootX - this.CURRENT_RIGHT_LEG_POSTION_AT_GROUND.x) * legSpeedFactor;
 
