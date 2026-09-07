@@ -320,8 +320,9 @@ export default class Bat {
         const normalizedAngle = Math.max(0, Math.min(Math.PI, shoulderHandleAngleRad));
         const angleAttenuation = 2.0 - (normalizedAngle / Math.PI);
 
-        // Update TARGET hip position (X follow = 0.4, Y follow scaled dynamically by angle attenuation)
-        this.targetHipPos.x += handleDeltaX * 0.4;
+        // Update TARGET hip position (X follow: Forward = 0.4, Backward = 0.70 for faster snappy retreat)
+        const hipXFollowScale = handleDeltaX < 0 ? 0.70 : 0.4;
+        this.targetHipPos.x += handleDeltaX * hipXFollowScale;
         this.targetHipPos.y += handleDeltaY * 0.35 * angleAttenuation;
 
         // 3b. Inverse Speed Horizontal-to-Vertical Hip Coupling (Slowed down 3.5x):
@@ -644,26 +645,21 @@ export default class Bat {
         
         // Find current angle
         let currentAngle = Math.atan2(dyAngle, dxAngle); 
-        // 1. Upward Swing -> Tilt Linearly
+        // 1. Arm angle k-lookup for wrist tilt scaling
+        let armDx = this.handleActual.x - this.SHOULDER_MID.x;
+        let armDy = this.handleActual.y - this.SHOULDER_MID.y;
+        let armAngleDeg = Math.atan2(armDy, armDx) * (180 / Math.PI);
+        let index = Math.floor((armAngleDeg + 30) / 3);
+        index = Math.max(0, Math.min(69, index));
+        let k = k_values[index];
+
+        // 2. Upward Swing -> Tilt Forward
         if (comUpSpeed > 0) {
-            let armDx = this.handleActual.x - this.SHOULDER_MID.x;
-            let armDy = this.handleActual.y - this.SHOULDER_MID.y;
-            let armAngleDeg = Math.atan2(armDy, armDx) * (180 / Math.PI);
-           // if (armAngleDeg < 0) armAngleDeg = 0; 
-
-            let index = Math.floor((armAngleDeg+30) / 3);
-
-            index = Math.max(0, Math.min(69, index));
-
-            let k = k_values[index];
-
-
             let tiltSpeed = comUpSpeed * this.WRIST_TILT_SPEED_SCALE;
-            // Straight up is -PI/2. Tilting right means angle increases towards 0.
-            currentAngle += tiltSpeed * dtClamp*k; 
+            currentAngle += tiltSpeed * dtClamp * k;
         }
-        
-        // Horizontal tilt based on smooth Target (Mouse) X velocity (0.7x scaled)
+
+        // 🟢 EXACT MIRROR SYMMETRICAL UN-BEND: Reverse tilt with identical instant feel on backward movement
         let horizontalTiltSpeed = targetVelocityX * HORIZONTAL_TILT_SPEED_SCALE * 0.7;
         
         // Clamp tilt speed so it doesn't spin wildly on very fast mouse flicks
@@ -671,7 +667,12 @@ export default class Bat {
         if (horizontalTiltSpeed > maxTiltSpeed) horizontalTiltSpeed = maxTiltSpeed;
         if (horizontalTiltSpeed < -maxTiltSpeed) horizontalTiltSpeed = -maxTiltSpeed;
 
-        currentAngle += horizontalTiltSpeed * dtClamp;
+        if (targetVelocityX < 0) {
+            // Apply identical instantaneous mirror un-bend scaling
+            currentAngle += horizontalTiltSpeed * dtClamp * (1.0 + k * 0.5);
+        } else {
+            currentAngle += horizontalTiltSpeed * dtClamp;
+        }
 
         // Clamp minimum/maximum wrist tilt angle to prevent unnatural inward curl under body
         const MIN_WRIST_ANGLE = -Math.PI * 0.58; // approx -104 degrees
