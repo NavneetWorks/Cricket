@@ -94,7 +94,7 @@ export default class Bat {
 
     private readonly EPS = 0.01;
 
-    private readonly FULL_LEG_LENGTH = 4.9*PLAYER_LENGTH_FACTOR; 
+    private readonly FULL_LEG_LENGTH = 5.2*PLAYER_LENGTH_FACTOR; 
 
     private readonly THIGH_LENGTH = this.FULL_LEG_LENGTH*.53;
     private readonly SHIN_LENGTH = this.FULL_LEG_LENGTH-this.THIGH_LENGTH;
@@ -521,9 +521,14 @@ export default class Bat {
         const maxLegReach = this.FULL_LEG_LENGTH - 10; // Natural knee bend headroom
         const maxDxAllowed = Math.sqrt(Math.max(0, maxLegReach ** 2 - dyRight ** 2));
 
+        const MIN_FEET_DISTANCE = 50; // Minimum allowed gap between Left and Right feet on ground
+        const minRightFootX = this.CURRENT_LEFT_LEG_POSTION_AT_GROUND.x + MIN_FEET_DISTANCE;
+
         const desiredRightFootX = this.CURRENT_RIGHT_HIP_POSITION.x + 35;
         const maxRightFootX = this.CURRENT_RIGHT_HIP_POSITION.x + maxDxAllowed;
-        const targetRightFootX = Math.min(maxRightFootX, desiredRightFootX);
+        
+        // Clamp Right Foot target between MIN_FEET_DISTANCE and maxLegReach
+        const targetRightFootX = Math.max(minRightFootX, Math.min(maxRightFootX, desiredRightFootX));
 
         const legSpeedFactor = 0.25;
         this.CURRENT_RIGHT_LEG_POSTION_AT_GROUND.x += 
@@ -705,9 +710,23 @@ export default class Bat {
                 let maxRadius = this.getInterpolatedRadius(outerArcJson, angleDeg, 200) * OUTER_ARC_SCALE;
                 let minRadius = this.getInterpolatedRadius(innerArcJson, angleDeg, 400) * INNER_ARC_SCALE;
 
-                if (hDist > maxRadius) {
+                if (hDist >= maxRadius - 2) {
                     this.handleActual.x = shoulderMid.x + (hdx / hDist) * maxRadius;
                     this.handleActual.y = shoulderMid.y + (hdy / hDist) * maxRadius;
+
+                    // 🟢 OUTER ARC DHAKA IMPULSE: Active ONLY between 0° and 80° angle range
+                    if (angleDeg >= 0 && angleDeg <= 80) {
+                        const pushDirX = hdx / hDist;
+                        const pushDirY = hdy / hDist;
+                        
+                        // Add continuous target displacement
+                        this.targetHipPos.x += pushDirX * 1.8;
+                        this.targetHipPos.y += pushDirY * 0.9;
+
+                        // Direct impulse velocity kick to hipVel for a realistic physical "Dhaka" momentum
+                        this.hipVel.x += pushDirX * 35;
+                        this.hipVel.y += pushDirY * 18;
+                    }
                 } else if (hDist < minRadius) {
                     this.handleActual.x = shoulderMid.x + (hdx / hDist) * minRadius;
                     this.handleActual.y = shoulderMid.y + (hdy / hDist) * minRadius;
