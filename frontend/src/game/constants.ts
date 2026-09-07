@@ -215,7 +215,7 @@ export const SERVER_CONFIG = {
     NETWORK_INTERVAL_MS: 16.66
 };
 
-export const PLAYER_LENGTH_FACTOR = 31;
+export const PLAYER_LENGTH_FACTOR = 28;
 
 // 🏏 STEP 2: Bat pose snapshot interpolation (bowler screen par smooth remote bat)
 // Batter 60Hz snapshots bhejta hai (tickNumber ke saath); bowler unhe playhead se

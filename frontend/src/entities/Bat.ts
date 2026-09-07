@@ -65,7 +65,7 @@ export default class Bat {
     private readonly BLADE_LENGTH = 3*PLAYER_LENGTH_FACTOR;
     private readonly TOTAL_BAT_LENGTH = 4.7*PLAYER_LENGTH_FACTOR;
     private readonly TOTAL_RIGHT_ARM_LENGTH  =  3.4*PLAYER_LENGTH_FACTOR;
-    private readonly TOTAL_LEFT_ARM_LENGTH = 3.4*PLAYER_LENGTH_FACTOR;
+    private readonly TOTAL_LEFT_ARM_LENGTH = 3.5*PLAYER_LENGTH_FACTOR;
     // --- WIDTHS ---
 
     private readonly HANDLE_WIDTH = this.TOTAL_BAT_LENGTH*.0388888888;
@@ -149,6 +149,13 @@ export default class Bat {
         y: this.CURRENT_HIP_POSITION.y - Math.sin(this.CURRENT_ANGLE_OF_SPINE) * this.NECT_TO_HIP_LENGTH 
     };  
     private HEAD_CENTER: Vec2 = { x: 0, y: 0 };
+    public shoulderRx: number = 25;
+    public shoulderRy: number = 17.5;
+    public hipRx: number = 20;
+    public hipRy: number = 14;
+    // 🟢 PAPER-DOLL HEAD: real head.png skeleton ke HEAD_CENTER par skin hoti hai
+    private headImage: HTMLImageElement = new Image();
+    private headImageLoaded: boolean = false;
     
     private FRONT_SHOULDER: Vec2 = { 
         x: this.SHOULDER_MID.x - this.SHOULDER_JOINT_OFFSET / 2, 
@@ -248,6 +255,14 @@ export default class Bat {
                 count: 0
             });
         }
+
+        // 🟢 PAPER-DOLL HEAD: sprite load karo (load hone tak fallback: cyan ellipse head)
+        // Pivot = neck bottom (image ke neeche-center ke paas) — head neck se judkar
+        // spine ke saath ghumega. Scale: image 1344x896 hai → game me ~2x PLAYER_LENGTH_FACTOR tall
+        this.headImage.src = '/assets/head.png';
+        this.headImage.onload = () => {
+            this.headImageLoaded = true;
+        };
     }
 
     private getRegionRestitution(regionIndex: number): number {
@@ -423,38 +438,39 @@ export default class Bat {
         }
 
         // --- UPDATE SHOULDERS ALONG THE DEBUG ELLIPSE BASED ON HAND CONTACT POINTS ---
-        const shoulderRx = this.SHOULDER_JOINT_OFFSET / 2;
-        const shoulderRy = shoulderRx * 0.3;
+        this.shoulderRx = this.SHOULDER_JOINT_OFFSET / 2;
+        this.shoulderRy = this.shoulderRx * 0.7;
 
         // Front hand contact point (left hand) offset relative to Hip Y-axis line (0.7x of previous speed)
         const frontDx = this.frontWristTarget.x - this.CURRENT_HIP_POSITION.x;
         const frontDy = this.frontWristTarget.y - this.CURRENT_HIP_POSITION.y;
-        const frontShiftAngle = (frontDx * 0.0147) + (frontDy * 0.0098); // 0.7x rate of change
-        const frontAngle = Math.PI - frontShiftAngle;
+        const frontShiftAngle = (frontDx * 0.0147) + (frontDy * 0.0098);
+        const scale = 1.2 // 0.7x rate of change
+        const frontAngle = Math.PI - frontShiftAngle*scale;
 
-        this.FRONT_SHOULDER.x = this.SHOULDER_MID.x + shoulderRx * Math.cos(frontAngle);
-        this.FRONT_SHOULDER.y = this.SHOULDER_MID.y + shoulderRy * Math.sin(frontAngle);
+        this.FRONT_SHOULDER.x = this.SHOULDER_MID.x + this.shoulderRx * Math.cos(frontAngle);
+        this.FRONT_SHOULDER.y = this.SHOULDER_MID.y + this.shoulderRy * Math.sin(frontAngle);
 
         // Back hand contact point (right hand) offset relative to Hip Y-axis line (0.7x of previous speed)
         const backDx = this.backWristTarget.x - this.CURRENT_HIP_POSITION.x;
         const backDy = this.backWristTarget.y - this.CURRENT_HIP_POSITION.y;
         const backShiftAngle = (backDx * 0.0147) + (backDy * 0.0098); // 0.7x rate of change
-        const backAngle = 0 - backShiftAngle;
+        const backAngle = 0 - backShiftAngle*scale;
 
-        this.BACK_SHOULDER.x = this.SHOULDER_MID.x + shoulderRx * Math.cos(backAngle);
-        this.BACK_SHOULDER.y = this.SHOULDER_MID.y + shoulderRy * Math.sin(backAngle);
+        this.BACK_SHOULDER.x = this.SHOULDER_MID.x + this.shoulderRx * Math.cos(backAngle);
+        this.BACK_SHOULDER.y = this.SHOULDER_MID.y + this.shoulderRy * Math.sin(backAngle);
 
         // --- UPDATE LEG / HIP JOINTS ALONG THE HIP DEBUG ELLIPSE (0.5x speed of shoulders, SAME direction) ---
-        const hipRx = this.LEG_WIDTH_AT_HIP / 2;
-        const hipRy = hipRx * 0.3;
+        this.hipRx = this.LEG_WIDTH_AT_HIP / 2;
+        this.hipRy = this.hipRx * 0.7;
 
         const leftHipAngle = Math.PI - (frontShiftAngle * 0.5);
-        this.CURRENT_LEFT_HIP_POSITION.x = this.CURRENT_HIP_POSITION.x + hipRx * Math.cos(leftHipAngle);
-        this.CURRENT_LEFT_HIP_POSITION.y = this.CURRENT_HIP_POSITION.y + hipRy * Math.sin(leftHipAngle);
+        this.CURRENT_LEFT_HIP_POSITION.x = this.CURRENT_HIP_POSITION.x + this.hipRx * Math.cos(leftHipAngle);
+        this.CURRENT_LEFT_HIP_POSITION.y = this.CURRENT_HIP_POSITION.y + this.hipRy * Math.sin(leftHipAngle);
 
         const rightHipAngle = 0 - (backShiftAngle * 0.5);
-        this.CURRENT_RIGHT_HIP_POSITION.x = this.CURRENT_HIP_POSITION.x + hipRx * Math.cos(rightHipAngle);
-        this.CURRENT_RIGHT_HIP_POSITION.y = this.CURRENT_HIP_POSITION.y + hipRy * Math.sin(rightHipAngle);
+        this.CURRENT_RIGHT_HIP_POSITION.x = this.CURRENT_HIP_POSITION.x + this.hipRx * Math.cos(rightHipAngle);
+        this.CURRENT_RIGHT_HIP_POSITION.y = this.CURRENT_HIP_POSITION.y + this.hipRy * Math.sin(rightHipAngle);
 
         // Dynamic Right Foot Ground Position (moves 2x of hip X displacement)
         const originalRightFootX = (this.ORIGINAL_HIP_POSITION.x - 40) + this.CURRENT_LEG_WIDTH_AT_GROUND;
@@ -1414,15 +1430,37 @@ export default class Bat {
     }
 
     private drawArms(ctx: CanvasRenderingContext2D): void {
-        this.drawLimb(ctx, this.FRONT_SHOULDER, this.frontElbow, this.frontWrist, "green");
-        this.drawLimb(ctx, this.BACK_SHOULDER, this.backElbow, this.backWrist, "purple");
+        this.drawLimb(ctx, this.FRONT_SHOULDER, this.frontElbow, this.frontWrist, "green", true);
+        this.drawLimb(ctx, this.BACK_SHOULDER, this.backElbow, this.backWrist, "purple", true);
     }
 
-    private drawLimb(ctx: CanvasRenderingContext2D, s: Vec2, e: Vec2, w: Vec2, color: string): void {
+    private drawLimb(ctx: CanvasRenderingContext2D, s: Vec2, e: Vec2, w: Vec2, color: string, isArm: boolean = false): void {
+        if (isArm) {
+            // 🟢 PAPER-DOLL ARMS: sprite-based (upper + lower), fallback lines ke saath
+            this.drawArmSegments(ctx, s, e, w, color);
+            return;
+        }
+
+        // Legs (sprites nahi hain abhi) — line drawing dono segments
+        this.drawSegment(ctx, s, e, color);
+        this.drawSegment(ctx, e, w, color);
+    }
+
+    // 🟢 Ek bone ke liye sprite draw: image ke andar bone ke dono ends (pivot→end)
+    // skeleton ke bone span par EXACT map hote hain — rotation + scale auto-calculate.
+    // Isliye sprite chahe diagonal hi kyun na ho, hamesha skeleton line se match karega.
+    private drawArmSegments(ctx: CanvasRenderingContext2D, s: Vec2, e: Vec2, w: Vec2, color: string): void {
+        // 1. UPPER ARM (Shoulder → Elbow)
+        this.drawSegment(ctx, s, e, color);
+
+        // 2. LOWER ARM (Elbow → Wrist)
+        this.drawSegment(ctx, e, w, color);
+    }
+
+    private drawSegment(ctx: CanvasRenderingContext2D, s: Vec2, e: Vec2, color: string): void {
         ctx.beginPath();
         ctx.moveTo(s.x, s.y);
         ctx.lineTo(e.x, e.y);
-        ctx.lineTo(w.x, w.y);
         ctx.strokeStyle = color;
         ctx.lineWidth = 8;
         ctx.lineCap = "round";
@@ -1487,11 +1525,9 @@ export default class Bat {
         ctx.fillStyle = "lime";
         ctx.fill();
 
-        // Debug draw shoulder ellipse
-        const shoulderMaxRadius = this.SHOULDER_JOINT_OFFSET / 2;
-        const shoulderMinRadius = shoulderMaxRadius * 0.3;
+        // Debug draw shoulder ellipse (using REAL active shoulderRx & shoulderRy)
         ctx.beginPath();
-        ctx.ellipse(shoulderMid.x, shoulderMid.y, shoulderMaxRadius, shoulderMinRadius, 0, 0, 2 * Math.PI);
+        ctx.ellipse(shoulderMid.x, shoulderMid.y, this.shoulderRx, this.shoulderRy, 0, 0, 2 * Math.PI);
         ctx.strokeStyle = "yellow";
         ctx.lineWidth = 1.5;
         ctx.stroke();
@@ -1516,20 +1552,55 @@ export default class Bat {
         ctx.lineWidth = 2.5;
         ctx.stroke();
 
-        // Draw Head Ellipse center dot
-        ctx.beginPath();
-        ctx.arc(headCenterX, headCenterY, 3.5, 0, 2 * Math.PI);
-        ctx.fillStyle = "yellow";
-        ctx.fill();
+        // 🟢 PAPER-DOLL HEAD: real head.png (image load hone tak fallback ellipse neeche)
+        if (this.headImageLoaded) {
+            // ── Tunables (test me adjust karo) ──
+            const HEAD_DRAW_H = 60;      // head image ki screen height (px)
+            const ANCHOR_X_FRAC = 0.42;  // image me neck-bottom-center ka X fraction
+            const ANCHOR_Y_FRAC = 0.8;  // image me neck-bottom-center ka Y fraction
+            const LEAN_FOLLOW = 0.5;     // spine lean kitna follow kare (0-1)
 
-        // Draw Head Ellipse (Smaller radius in X axis: 14px, Longer radius in Y axis: 20px)
-        const headRadiusX = .6*PLAYER_LENGTH_FACTOR;
-        const headRadiusY = .9*PLAYER_LENGTH_FACTOR;
-        ctx.beginPath();
-        ctx.ellipse(headCenterX, headCenterY, headRadiusX, headRadiusY, 0, 0, 2 * Math.PI);
-        ctx.strokeStyle = "cyan";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+            const imgW = this.headImage.naturalWidth || 1344;
+            const imgH = this.headImage.naturalHeight || 896;
+            const drawH = HEAD_DRAW_H;
+            const drawW = drawH * (imgW / imgH);
+
+            // Pivot: mid-neck (shoulderMid ↔ headCenter ke beech)
+            const pivotX = (shoulderMid.x + headCenterX) / 2;
+            const pivotY = (shoulderMid.y + headCenterY) / 2;
+
+            // Spine lean follow: upright spine = PI/2, deviation = lean
+            // (upright par rotation 0 — head image seedhi; lean par head bhi jhukega)
+            const lean = (this.CURRENT_ANGLE_OF_SPINE - Math.PI / 2) * LEAN_FOLLOW;
+
+            ctx.save();
+            ctx.translate(pivotX, pivotY);
+            ctx.rotate(lean);
+            // Image ka neck-bottom-center pivot par baithta hai:
+            ctx.drawImage(
+                this.headImage,
+                -drawW * ANCHOR_X_FRAC,
+                -drawH * ANCHOR_Y_FRAC,
+                drawW,
+                drawH
+            );
+            ctx.restore();
+        } else {
+            // FALLBACK: image load hone tak purana debug head
+            ctx.beginPath();
+            ctx.arc(headCenterX, headCenterY, 3.5, 0, 2 * Math.PI);
+            ctx.fillStyle = "yellow";
+            ctx.fill();
+
+            // Draw Head Ellipse (Smaller radius in X axis: 14px, Longer radius in Y axis: 20px)
+            const headRadiusX = .6*PLAYER_LENGTH_FACTOR;
+            const headRadiusY = .9*PLAYER_LENGTH_FACTOR;
+            ctx.beginPath();
+            ctx.ellipse(headCenterX, headCenterY, headRadiusX, headRadiusY, 0, 0, 2 * Math.PI);
+            ctx.strokeStyle = "cyan";
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+        }
 
         // Draw circle at hips
         ctx.beginPath();
@@ -1537,11 +1608,9 @@ export default class Bat {
         ctx.fillStyle = "cyan";
         ctx.fill();
 
-        // Debug draw hip ellipse
-        const hipMaxRadius = this.LEG_WIDTH_AT_HIP / 2;
-        const hipMinRadius = hipMaxRadius * 0.3;
+        // Debug draw hip ellipse (using REAL active hipRx & hipRy)
         ctx.beginPath();
-        ctx.ellipse(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y, hipMaxRadius, hipMinRadius, 0, 0, 2 * Math.PI);
+        ctx.ellipse(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y, this.hipRx, this.hipRy, 0, 0, 2 * Math.PI);
         ctx.strokeStyle = "magenta";
         ctx.lineWidth = 1.5;
         ctx.stroke();
