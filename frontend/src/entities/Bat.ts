@@ -492,20 +492,27 @@ export default class Bat {
         this.hipRx = baseHipRx * (1 - stretchFrac * 0.15); // Narrows slightly on shot extension relative to LEG_WIDTH_AT_HIP
         this.hipRy = this.hipRx * 0.65;
 
-        // Front hand contact point (left hand) offset relative to Hip Y-axis line (0.7x of previous speed)
+        // Front hand contact point (left hand) offset relative to Hip Y-axis line
         const frontDx = this.frontWristTarget.x - this.CURRENT_HIP_POSITION.x;
         const frontDy = this.frontWristTarget.y - this.CURRENT_HIP_POSITION.y;
         const frontShiftAngle = (frontDx * 0.0147) + (frontDy * 0.0098);
-        const scale = 1; // 0.7x rate of change
-        const frontAngle = Math.PI - frontShiftAngle * scale;
+        const scale = 1;
+        
+        // Strict constraints for Left (Front) Shoulder rotation
+        const rawFrontAngle = Math.PI - frontShiftAngle * scale;
+        const MIN_FRONT_SHOULDER_ANGLE = Math.PI * 0.75; // ~135 deg (prevents going too far back/down)
+        const MAX_FRONT_SHOULDER_ANGLE = Math.PI * 1.25; // ~225 deg (prevents going too far forward/up)
+        const frontAngle = Math.max(MIN_FRONT_SHOULDER_ANGLE, Math.min(MAX_FRONT_SHOULDER_ANGLE, rawFrontAngle));
 
         this.FRONT_SHOULDER.x = this.SHOULDER_MID.x + this.shoulderRx * Math.cos(frontAngle);
         this.FRONT_SHOULDER.y = this.SHOULDER_MID.y + this.shoulderRy * Math.sin(frontAngle);
 
-        // Back hand contact point (right hand) offset relative to Hip Y-axis line (0.7x of previous speed)
+        // Back hand contact point (right hand) offset relative to Hip Y-axis line
         const backDx = this.backWristTarget.x - this.CURRENT_HIP_POSITION.x;
         const backDy = this.backWristTarget.y - this.CURRENT_HIP_POSITION.y;
-        const backShiftAngle = (backDx * 0.0147) + (backDy * 0.0098); // 0.7x rate of change
+        const backShiftAngle = (backDx * 0.0147) + (backDy * 0.0098);
+        
+        // Unclamped back/right shoulder angle
         const backAngle = 0 - backShiftAngle * scale;
 
         this.BACK_SHOULDER.x = this.SHOULDER_MID.x + this.shoulderRx * Math.cos(backAngle);
@@ -2217,6 +2224,27 @@ export default class Bat {
         for (const dot of allGreenDots) {
             ctx.beginPath();
             ctx.arc(dot.x, dot.y, 5, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        // 🟡 SHOULDER ROTATION LIMIT DEBUG DOTS (Yellow = Left limit, Magenta = Right limit)
+        const MIN_BACK_SHOULDER_ANGLE = -Math.PI * 0.25;
+        const MAX_BACK_SHOULDER_ANGLE = Math.PI * 0.35;
+
+        const backMinDot = {
+            x: this.SHOULDER_MID.x + this.shoulderRx * Math.cos(MIN_BACK_SHOULDER_ANGLE),
+            y: this.SHOULDER_MID.y + this.shoulderRy * Math.sin(MIN_BACK_SHOULDER_ANGLE)
+        };
+        const backMaxDot = {
+            x: this.SHOULDER_MID.x + this.shoulderRx * Math.cos(MAX_BACK_SHOULDER_ANGLE),
+            y: this.SHOULDER_MID.y + this.shoulderRy * Math.sin(MAX_BACK_SHOULDER_ANGLE)
+        };
+
+        // Draw Right Shoulder Angle Limit Debug Dots (Magenta)
+        ctx.fillStyle = "#ec4899";
+        for (const dot of [backMinDot, backMaxDot]) {
+            ctx.beginPath();
+            ctx.arc(dot.x, dot.y, 4, 0, 2 * Math.PI);
             ctx.fill();
         }
 
