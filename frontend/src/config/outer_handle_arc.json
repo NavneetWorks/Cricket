@@ -14,12 +14,12 @@
   { "angle": 80, "radius": 132 },
   { "angle": 90, "radius": 130 },
   { "angle": 100, "radius": 127 },
-  { "angle": 110, "radius":125  },
-  { "angle": 120, "radius": 116 },
-  { "angle": 130, "radius": 109 },
-  { "angle": 140, "radius": 102 },
-  { "angle": 150, "radius": 95 },
-  { "angle": 160, "radius": 90},
-  { "angle": 170, "radius": 90 },
-  { "angle": 180, "radius": 85 }
+  { "angle": 110, "radius":120  },
+  { "angle": 120, "radius":  110},
+  { "angle": 130, "radius": 100 },
+  { "angle": 140, "radius":  90},
+  { "angle": 150, "radius": 80 },
+  { "angle": 160, "radius": 70},
+  { "angle": 170, "radius": 60 },
+  { "angle": 180, "radius": 50 }
 ]
