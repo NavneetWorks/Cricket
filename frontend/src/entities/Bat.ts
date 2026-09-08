@@ -1376,9 +1376,10 @@ export default class Bat {
     }
 
     draw(ctx: CanvasRenderingContext2D): void {
+        this.drawLegs(ctx);
         this.drawTorsoCylinder(ctx);
         this.drawBackArm(ctx);
-        this.drawHeadAndLegs(ctx);
+        this.drawHead(ctx);
         this.drawFrontArm(ctx);
         this.drawBat(ctx);
     }
@@ -1517,29 +1518,27 @@ export default class Bat {
 
         ctx.fillStyle = "#e8e8e8"; // Greyish-white grip
         ctx.fill();
-        ctx.strokeStyle = "#424242"; // Dark grey handle outline
-        ctx.lineWidth = 1.2;
         ctx.stroke();
 
         ctx.restore();
     }
 
     public drawBackArm(ctx: CanvasRenderingContext2D): void {
-        this.drawRealisticArmOutline(ctx, this.BACK_SHOULDER, this.backElbow, this.backWrist, "#a855f7"); // Purple arm outline
+        this.drawRealisticArmWithSleeve(ctx, this.BACK_SHOULDER, this.backElbow, this.backWrist, "back");
     }
 
     public drawFrontArm(ctx: CanvasRenderingContext2D): void {
-        this.drawRealisticArmOutline(ctx, this.FRONT_SHOULDER, this.frontElbow, this.frontWrist, "#22c55e"); // Green arm outline
+        this.drawRealisticArmWithSleeve(ctx, this.FRONT_SHOULDER, this.frontElbow, this.frontWrist, "front");
     }
 
-    private drawRealisticArmOutline(
+    private drawRealisticArmWithSleeve(
         ctx: CanvasRenderingContext2D,
         shoulder: Vec2,
         elbow: Vec2,
         wrist: Vec2,
-        color: string
+        armSide: "front" | "back"
     ): void {
-        // Upper Arm (Shoulder -> Elbow)
+        // Upper Arm Vector (Shoulder -> Elbow)
         const uDx = elbow.x - shoulder.x;
         const uDy = elbow.y - shoulder.y;
         const uLen = Math.hypot(uDx, uDy) || 1;
@@ -1548,30 +1547,84 @@ export default class Bat {
         const uNx = -uUy;
         const uNy = uUx;
 
-        const shoulderRadius = 6.0;
-        const bicepBulgeRadius = 7.5;
-        const elbowRadius = 5.5;
+        // Muscular arm dimensions
+        const shoulderRadius = 8.0;
+        const bicepBulgeRadius = 10.0;
+        const sleeveCuffRadius = 9.0;
+        const elbowRadius = 7.5;
 
-        const midUpperX = shoulder.x + uUx * (uLen * 0.5);
-        const midUpperY = shoulder.y + uUy * (uLen * 0.5);
+        // Sleeve ends at ~55% down the upper arm
+        const sleeveFrac = 0.55;
+        const sleeveCutX = shoulder.x + uUx * (uLen * sleeveFrac);
+        const sleeveCutY = shoulder.y + uUy * (uLen * sleeveFrac);
+
+        const midUpperX = shoulder.x + uUx * (uLen * 0.28);
+        const midUpperY = shoulder.y + uUy * (uLen * 0.28);
 
         ctx.save();
 
-        // Upper Arm Contour Outline
+        // --- 1. SHORT SLEEVE (Jersey Shirt Color) ---
         ctx.beginPath();
         ctx.moveTo(shoulder.x + uNx * shoulderRadius, shoulder.y + uNy * shoulderRadius);
         ctx.lineTo(midUpperX + uNx * bicepBulgeRadius, midUpperY + uNy * bicepBulgeRadius);
-        ctx.lineTo(elbow.x + uNx * elbowRadius, elbow.y + uNy * elbowRadius);
-        ctx.lineTo(elbow.x - uNx * elbowRadius, elbow.y - uNy * elbowRadius);
+        ctx.lineTo(sleeveCutX + uNx * sleeveCuffRadius, sleeveCutY + uNy * sleeveCuffRadius);
+        ctx.lineTo(sleeveCutX - uNx * sleeveCuffRadius, sleeveCutY - uNy * sleeveCuffRadius);
         ctx.lineTo(midUpperX - uNx * bicepBulgeRadius, midUpperY - uNy * bicepBulgeRadius);
         ctx.lineTo(shoulder.x - uNx * shoulderRadius, shoulder.y - uNy * shoulderRadius);
         ctx.closePath();
 
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 1.5;
+        // Fill Shirt Sleeve (India Blue)
+        const sleeveGrad = ctx.createLinearGradient(shoulder.x, shoulder.y, sleeveCutX, sleeveCutY);
+        sleeveGrad.addColorStop(0, "#1d4ed8");
+        sleeveGrad.addColorStop(0.6, "#2563eb");
+        sleeveGrad.addColorStop(1, "#3b82f6");
+        ctx.fillStyle = sleeveGrad;
+        ctx.fill();
+
+        ctx.strokeStyle = "#0f172a";
+        ctx.lineWidth = 1.2;
         ctx.stroke();
 
-        // Lower Arm (Elbow -> Wrist)
+        // Sleeve Cuff Seam Ring
+        ctx.beginPath();
+        ctx.moveTo(sleeveCutX + uNx * sleeveCuffRadius, sleeveCutY + uNy * sleeveCuffRadius);
+        ctx.lineTo(sleeveCutX - uNx * sleeveCuffRadius, sleeveCutY - uNy * sleeveCuffRadius);
+        ctx.strokeStyle = "#1e3a8a";
+        ctx.lineWidth = 2.2;
+        ctx.stroke();
+
+        // --- 2. EXPOSED BICEP & FOREARM (Muscular Skin Tone) ---
+        const midLowerBicepX = shoulder.x + uUx * (uLen * 0.78);
+        const midLowerBicepY = shoulder.y + uUy * (uLen * 0.78);
+
+        // Lower Bicep Skin segment (from sleeve cut to elbow)
+        ctx.beginPath();
+        ctx.moveTo(sleeveCutX + uNx * (sleeveCuffRadius * 0.95), sleeveCutY + uNy * (sleeveCuffRadius * 0.95));
+        ctx.lineTo(midLowerBicepX + uNx * (bicepBulgeRadius * 0.9), midLowerBicepY + uNy * (bicepBulgeRadius * 0.9));
+        ctx.lineTo(elbow.x + uNx * elbowRadius, elbow.y + uNy * elbowRadius);
+        ctx.lineTo(elbow.x - uNx * elbowRadius, elbow.y - uNy * elbowRadius);
+        ctx.lineTo(midLowerBicepX - uNx * (bicepBulgeRadius * 0.9), midLowerBicepY - uNy * (bicepBulgeRadius * 0.9));
+        ctx.lineTo(sleeveCutX - uNx * (sleeveCuffRadius * 0.95), sleeveCutY - uNy * (sleeveCuffRadius * 0.95));
+        ctx.closePath();
+
+        // Skin Tone Gradient
+        const skinGrad = ctx.createLinearGradient(shoulder.x, shoulder.y, wrist.x, wrist.y);
+        skinGrad.addColorStop(0, "#e0ac69");
+        skinGrad.addColorStop(0.5, "#d19c67");
+        skinGrad.addColorStop(1, "#c68b59");
+        ctx.fillStyle = skinGrad;
+        ctx.fill();
+
+        // Smooth Rounded Elbow Joint Cap
+        ctx.beginPath();
+        ctx.arc(elbow.x, elbow.y, elbowRadius, 0, 2 * Math.PI);
+        ctx.fillStyle = skinGrad;
+        ctx.fill();
+        ctx.strokeStyle = "#78350f";
+        ctx.lineWidth = 1.0;
+        ctx.stroke();
+
+        // Lower Arm / Forearm (Elbow -> Wrist) - FIXED TYPO & MUSCULAR BULGE
         const lDx = wrist.x - elbow.x;
         const lDy = wrist.y - elbow.y;
         const lLen = Math.hypot(lDx, lDy) || 1;
@@ -1580,13 +1633,12 @@ export default class Bat {
         const lNx = -lUy;
         const lNy = lUx;
 
-        const forearmBulgeRadius = 6.5;
-        const wristRadius = 4.5;
+        const forearmBulgeRadius = 9.0; // Muscular forearm bulge
+        const wristRadius = 6.0;
 
-        const midLowerX = elbow.x + lUx * (lLen * 0.4);
-        const midLowerY = elbow.y + lUy * (lLen * 0.4);
+        const midLowerX = elbow.x + lUx * (lLen * 0.42);
+        const midLowerY = elbow.y + lUy * (lLen * 0.42);
 
-        // Lower Arm Contour Outline
         ctx.beginPath();
         ctx.moveTo(elbow.x + lNx * elbowRadius, elbow.y + lNy * elbowRadius);
         ctx.lineTo(midLowerX + lNx * forearmBulgeRadius, midLowerY + lNy * forearmBulgeRadius);
@@ -1596,7 +1648,108 @@ export default class Bat {
         ctx.lineTo(elbow.x - lNx * elbowRadius, elbow.y - lNy * elbowRadius);
         ctx.closePath();
 
-        ctx.strokeStyle = color;
+        ctx.fillStyle = skinGrad;
+        ctx.fill();
+
+        ctx.strokeStyle = "#78350f";
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        // --- 3. BATTING GLOVE AT WRIST ---
+        this.drawBattingGlove(ctx, wrist, lUx, lUy, lNx, lNy);
+
+        ctx.restore();
+    }
+
+    private drawBattingGlove(
+        ctx: CanvasRenderingContext2D,
+        wrist: Vec2,
+        dirX: number,
+        dirY: number,
+        normX: number,
+        normY: number
+    ): void {
+        const gloveLen = 18;
+        const gloveWidth = 12;
+
+        const gloveTipX = wrist.x + dirX * gloveLen;
+        const gloveTipY = wrist.y + dirY * gloveLen;
+
+        ctx.save();
+
+        // 1. Elastic Wrist Band Cuff with White & Blue stripes
+        ctx.beginPath();
+        ctx.moveTo(wrist.x + normX * (gloveWidth * 0.9), wrist.y + normY * (gloveWidth * 0.9));
+        ctx.lineTo(wrist.x - normX * (gloveWidth * 0.9), wrist.y - normY * (gloveWidth * 0.9));
+        ctx.strokeStyle = "#1d4ed8"; // Blue wrist band
+        ctx.lineWidth = 4.5;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(wrist.x + normX * (gloveWidth * 0.85), wrist.y + normY * (gloveWidth * 0.85));
+        ctx.lineTo(wrist.x - normX * (gloveWidth * 0.85), wrist.y - normY * (gloveWidth * 0.85));
+        ctx.strokeStyle = "#ffffff"; // White stripe
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // 2. Main Padded Glove Palm & Back Body
+        const gloveMidX = wrist.x + dirX * (gloveLen * 0.5);
+        const gloveMidY = wrist.y + dirY * (gloveLen * 0.5);
+
+        ctx.beginPath();
+        ctx.moveTo(wrist.x + normX * gloveWidth, wrist.y + normY * gloveWidth);
+        ctx.lineTo(gloveMidX + normX * (gloveWidth * 1.1), gloveMidY + normY * (gloveWidth * 1.1));
+        ctx.lineTo(gloveTipX + normX * (gloveWidth * 0.75), gloveTipY + normY * (gloveWidth * 0.75));
+        ctx.lineTo(gloveTipX - normX * (gloveWidth * 0.75), gloveTipY - normY * (gloveWidth * 0.75));
+        ctx.lineTo(gloveMidX - normX * (gloveWidth * 1.1), gloveMidY - normY * (gloveWidth * 1.1));
+        ctx.lineTo(wrist.x - normX * gloveWidth, wrist.y - normY * gloveWidth);
+        ctx.closePath();
+
+        const gloveGrad = ctx.createLinearGradient(wrist.x, wrist.y, gloveTipX, gloveTipY);
+        gloveGrad.addColorStop(0, "#ffffff");
+        gloveGrad.addColorStop(0.5, "#f8fafc");
+        gloveGrad.addColorStop(1, "#cbd5e1");
+        ctx.fillStyle = gloveGrad;
+        ctx.fill();
+
+        ctx.strokeStyle = "#0f172a";
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        // 3. Individual Padded Sausage Finger Rolls (Index, Middle, Ring, Pinky)
+        const numFingers = 4;
+        for (let i = 0; i < numFingers; i++) {
+            const fOffset = ((i - 1.5) * (gloveWidth * 1.6)) / numFingers;
+            const fingerStartX = gloveMidX + normX * fOffset;
+            const fingerStartY = gloveMidY + normY * fOffset;
+            const fingerEndX = gloveTipX + normX * (fOffset * 0.8);
+            const fingerEndY = gloveTipY + normY * (fOffset * 0.8);
+
+            ctx.beginPath();
+            ctx.moveTo(fingerStartX, fingerStartY);
+            ctx.lineTo(fingerEndX, fingerEndY);
+            ctx.strokeStyle = "#2563eb"; // Blue flex break line between finger rolls
+            ctx.lineWidth = 1.8;
+            ctx.stroke();
+
+            // Padded finger roll cap (rounded sausage padding)
+            ctx.beginPath();
+            ctx.arc(fingerEndX, fingerEndY, 3.2, 0, 2 * Math.PI);
+            ctx.fillStyle = "#ffffff";
+            ctx.fill();
+            ctx.strokeStyle = "#475569";
+            ctx.lineWidth = 1.0;
+            ctx.stroke();
+        }
+
+        // 4. Thumb Guard Roll
+        const thumbX = wrist.x + dirX * 6 + normX * (gloveWidth * 1.15);
+        const thumbY = wrist.y + dirY * 6 + normY * (gloveWidth * 1.15);
+        ctx.beginPath();
+        ctx.ellipse(thumbX, thumbY, 5.0, 3.5, Math.atan2(dirY, dirX), 0, 2 * Math.PI);
+        ctx.fillStyle = "#f1f5f9";
+        ctx.fill();
+        ctx.strokeStyle = "#2563eb";
         ctx.lineWidth = 1.5;
         ctx.stroke();
 
@@ -1640,25 +1793,37 @@ export default class Bat {
         const sNx = -sUy; // Normal perpendicular vector
         const sNy = sUx;
 
-        // --- 2. SLIM & REALISTIC RADIUS DIMENSIONS ---
-        // Thigh contours
-        const hipRadius = 7.5;
-        const quadBulgeRadius = 9.5; // Muscle curve bulge
-        const kneeRadius = 6.5;
+        // --- 2. PROPORTIONATE THIGH & SHIN RADIUS DIMENSIONS ---
+        const hipRadius = 13.5;
+        const quadBulgeRadius = 16.5; // Strong muscular thigh bulge
+        const kneeRadius = 10.5;
 
         const midThighX = hip.x + tUx * (tLen * 0.5);
         const midThighY = hip.y + tUy * (tLen * 0.5);
 
-        // Shin contours
-        const calfBulgeRadius = 8.0; // Calf muscle bulge
-        const ankleRadius = 5.0;
+        const calfBulgeRadius = 11.5; // Muscular calf bulge
+        const ankleRadius = 7.5;
 
         const midShinX = knee.x + sUx * (sLen * 0.4);
         const midShinY = knee.y + sUy * (sLen * 0.4);
 
         ctx.save();
 
-        // --- DRAW THIGH OUTLINE ONLY ---
+        // --- 1. ROUNDED HIP JOINT CONNECTION AT CROTCH/HIP ---
+        const thighGrad = ctx.createLinearGradient(hip.x, hip.y, knee.x, knee.y);
+        thighGrad.addColorStop(0, "#1d4ed8");
+        thighGrad.addColorStop(0.5, "#2563eb");
+        thighGrad.addColorStop(1, "#1e40af");
+
+        ctx.beginPath();
+        ctx.arc(hip.x, hip.y, hipRadius, 0, 2 * Math.PI);
+        ctx.fillStyle = thighGrad;
+        ctx.fill();
+        ctx.strokeStyle = "#091e42";
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        // --- 2. DRAW THIGH (Blue Lower Trousers Body) ---
         ctx.beginPath();
         ctx.moveTo(hip.x + tNx * hipRadius, hip.y + tNy * hipRadius);
         ctx.lineTo(midThighX + tNx * quadBulgeRadius, midThighY + tNy * quadBulgeRadius);
@@ -1668,11 +1833,14 @@ export default class Bat {
         ctx.lineTo(hip.x - tNx * hipRadius, hip.y - tNy * hipRadius);
         ctx.closePath();
 
-        ctx.strokeStyle = legSide === "left" ? "#ffffff" : "#00ffff"; // White for left leg, cyan for right leg outline
-        ctx.lineWidth = 1.5;
+        ctx.fillStyle = thighGrad;
+        ctx.fill();
+
+        ctx.strokeStyle = "#091e42";
+        ctx.lineWidth = 1.2;
         ctx.stroke();
 
-        // --- DRAW SHIN / CALF OUTLINE ONLY ---
+        // --- 3. DRAW SHIN / CALF (Lower Leg Trousers Base) ---
         ctx.beginPath();
         ctx.moveTo(knee.x + sNx * kneeRadius, knee.y + sNy * kneeRadius);
         ctx.lineTo(midShinX + sNx * calfBulgeRadius, midShinY + sNy * calfBulgeRadius);
@@ -1682,9 +1850,158 @@ export default class Bat {
         ctx.lineTo(knee.x - sNx * kneeRadius, knee.y - sNy * kneeRadius);
         ctx.closePath();
 
-        ctx.strokeStyle = legSide === "left" ? "#ffffff" : "#00ffff";
+        ctx.fillStyle = "#1e40af";
+        ctx.fill();
+
+        ctx.strokeStyle = "#091e42";
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        // --- 4. GRAYISH-WHITE CRICKET BATTING PADS (Ends above ankle for shoe visibility) ---
+        const padWidth = 16;
+        const padTopExtension = 14; // Pad wing above knee
+        const padKneeRollRadiusX = 11;
+        const padKneeRollRadiusY = 8;
+
+        const padTopX = knee.x - sUx * padTopExtension;
+        const padTopY = knee.y - sUy * padTopExtension;
+        const padBotX = ankle.x - sUx * 6; // Ends 6px above ankle so shoe is 100% visible
+        const padBotY = ankle.y - sUy * 6;
+
+        // Main Pad Shield Body
+        ctx.beginPath();
+        ctx.moveTo(padTopX + sNx * (padWidth * 0.7), padTopY + sNy * (padWidth * 0.7));
+        ctx.lineTo(knee.x + sNx * padWidth, knee.y + sNy * padWidth);
+        ctx.lineTo(padBotX + sNx * (padWidth * 0.85), padBotY + sNy * (padWidth * 0.85));
+        ctx.lineTo(padBotX - sNx * (padWidth * 0.85), padBotY - sNy * (padWidth * 0.85));
+        ctx.lineTo(knee.x - sNx * padWidth, knee.y - sNy * padWidth);
+        ctx.lineTo(padTopX - sNx * (padWidth * 0.7), padTopY - sNy * (padWidth * 0.7));
+        ctx.closePath();
+
+        const padGrad = ctx.createLinearGradient(knee.x + sNx * padWidth, knee.y, knee.x - sNx * padWidth, knee.y);
+        padGrad.addColorStop(0, "#f8fafc");
+        padGrad.addColorStop(0.3, "#ffffff");
+        padGrad.addColorStop(0.7, "#e2e8f0");
+        padGrad.addColorStop(1, "#cbd5e1");
+        ctx.fillStyle = padGrad;
+        ctx.fill();
+
+        ctx.strokeStyle = "#475569";
         ctx.lineWidth = 1.5;
         ctx.stroke();
+
+        // Vertical Ribbed Padding Lines
+        for (let i = -1; i <= 1; i += 1) {
+            const offset = (i * padWidth) / 3.2;
+            const ribStartX = knee.x + sUx * 10 + sNx * offset;
+            const ribStartY = knee.y + sUy * 10 + sNy * offset;
+            const ribEndX = ankle.x - sUx * 3 + sNx * offset;
+            const ribEndY = ankle.y - sUy * 3 + sNy * offset;
+
+            ctx.beginPath();
+            ctx.moveTo(ribStartX, ribStartY);
+            ctx.lineTo(ribEndX, ribEndY);
+            ctx.strokeStyle = "rgba(71, 85, 105, 0.45)";
+            ctx.lineWidth = 2.0;
+            ctx.stroke();
+        }
+
+        // Horizontal Flex Ridge Rolls below knee
+        for (let r = 1; r <= 3; r++) {
+            const rollDist = 8 + r * 5;
+            const rx = knee.x + sUx * rollDist;
+            const ry = knee.y + sUy * rollDist;
+
+            ctx.beginPath();
+            ctx.moveTo(rx + sNx * (padWidth * 0.85), ry + sNy * (padWidth * 0.85));
+            ctx.lineTo(rx - sNx * (padWidth * 0.85), ry - sNy * (padWidth * 0.85));
+            ctx.strokeStyle = "#94a3b8";
+            ctx.lineWidth = 2.0;
+            ctx.stroke();
+        }
+
+        // Knee Roll Oval Cap
+        ctx.beginPath();
+        const padAngle = Math.atan2(sDy, sDx);
+        ctx.ellipse(knee.x, knee.y, padKneeRollRadiusX, padKneeRollRadiusY, padAngle, 0, 2 * Math.PI);
+        const kneeGrad = ctx.createRadialGradient(knee.x, knee.y, 2, knee.x, knee.y, padKneeRollRadiusX);
+        kneeGrad.addColorStop(0, "#ffffff");
+        kneeGrad.addColorStop(0.7, "#f1f5f9");
+        kneeGrad.addColorStop(1, "#cbd5e1");
+        ctx.fillStyle = kneeGrad;
+        ctx.fill();
+        ctx.strokeStyle = "#475569";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // --- 4. WHITE CRICKET BATTING SHOES WITH SPIKES ---
+        this.drawCricketShoe(ctx, ankle, sUx, sUy, sNx, sNy);
+
+        ctx.restore();
+    }
+
+    private drawCricketShoe(
+        ctx: CanvasRenderingContext2D,
+        ankle: Vec2,
+        sUx: number,
+        sUy: number,
+        sNx: number,
+        sNy: number
+    ): void {
+        const shoeLen = 22;
+        const shoeHeight = 10;
+        
+        const toeX = ankle.x + shoeLen;
+        const toeY = ankle.y;
+        const heelX = ankle.x - 6;
+        const heelY = ankle.y;
+
+        ctx.save();
+
+        // 1. White Cricket Shoe Upper Body
+        ctx.beginPath();
+        ctx.moveTo(heelX, heelY - shoeHeight * 0.6);
+        ctx.lineTo(ankle.x, ankle.y - shoeHeight);
+        ctx.lineTo(toeX - 5, ankle.y - shoeHeight * 0.7);
+        ctx.lineTo(toeX, ankle.y - 2);
+        ctx.lineTo(toeX, ankle.y);
+        ctx.lineTo(heelX, ankle.y);
+        ctx.closePath();
+
+        const shoeGrad = ctx.createLinearGradient(heelX, ankle.y - shoeHeight, toeX, ankle.y);
+        shoeGrad.addColorStop(0, "#ffffff");
+        shoeGrad.addColorStop(0.7, "#f8fafc");
+        shoeGrad.addColorStop(1, "#e2e8f0");
+        ctx.fillStyle = shoeGrad;
+        ctx.fill();
+
+        ctx.strokeStyle = "#334155";
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        // 2. Metallic Blue & Gold Puma Side Stripe Accent
+        ctx.beginPath();
+        ctx.moveTo(ankle.x - 2, ankle.y - shoeHeight * 0.6);
+        ctx.lineTo(ankle.x + 8, ankle.y - shoeHeight * 0.4);
+        ctx.lineTo(ankle.x + 14, ankle.y - 3);
+        ctx.strokeStyle = "#2563eb";
+        ctx.lineWidth = 2.2;
+        ctx.stroke();
+
+        // 3. Dark Outsole & Silver Spike Studs
+        ctx.beginPath();
+        ctx.rect(heelX, ankle.y - 1, shoeLen + 6, 2.5);
+        ctx.fillStyle = "#1e293b";
+        ctx.fill();
+
+        // Spikes under sole
+        for (let sp = 0; sp < 4; sp++) {
+            const spX = heelX + 4 + sp * 6;
+            ctx.beginPath();
+            ctx.arc(spX, ankle.y + 2, 1.2, 0, Math.PI, false);
+            ctx.fillStyle = "#94a3b8";
+            ctx.fill();
+        }
 
         ctx.restore();
     }
@@ -1757,7 +2074,7 @@ export default class Bat {
 
         ctx.save();
         
-        // 🟢 FULL OUTER TORSO CYLINDER OUTLINE (No Internal Spine Lines)
+        // 🟢 TORSO SHIRT BODY (India Blue Jersey)
         ctx.beginPath();
         // Top shoulder arc (left major end to right major end)
         ctx.ellipse(shoulderMid.x, shoulderMid.y, this.shoulderRx, this.shoulderRy, 0, Math.PI, 2 * Math.PI, false);
@@ -1769,13 +2086,39 @@ export default class Bat {
         ctx.lineTo(leftShoulderMajorEnd.x, leftShoulderMajorEnd.y);
         ctx.closePath();
 
-        ctx.strokeStyle = "#38bdf8"; // Bright sky blue outer torso outline
-        ctx.lineWidth = 1.8;
+        // Fill Jersey Body with Electric Blue Gradient
+        const torsoGrad = ctx.createLinearGradient(shoulderMid.x - this.shoulderRx, shoulderMid.y, shoulderMid.x + this.shoulderRx, shoulderMid.y);
+        torsoGrad.addColorStop(0, "#1d4ed8");
+        torsoGrad.addColorStop(0.5, "#2563eb");
+        torsoGrad.addColorStop(1, "#3b82f6");
+        ctx.fillStyle = torsoGrad;
+        ctx.fill();
+
+        ctx.strokeStyle = "#0f172a"; // Dark jersey outline
+        ctx.lineWidth = 1.5;
         ctx.stroke();
+
+        // 🟢 V-NECK COLLAR TRIM AT SHOULDER MID
+        ctx.beginPath();
+        ctx.moveTo(shoulderMid.x - 10, shoulderMid.y - 2);
+        ctx.lineTo(shoulderMid.x, shoulderMid.y + 12);
+        ctx.lineTo(shoulderMid.x + 10, shoulderMid.y - 2);
+        ctx.strokeStyle = "#1e3a8a"; // Dark navy collar trim
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
         ctx.restore();
     }
 
-    private drawHeadAndLegs(ctx: CanvasRenderingContext2D): void {
+    private drawLegs(ctx: CanvasRenderingContext2D): void {
+        // Draw left leg (thigh + shin)
+        this.drawRealisticLegWithPad(ctx, this.CURRENT_LEFT_HIP_POSITION, this.leftKnee, this.CURRENT_LEFT_LEG_POSTION_AT_GROUND, "left");
+
+        // Draw right leg (thigh + shin)
+        this.drawRealisticLegWithPad(ctx, this.CURRENT_RIGHT_HIP_POSITION, this.rightKnee, this.CURRENT_RIGHT_LEG_POSTION_AT_GROUND, "right");
+    }
+
+    private drawHead(ctx: CanvasRenderingContext2D): void {
         const shoulderMid = this.SHOULDER_MID;
 
         // 🟢 SHOULDER CAP ELLIPSE: Outline only
@@ -1792,13 +2135,12 @@ export default class Bat {
         ctx.lineWidth = 1.5;
         ctx.stroke();
 
-        // --- HEAD & NECK DEBUG DRAWING ---
+        // --- HEAD & NECK DRAWING ---
         const headCenterX = this.HEAD_CENTER.x;
         const headCenterY = this.HEAD_CENTER.y;
 
         // 🟢 PAPER-DOLL HEAD: real head.png (image load hone tak fallback ellipse neeche)
         if (this.headImageLoaded) {
-            // ── Tunables (test me adjust karo) ──
             const HEAD_DRAW_H = 60;      // head image ki screen height (px)
             const ANCHOR_X_FRAC = 0.42;  // image me neck-bottom-center ka X fraction
             const ANCHOR_Y_FRAC = 0.8;  // image me neck-bottom-center ka Y fraction
@@ -1809,18 +2151,14 @@ export default class Bat {
             const drawH = HEAD_DRAW_H;
             const drawW = drawH * (imgW / imgH);
 
-            // Pivot: mid-neck (shoulderMid ↔ headCenter ke beech)
             const pivotX = (shoulderMid.x + headCenterX) / 2;
             const pivotY = (shoulderMid.y + headCenterY) / 2;
 
-            // Spine lean follow: upright spine = PI/2, deviation = lean
-            // (upright par rotation 0 — head image seedhi; lean par head bhi jhukega)
             const lean = (this.CURRENT_ANGLE_OF_SPINE - Math.PI / 2) * LEAN_FOLLOW;
 
             ctx.save();
             ctx.translate(pivotX, pivotY);
             ctx.rotate(lean);
-            // Image ka neck-bottom-center pivot par baithta hai:
             ctx.drawImage(
                 this.headImage,
                 -drawW * ANCHOR_X_FRAC,
@@ -1830,13 +2168,11 @@ export default class Bat {
             );
             ctx.restore();
         } else {
-            // FALLBACK: image load hone tak purana debug head
             ctx.beginPath();
             ctx.arc(headCenterX, headCenterY, 3.5, 0, 2 * Math.PI);
             ctx.fillStyle = "yellow";
             ctx.fill();
 
-            // Draw Head Ellipse (Smaller radius in X axis: 14px, Longer radius in Y axis: 20px)
             const headRadiusX = .6*PLAYER_LENGTH_FACTOR;
             const headRadiusY = .9*PLAYER_LENGTH_FACTOR;
             ctx.beginPath();
@@ -1845,40 +2181,6 @@ export default class Bat {
             ctx.lineWidth = 1.5;
             ctx.stroke();
         }
-
-        // Draw circle at hips
-        ctx.beginPath();
-        ctx.arc(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y, 4, 0, 2 * Math.PI);
-        ctx.fillStyle = "cyan";
-        ctx.fill();
-
-        // Debug draw hip ellipse (using REAL active hipRx & hipRy)
-        ctx.beginPath();
-        ctx.ellipse(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y, this.hipRx, this.hipRy, 0, 0, 2 * Math.PI);
-        ctx.strokeStyle = "magenta";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        // Debug draw second hip ellipse (using REAL active hipRx & hipRy)
-        ctx.beginPath();
-        ctx.ellipse(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y, this.hipRx, this.hipRy/2, 0, 0, 2 * Math.PI);
-        ctx.strokeStyle = "blue";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        // Draw left leg (thigh + shin) with realistic muscles, blue lower, and grayish-white pads
-        this.drawRealisticLegWithPad(ctx, this.CURRENT_LEFT_HIP_POSITION, this.leftKnee, this.CURRENT_LEFT_LEG_POSTION_AT_GROUND, "left");
-
-        // Draw right leg (thigh + shin) with realistic muscles, blue lower, and grayish-white pads
-        this.drawRealisticLegWithPad(ctx, this.CURRENT_RIGHT_HIP_POSITION, this.rightKnee, this.CURRENT_RIGHT_LEG_POSTION_AT_GROUND, "right");
-
-        // Draw line from left hip to right hip
-        ctx.beginPath();
-        ctx.moveTo(this.CURRENT_LEFT_HIP_POSITION.x, this.CURRENT_LEFT_HIP_POSITION.y);
-        ctx.lineTo(this.CURRENT_RIGHT_HIP_POSITION.x, this.CURRENT_RIGHT_HIP_POSITION.y);
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 2;
-        ctx.stroke();
 
         // Debug draw outer arc
         ctx.beginPath();
@@ -1892,6 +2194,7 @@ export default class Bat {
         ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
         ctx.lineWidth = 1;
         ctx.stroke();
+
         // Debug draw inner arc
         ctx.beginPath();
         for (let a = -30; a <= 180; a += 5) {
@@ -1902,36 +2205,6 @@ export default class Bat {
             else ctx.lineTo(px, py);
         }
         ctx.strokeStyle = "rgba(255, 100, 100, 0.3)";
-        ctx.lineWidth = 1;
         ctx.stroke();
-
-        /* DEBUG PRINT - DISABLED FOR NOW
-        // Debug text for Spine Angle
-        ctx.fillStyle = "black";
-        ctx.font = "bold 18px monospace";
-        ctx.textAlign = "center";
-        const currentSpineDeg = this.CURRENT_ANGLE_OF_SPINE * (180 / Math.PI);
-        ctx.fillText(`SPINE ANGLE: ${currentSpineDeg.toFixed(1)}°`, ctx.canvas.width / 4, 30);
-
-        // Debug text for Collision Stats
-        if (this.lastHitStats) {
-            ctx.fillStyle = "black";
-            ctx.font = "bold 18px monospace";
-            ctx.textAlign = "center";
-            
-            const stats = this.lastHitStats;
-            const totalBatSpeed = Math.hypot(stats.batSpeedX, stats.batSpeedY);
-            ctx.fillText(`HIT REGION: ${stats.regionIndex}`, ctx.canvas.width / 2, 30);
-            ctx.fillText(`BAT ANGLE: ${stats.batAngle.toFixed(1)}°`, ctx.canvas.width / 2, 55);
-            ctx.fillText(`BAT SPEED: X=${stats.batSpeedX.toFixed(1)} Y=${stats.batSpeedY.toFixed(1)}`, ctx.canvas.width / 2, 80);
-            ctx.fillText(`BALL BEFORE: X=${stats.ballSpeedBeforeX.toFixed(1)} Y=${stats.ballSpeedBeforeY.toFixed(1)}`, ctx.canvas.width / 2, 105);
-            ctx.fillText(`BALL AFTER: X=${stats.ballSpeedAfterX.toFixed(1)} Y=${stats.ballSpeedAfterY.toFixed(1)}`, ctx.canvas.width / 2, 130);
-            ctx.fillText(`BAT SPEED AT COLLISION: ${totalBatSpeed.toFixed(1)}`, ctx.canvas.width / 2, 155);
-            ctx.fillText(`RELATIVE IMPACT SPEED: ${stats.relativeImpactSpeed.toFixed(1)}`, ctx.canvas.width / 2, 180);
-            
-            ctx.textAlign = "left"; // Reset alignment
-        }
-        */
     }
-    
 }
