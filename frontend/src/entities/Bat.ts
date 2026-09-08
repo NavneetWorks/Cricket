@@ -116,7 +116,7 @@ export default class Bat {
     private hipVel : Vec2 = { x: 0, y: 0 };
 
     private readonly SHOULDER_JOINT_OFFSET = 68;
-    private readonly LEG_WIDTH_AT_HIP = 35;
+    private readonly LEG_WIDTH_AT_HIP = 44;
 
     private CURRENT_LEFT_HIP_POSITION : Vec2  = {x:this.CURRENT_HIP_POSITION.x-this.LEG_WIDTH_AT_HIP/2,y:this.CURRENT_HIP_POSITION.y};
     private CURRENT_RIGHT_HIP_POSITION : Vec2  = {x:this.CURRENT_HIP_POSITION.x+this.LEG_WIDTH_AT_HIP/2,y:this.CURRENT_HIP_POSITION.y};
@@ -512,11 +512,11 @@ export default class Bat {
         this.BACK_SHOULDER.y = this.SHOULDER_MID.y + this.shoulderRy * Math.sin(backAngle);
 
         // --- UPDATE LEG / HIP JOINTS ALONG THE HIP DEBUG ELLIPSE ---
-        const leftHipAngle = Math.PI - (frontShiftAngle * 0.08);
+        const leftHipAngle = Math.PI - (frontShiftAngle * 0.3);
         this.CURRENT_LEFT_HIP_POSITION.x = this.CURRENT_HIP_POSITION.x + this.hipRx * Math.cos(leftHipAngle);
         this.CURRENT_LEFT_HIP_POSITION.y = this.CURRENT_HIP_POSITION.y + this.hipRy * Math.sin(leftHipAngle);
 
-        const rightHipAngle = 0 - (backShiftAngle * 0.08);
+        const rightHipAngle = 0 - (backShiftAngle * 0.5);
         this.CURRENT_RIGHT_HIP_POSITION.x = this.CURRENT_HIP_POSITION.x + this.hipRx * Math.cos(rightHipAngle);
         this.CURRENT_RIGHT_HIP_POSITION.y = this.CURRENT_HIP_POSITION.y + this.hipRy * Math.sin(rightHipAngle);
 
@@ -1815,25 +1815,30 @@ export default class Bat {
 
         ctx.save();
 
-        // --- 1. SMOOTH THIGH BASE (Blue Lower Trousers Body) ---
-        const thighGrad = ctx.createLinearGradient(hip.x, hip.y, knee.x, knee.y);
+        // Shift hip fill base upward by 10px so blue trouser cloth extends higher above red hip joint dots
+        const upOffset = 20;
+        const hipUpX = hip.x - tUx * upOffset;
+        const hipUpY = hip.y - tUy * upOffset;
+
+        // --- 1. SMOOTH THIGH BASE (Blue Lower Trousers Body Extended Upward) ---
+        const thighGrad = ctx.createLinearGradient(hipUpX, hipUpY, knee.x, knee.y);
         thighGrad.addColorStop(0, "#1d4ed8");
         thighGrad.addColorStop(0.5, "#2563eb");
         thighGrad.addColorStop(1, "#1e40af");
 
         ctx.beginPath();
-        ctx.arc(hip.x, hip.y, hipRadius, 0, 2 * Math.PI);
+        ctx.arc(hipUpX, hipUpY, hipRadius, 0, 2 * Math.PI);
         ctx.fillStyle = thighGrad;
         ctx.fill();
 
-        // --- 2. DRAW FULL MUSCULAR THIGH POLYGON ---
+        // --- 2. DRAW FULL MUSCULAR THIGH POLYGON (EXTENDED ABOVE HIP DOT) ---
         ctx.beginPath();
-        ctx.moveTo(hip.x + tNx * hipRadius, hip.y + tNy * hipRadius);
+        ctx.moveTo(hipUpX + tNx * hipRadius, hipUpY + tNy * hipRadius);
         ctx.lineTo(midThighX + tNx * quadBulgeRadius, midThighY + tNy * quadBulgeRadius);
         ctx.lineTo(knee.x + tNx * kneeRadius, knee.y + tNy * kneeRadius);
         ctx.lineTo(knee.x - tNx * kneeRadius, knee.y - tNy * kneeRadius);
         ctx.lineTo(midThighX - tNx * quadBulgeRadius, midThighY - tNy * quadBulgeRadius);
-        ctx.lineTo(hip.x - tNx * hipRadius, hip.y - tNy * hipRadius);
+        ctx.lineTo(hipUpX - tNx * hipRadius, hipUpY - tNy * hipRadius);
         ctx.closePath();
 
         ctx.fillStyle = thighGrad;
@@ -2085,12 +2090,137 @@ export default class Bat {
     private drawLegs(ctx: CanvasRenderingContext2D): void {
         const leftHip = this.CURRENT_LEFT_HIP_POSITION;
         const rightHip = this.CURRENT_RIGHT_HIP_POSITION;
+        const leftAnkle = this.CURRENT_LEFT_LEG_POSTION_AT_GROUND;
+        const rightAnkle = this.CURRENT_RIGHT_LEG_POSTION_AT_GROUND;
 
         // Draw left leg (thigh + shin)
-        this.drawRealisticLegWithPad(ctx, leftHip, this.leftKnee, this.CURRENT_LEFT_LEG_POSTION_AT_GROUND, "left");
+        this.drawRealisticLegWithPad(ctx, leftHip, this.leftKnee, leftAnkle, "left");
 
         // Draw right leg (thigh + shin)
-        this.drawRealisticLegWithPad(ctx, rightHip, this.rightKnee, this.CURRENT_RIGHT_LEG_POSTION_AT_GROUND, "right");
+        this.drawRealisticLegWithPad(ctx, rightHip, this.rightKnee, rightAnkle, "right");
+
+        ctx.save();
+        // 🔴 RED DEBUG SKELETON BONE LINES & JOINTS FOR LEGS
+        ctx.strokeStyle = "#ef4444"; // Vivid red skeleton line
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = "round";
+
+        // Left Leg Bones (Hip -> Knee -> Ankle)
+        ctx.beginPath();
+        ctx.moveTo(leftHip.x, leftHip.y);
+        ctx.lineTo(this.leftKnee.x, this.leftKnee.y);
+        ctx.lineTo(leftAnkle.x, leftAnkle.y);
+        ctx.stroke();
+
+        // Right Leg Bones (Hip -> Knee -> Ankle)
+        ctx.beginPath();
+        ctx.moveTo(rightHip.x, rightHip.y);
+        ctx.lineTo(this.rightKnee.x, this.rightKnee.y);
+        ctx.lineTo(rightAnkle.x, rightAnkle.y);
+        ctx.stroke();
+
+        // Red Joint Dots (Hips, Knees, Ankles)
+        const joints = [leftHip, rightHip, this.leftKnee, this.rightKnee, leftAnkle, rightAnkle];
+        ctx.fillStyle = "#ff0000";
+        for (const j of joints) {
+            ctx.beginPath();
+            ctx.arc(j.x, j.y, 3.5, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        // 🟢 LEFT SIDE GREEN DOTS & CONNECTING GUIDELINE
+        // 1. Upper Left Green Dot: Left major axis tangent of shoulder ellipse
+        const upperLeftGreenDot = {
+            x: this.SHOULDER_MID.x - this.shoulderRx,
+            y: this.SHOULDER_MID.y
+        };
+
+        // 2. Lower Left Green Dot: Extended along left leg thigh bone and offset by half thigh width
+        const leftThighDx = this.leftKnee.x - leftHip.x;
+        const leftThighDy = this.leftKnee.y - leftHip.y;
+        const leftThighLen = Math.hypot(leftThighDx, leftThighDy) || 1;
+        const leftThighUx = leftThighDx / leftThighLen;
+        const leftThighUy = leftThighDy / leftThighLen;
+        // Perpendicular vector pointing outward to back of left thigh
+        const leftPerpUx = -leftThighUy;
+        const leftPerpUy = leftThighUx;
+
+        const leftExtLen = 12; // Extend left leg skeleton line upper past hip
+        const leftHalfThighThick = (this.LEG_WIDTH_AT_HIP || 38) / 8;
+
+        const lowerLeftGreenDot = {
+            x: leftHip.x - leftThighUx * leftExtLen + leftPerpUx * leftHalfThighThick,
+            y: leftHip.y - leftThighUy * leftExtLen + leftPerpUy * leftHalfThighThick
+        };
+
+        // 3. Dark connecting line joining left green dots
+        ctx.beginPath();
+        ctx.moveTo(upperLeftGreenDot.x, upperLeftGreenDot.y);
+        ctx.lineTo(lowerLeftGreenDot.x, lowerLeftGreenDot.y);
+        ctx.strokeStyle = "#4b5563"; // Dark grey line
+        ctx.lineWidth = 5.0;
+        ctx.lineCap = "round";
+        ctx.stroke();
+
+        // 🔴 RIGHT SIDE GREEN DOTS & CONNECTING GUIDELINE (Dynamic displacement based on bat handle)
+        // 1. Upper Right Green Dot: Right shoulder joint, but if it goes below the right shoulder ellipse level, stick to the right tangent point of shoulder ellipse
+        const rightTangentX = this.SHOULDER_MID.x + this.shoulderRx;
+        const rightTangentY = this.SHOULDER_MID.y;
+
+        const upperRightGreenDot = {
+            x: (this.BACK_SHOULDER.y > rightTangentY) ? rightTangentX : this.BACK_SHOULDER.x,
+            y: (this.BACK_SHOULDER.y > rightTangentY) ? rightTangentY : this.BACK_SHOULDER.y
+        };
+
+        // 2. Lower Right Green Dot: Extended along right leg thigh bone and offset outward,
+        // dynamically shrinking with bat handle X-displacement from hip midpoint
+        const rightThighDx = this.rightKnee.x - rightHip.x;
+        const rightThighDy = this.rightKnee.y - rightHip.y;
+        const rightThighLen = Math.hypot(rightThighDx, rightThighDy) || 1;
+        const rightThighUx = rightThighDx / rightThighLen;
+        const rightThighUy = rightThighDy / rightThighLen;
+        // Perpendicular vector pointing outward (front side) for right thigh
+        const rightPerpUx = rightThighUy;
+        const rightPerpUy = -rightThighUx;
+
+        // Calculate absolute X-displacement between Bat Handle and Hip Midpoint
+        const hipMidX = (leftHip.x + rightHip.x) / 2;
+        const handleDisplacementX = Math.abs(this.handleActual.x - hipMidX);
+
+        // Maximum normal offset (perpendicular distance from right thigh bone line)
+        const normalRightOffset = (this.LEG_WIDTH_AT_HIP || 38) / 3.8;
+        const MIN_RIGHT_OFFSET = -10; // Allows shrinking towards left lower green dot safely
+        const DISPLACEMENT_SHRINK_FACTOR = 0.25; // Rate at which perpendicular offset shrinks per pixel of handle displacement
+
+        // Any displacement (left or right) reduces dynamic offset so right green dot moves closer to left green dot
+        const dynamicRightOffset = Math.max(MIN_RIGHT_OFFSET, normalRightOffset - handleDisplacementX * DISPLACEMENT_SHRINK_FACTOR);
+
+        const rightExtLen = 10; // Independent extension length for right leg
+
+        const lowerRightGreenDot = {
+            x: rightHip.x - rightThighUx * rightExtLen + rightPerpUx * dynamicRightOffset,
+            y: rightHip.y - rightThighUy * rightExtLen + rightPerpUy * dynamicRightOffset
+        };
+
+        // 3. Dark connecting line joining right green dots
+        ctx.beginPath();
+        ctx.moveTo(upperRightGreenDot.x, upperRightGreenDot.y);
+        ctx.lineTo(lowerRightGreenDot.x, lowerRightGreenDot.y);
+        ctx.strokeStyle = "#4b5563"; // Dark grey line
+        ctx.lineWidth = 5.0;
+        ctx.lineCap = "round";
+        ctx.stroke();
+
+        // 4. Draw all 4 Green Dots (2 Left, 2 Right)
+        ctx.fillStyle = "#22c55e"; // Bright green dot
+        const allGreenDots = [upperLeftGreenDot, lowerLeftGreenDot, upperRightGreenDot, lowerRightGreenDot];
+        for (const dot of allGreenDots) {
+            ctx.beginPath();
+            ctx.arc(dot.x, dot.y, 5, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        ctx.restore();
     }
 
     private drawHead(ctx: CanvasRenderingContext2D): void {
