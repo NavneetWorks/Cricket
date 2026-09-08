@@ -1381,9 +1381,10 @@ export default class Bat {
     }
 
     draw(ctx: CanvasRenderingContext2D): void {
-        
-        this.drawArms(ctx);
-        this.drawDebug(ctx);
+        this.drawTorsoCylinder(ctx);
+        this.drawBackArm(ctx);
+        this.drawHeadAndLegs(ctx);
+        this.drawFrontArm(ctx);
         this.drawBat(ctx);
     }
 
@@ -1528,9 +1529,12 @@ export default class Bat {
         ctx.restore();
     }
 
-    private drawArms(ctx: CanvasRenderingContext2D): void {
-        this.drawLimb(ctx, this.FRONT_SHOULDER, this.frontElbow, this.frontWrist, "green", true);
+    public drawBackArm(ctx: CanvasRenderingContext2D): void {
         this.drawLimb(ctx, this.BACK_SHOULDER, this.backElbow, this.backWrist, "purple", true);
+    }
+
+    public drawFrontArm(ctx: CanvasRenderingContext2D): void {
+        this.drawLimb(ctx, this.FRONT_SHOULDER, this.frontElbow, this.frontWrist, "green", true);
     }
 
     private drawLimb(ctx: CanvasRenderingContext2D, s: Vec2, e: Vec2, w: Vec2, color: string, isArm: boolean = false): void {
@@ -1624,19 +1628,80 @@ export default class Bat {
         ctx.fillStyle = "lime";
         ctx.fill();
 
-        // Debug draw shoulder ellipse (using REAL active shoulderRx & shoulderRy)
-        ctx.beginPath();
-        ctx.ellipse(shoulderMid.x, shoulderMid.y, this.shoulderRx, this.shoulderRy, 0, 0, 2 * Math.PI);
-        ctx.strokeStyle = "yellow";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
         // Draw line between hips and shoulder mid (Spine)
         ctx.beginPath();
         ctx.moveTo(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y);
         ctx.lineTo(this.SHOULDER_MID.x, this.SHOULDER_MID.y);
         ctx.strokeStyle = "orange";
         ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+
+    private drawTorsoCylinder(ctx: CanvasRenderingContext2D): void {
+        const shoulderMid = this.SHOULDER_MID;
+        // 🟢 DEBUG TORSO CYLINDER: Fill cylinder path between shoulder ellipse & hip ellipse with solid blue
+        const leftShoulderMajorEnd = { x: shoulderMid.x - this.shoulderRx, y: shoulderMid.y };
+        const rightShoulderMajorEnd = { x: shoulderMid.x + this.shoulderRx, y: shoulderMid.y };
+        const leftHipMajorEnd = { x: this.CURRENT_HIP_POSITION.x - this.hipRx, y: this.CURRENT_HIP_POSITION.y };
+        const rightHipMajorEnd = { x: this.CURRENT_HIP_POSITION.x + this.hipRx, y: this.CURRENT_HIP_POSITION.y };
+
+        ctx.save();
+        
+        // 🟢 LEFT BACK POLYGON (Black Fill): Formed by left major tangent line, shoulder left arc, spine line, and hip left arc
+        ctx.beginPath();
+        // Top shoulder left arc (from left major end to shoulderMid center)
+        ctx.ellipse(shoulderMid.x, shoulderMid.y, this.shoulderRx, this.shoulderRy, 0, Math.PI, 1.5 * Math.PI, false);
+        // Spine line down to hip center
+        ctx.lineTo(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y);
+        // Bottom hip left arc (from hip center to left hip major end)
+        ctx.ellipse(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y, this.hipRx, this.hipRy, 0, 0.5 * Math.PI, Math.PI, false);
+        // Left major tangent line back up to left shoulder major end
+        ctx.lineTo(leftShoulderMajorEnd.x, leftShoulderMajorEnd.y);
+        ctx.closePath();
+
+        ctx.fillStyle = "#000000"; // Solid 100% Black fill for left back polygon
+        ctx.fill();
+        ctx.strokeStyle = "#1e293b";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // 🟢 RIGHT FRONT POLYGON (Blue Fill): Formed by spine line, shoulder right arc, right major tangent line, and hip right arc
+        ctx.beginPath();
+        // Top shoulder right arc (from shoulderMid center to right major end)
+        ctx.ellipse(shoulderMid.x, shoulderMid.y, this.shoulderRx, this.shoulderRy, 0, 1.5 * Math.PI, 2 * Math.PI, false);
+        // Right major tangent line down to right hip major end
+        ctx.lineTo(rightHipMajorEnd.x, rightHipMajorEnd.y);
+        // Bottom hip right arc (from right hip major end to hip center)
+        ctx.ellipse(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y, this.hipRx, this.hipRy, 0, 0, 0.5 * Math.PI, false);
+        // Spine line back up to shoulderMid center
+        ctx.lineTo(shoulderMid.x, shoulderMid.y);
+        ctx.closePath();
+
+        ctx.fillStyle = "#2563eb"; // Solid Blue fill for right front polygon
+        ctx.fill();
+        ctx.strokeStyle = "#1d4ed8";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    private drawHeadAndLegs(ctx: CanvasRenderingContext2D): void {
+        const shoulderMid = this.SHOULDER_MID;
+
+        // 🟢 SHOULDER CAP ELLIPSE: Render dark navy top ellipse ON TOP of torso cylinder
+        ctx.beginPath();
+        ctx.ellipse(shoulderMid.x, shoulderMid.y, this.shoulderRx, this.shoulderRy, 0, 0, 2 * Math.PI);
+        ctx.fillStyle = "#0f172a"; // Deep navy blue top cap
+        ctx.fill();
+        ctx.strokeStyle = "#38bdf8"; // Bright cyan outline
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Inner shoulder ellipse
+        ctx.beginPath();
+        ctx.ellipse(shoulderMid.x, shoulderMid.y, this.shoulderRx, this.shoulderRy / 2, 0, 0, 2 * Math.PI);
+        ctx.strokeStyle = "#facc15"; // Bright yellow inner ellipse
+        ctx.lineWidth = 1.5;
         ctx.stroke();
 
         // --- HEAD & NECK DEBUG DRAWING ---
@@ -1714,9 +1779,16 @@ export default class Bat {
         ctx.lineWidth = 1.5;
         ctx.stroke();
 
+        // Debug draw second hip ellipse (using REAL active hipRx & hipRy)
+        ctx.beginPath();
+        ctx.ellipse(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y, this.hipRx, this.hipRy/2, 0, 0, 2 * Math.PI);
+        ctx.strokeStyle = "blue";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
         // Draw left leg (thigh + shin)
         this.drawLimb(ctx, this.CURRENT_LEFT_HIP_POSITION, this.leftKnee, this.CURRENT_LEFT_LEG_POSTION_AT_GROUND, "red");
-        
+
         // Draw right leg (thigh + shin)
         this.drawLimb(ctx, this.CURRENT_RIGHT_HIP_POSITION, this.rightKnee, this.CURRENT_RIGHT_LEG_POSTION_AT_GROUND, "blue");
 

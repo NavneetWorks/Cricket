@@ -8,7 +8,7 @@ export const GAME_COLORS = {
 };
 export const PITCH_WIDTH = 180;
 export const QUEUE_SIZE = 3;
-export const NORMAL_DIRECTION_ASSIST = 80; // 0 to 100 scale. E.g. 10 = bends 10% towards Normal
+export const NORMAL_DIRECTION_ASSIST = 90; // 0 to 100 scale. E.g. 10 = bends 10% towards Normal
 
 export const GLOBAL_RESTITUTION_SCALE = .5;
 export const REGION1 = 1;
