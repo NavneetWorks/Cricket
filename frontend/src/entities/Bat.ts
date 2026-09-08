@@ -96,8 +96,8 @@ export default class Bat {
 
     private readonly FULL_LEG_LENGTH = 5.2*PLAYER_LENGTH_FACTOR; 
 
-    private readonly THIGH_LENGTH = this.FULL_LEG_LENGTH*.53;
-    private readonly SHIN_LENGTH = this.FULL_LEG_LENGTH-this.THIGH_LENGTH;
+    private readonly THIGH_LENGTH = this.FULL_LEG_LENGTH * 0.5;
+    private readonly SHIN_LENGTH = this.FULL_LEG_LENGTH - this.THIGH_LENGTH;
 
 
     private readonly NECT_TO_HIP_LENGTH = 2.6*PLAYER_LENGTH_FACTOR;
@@ -1354,11 +1354,6 @@ export default class Bat {
             : candidateB;
 
         if (which === "left") {
-            // Natural stance knee clamp: prevent left knee from popping out too far to the left when crouching
-            const maxLeftKneeOffset = hip.x - 42;
-            if (knee.x < maxLeftKneeOffset) {
-                knee.x = maxLeftKneeOffset;
-            }
             this.leftKnee = knee;
         } else {
             this.rightKnee = knee;
@@ -1530,34 +1525,82 @@ export default class Bat {
     }
 
     public drawBackArm(ctx: CanvasRenderingContext2D): void {
-        this.drawLimb(ctx, this.BACK_SHOULDER, this.backElbow, this.backWrist, "purple", true);
+        this.drawRealisticArmOutline(ctx, this.BACK_SHOULDER, this.backElbow, this.backWrist, "#a855f7"); // Purple arm outline
     }
 
     public drawFrontArm(ctx: CanvasRenderingContext2D): void {
-        this.drawLimb(ctx, this.FRONT_SHOULDER, this.frontElbow, this.frontWrist, "green", true);
+        this.drawRealisticArmOutline(ctx, this.FRONT_SHOULDER, this.frontElbow, this.frontWrist, "#22c55e"); // Green arm outline
     }
 
-    private drawLimb(ctx: CanvasRenderingContext2D, s: Vec2, e: Vec2, w: Vec2, color: string, isArm: boolean = false): void {
-        if (isArm) {
-            // 🟢 PAPER-DOLL ARMS: sprite-based (upper + lower), fallback lines ke saath
-            this.drawArmSegments(ctx, s, e, w, color);
-            return;
-        }
+    private drawRealisticArmOutline(
+        ctx: CanvasRenderingContext2D,
+        shoulder: Vec2,
+        elbow: Vec2,
+        wrist: Vec2,
+        color: string
+    ): void {
+        // Upper Arm (Shoulder -> Elbow)
+        const uDx = elbow.x - shoulder.x;
+        const uDy = elbow.y - shoulder.y;
+        const uLen = Math.hypot(uDx, uDy) || 1;
+        const uUx = uDx / uLen;
+        const uUy = uDy / uLen;
+        const uNx = -uUy;
+        const uNy = uUx;
 
-        // Legs (sprites nahi hain abhi) — line drawing dono segments
-        this.drawSegment(ctx, s, e, color);
-        this.drawSegment(ctx, e, w, color);
-    }
+        const shoulderRadius = 6.0;
+        const bicepBulgeRadius = 7.5;
+        const elbowRadius = 5.5;
 
-    // 🟢 Ek bone ke liye sprite draw: image ke andar bone ke dono ends (pivot→end)
-    // skeleton ke bone span par EXACT map hote hain — rotation + scale auto-calculate.
-    // Isliye sprite chahe diagonal hi kyun na ho, hamesha skeleton line se match karega.
-    private drawArmSegments(ctx: CanvasRenderingContext2D, s: Vec2, e: Vec2, w: Vec2, color: string): void {
-        // 1. UPPER ARM (Shoulder → Elbow)
-        this.drawSegment(ctx, s, e, color);
+        const midUpperX = shoulder.x + uUx * (uLen * 0.5);
+        const midUpperY = shoulder.y + uUy * (uLen * 0.5);
 
-        // 2. LOWER ARM (Elbow → Wrist)
-        this.drawSegment(ctx, e, w, color);
+        ctx.save();
+
+        // Upper Arm Contour Outline
+        ctx.beginPath();
+        ctx.moveTo(shoulder.x + uNx * shoulderRadius, shoulder.y + uNy * shoulderRadius);
+        ctx.lineTo(midUpperX + uNx * bicepBulgeRadius, midUpperY + uNy * bicepBulgeRadius);
+        ctx.lineTo(elbow.x + uNx * elbowRadius, elbow.y + uNy * elbowRadius);
+        ctx.lineTo(elbow.x - uNx * elbowRadius, elbow.y - uNy * elbowRadius);
+        ctx.lineTo(midUpperX - uNx * bicepBulgeRadius, midUpperY - uNy * bicepBulgeRadius);
+        ctx.lineTo(shoulder.x - uNx * shoulderRadius, shoulder.y - uNy * shoulderRadius);
+        ctx.closePath();
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Lower Arm (Elbow -> Wrist)
+        const lDx = wrist.x - elbow.x;
+        const lDy = wrist.y - elbow.y;
+        const lLen = Math.hypot(lDx, lDy) || 1;
+        const lUx = lDx / lLen;
+        const lUy = lDy / lLen;
+        const lNx = -lUy;
+        const lNy = lUx;
+
+        const forearmBulgeRadius = 6.5;
+        const wristRadius = 4.5;
+
+        const midLowerX = elbow.x + lUx * (lLen * 0.4);
+        const midLowerY = elbow.y + lUy * (lLen * 0.4);
+
+        // Lower Arm Contour Outline
+        ctx.beginPath();
+        ctx.moveTo(elbow.x + lNx * elbowRadius, elbow.y + lNy * elbowRadius);
+        ctx.lineTo(midLowerX + lNx * forearmBulgeRadius, midLowerY + lNy * forearmBulgeRadius);
+        ctx.lineTo(wrist.x + lNx * wristRadius, wrist.y + lNy * wristRadius);
+        ctx.lineTo(wrist.x - lNx * wristRadius, wrist.y - lNy * wristRadius);
+        ctx.lineTo(midLowerX - lNx * forearmBulgeRadius, midLowerY - lNy * forearmBulgeRadius);
+        ctx.lineTo(elbow.x - lNx * elbowRadius, elbow.y - lNy * elbowRadius);
+        ctx.closePath();
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.restore();
     }
 
     private drawSegment(ctx: CanvasRenderingContext2D, s: Vec2, e: Vec2, color: string): void {
@@ -1569,6 +1612,81 @@ export default class Bat {
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         ctx.stroke();
+    }
+
+    private drawRealisticLegWithPad(
+        ctx: CanvasRenderingContext2D,
+        hip: Vec2,
+        knee: Vec2,
+        ankle: Vec2,
+        legSide: "left" | "right"
+    ): void {
+        // --- 1. VECTOR MATH FOR CONTOURS ---
+        // Thigh vector (Hip -> Knee)
+        const tDx = knee.x - hip.x;
+        const tDy = knee.y - hip.y;
+        const tLen = Math.hypot(tDx, tDy) || 1;
+        const tUx = tDx / tLen; // Unit vector along thigh
+        const tUy = tDy / tLen;
+        const tNx = -tUy; // Normal perpendicular vector
+        const tNy = tUx;
+
+        // Shin vector (Knee -> Ankle)
+        const sDx = ankle.x - knee.x;
+        const sDy = ankle.y - knee.y;
+        const sLen = Math.hypot(sDx, sDy) || 1;
+        const sUx = sDx / sLen; // Unit vector along shin
+        const sUy = sDy / sLen;
+        const sNx = -sUy; // Normal perpendicular vector
+        const sNy = sUx;
+
+        // --- 2. SLIM & REALISTIC RADIUS DIMENSIONS ---
+        // Thigh contours
+        const hipRadius = 7.5;
+        const quadBulgeRadius = 9.5; // Muscle curve bulge
+        const kneeRadius = 6.5;
+
+        const midThighX = hip.x + tUx * (tLen * 0.5);
+        const midThighY = hip.y + tUy * (tLen * 0.5);
+
+        // Shin contours
+        const calfBulgeRadius = 8.0; // Calf muscle bulge
+        const ankleRadius = 5.0;
+
+        const midShinX = knee.x + sUx * (sLen * 0.4);
+        const midShinY = knee.y + sUy * (sLen * 0.4);
+
+        ctx.save();
+
+        // --- DRAW THIGH OUTLINE ONLY ---
+        ctx.beginPath();
+        ctx.moveTo(hip.x + tNx * hipRadius, hip.y + tNy * hipRadius);
+        ctx.lineTo(midThighX + tNx * quadBulgeRadius, midThighY + tNy * quadBulgeRadius);
+        ctx.lineTo(knee.x + tNx * kneeRadius, knee.y + tNy * kneeRadius);
+        ctx.lineTo(knee.x - tNx * kneeRadius, knee.y - tNy * kneeRadius);
+        ctx.lineTo(midThighX - tNx * quadBulgeRadius, midThighY - tNy * quadBulgeRadius);
+        ctx.lineTo(hip.x - tNx * hipRadius, hip.y - tNy * hipRadius);
+        ctx.closePath();
+
+        ctx.strokeStyle = legSide === "left" ? "#ffffff" : "#00ffff"; // White for left leg, cyan for right leg outline
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // --- DRAW SHIN / CALF OUTLINE ONLY ---
+        ctx.beginPath();
+        ctx.moveTo(knee.x + sNx * kneeRadius, knee.y + sNy * kneeRadius);
+        ctx.lineTo(midShinX + sNx * calfBulgeRadius, midShinY + sNy * calfBulgeRadius);
+        ctx.lineTo(ankle.x + sNx * ankleRadius, ankle.y + sNy * ankleRadius);
+        ctx.lineTo(ankle.x - sNx * ankleRadius, ankle.y - sNy * ankleRadius);
+        ctx.lineTo(midShinX - sNx * calfBulgeRadius, midShinY - sNy * calfBulgeRadius);
+        ctx.lineTo(knee.x - sNx * kneeRadius, knee.y - sNy * kneeRadius);
+        ctx.closePath();
+
+        ctx.strokeStyle = legSide === "left" ? "#ffffff" : "#00ffff";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.restore();
     }
 
     private drawDebug(ctx: CanvasRenderingContext2D): void {
@@ -1628,18 +1746,10 @@ export default class Bat {
         ctx.fillStyle = "lime";
         ctx.fill();
 
-        // Draw line between hips and shoulder mid (Spine)
-        ctx.beginPath();
-        ctx.moveTo(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y);
-        ctx.lineTo(this.SHOULDER_MID.x, this.SHOULDER_MID.y);
-        ctx.strokeStyle = "orange";
-        ctx.lineWidth = 2;
-        ctx.stroke();
     }
 
     private drawTorsoCylinder(ctx: CanvasRenderingContext2D): void {
         const shoulderMid = this.SHOULDER_MID;
-        // 🟢 DEBUG TORSO CYLINDER: Fill cylinder path between shoulder ellipse & hip ellipse with solid blue
         const leftShoulderMajorEnd = { x: shoulderMid.x - this.shoulderRx, y: shoulderMid.y };
         const rightShoulderMajorEnd = { x: shoulderMid.x + this.shoulderRx, y: shoulderMid.y };
         const leftHipMajorEnd = { x: this.CURRENT_HIP_POSITION.x - this.hipRx, y: this.CURRENT_HIP_POSITION.y };
@@ -1647,40 +1757,20 @@ export default class Bat {
 
         ctx.save();
         
-        // 🟢 LEFT BACK POLYGON (Black Fill): Formed by left major tangent line, shoulder left arc, spine line, and hip left arc
+        // 🟢 FULL OUTER TORSO CYLINDER OUTLINE (No Internal Spine Lines)
         ctx.beginPath();
-        // Top shoulder left arc (from left major end to shoulderMid center)
-        ctx.ellipse(shoulderMid.x, shoulderMid.y, this.shoulderRx, this.shoulderRy, 0, Math.PI, 1.5 * Math.PI, false);
-        // Spine line down to hip center
-        ctx.lineTo(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y);
-        // Bottom hip left arc (from hip center to left hip major end)
-        ctx.ellipse(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y, this.hipRx, this.hipRy, 0, 0.5 * Math.PI, Math.PI, false);
-        // Left major tangent line back up to left shoulder major end
+        // Top shoulder arc (left major end to right major end)
+        ctx.ellipse(shoulderMid.x, shoulderMid.y, this.shoulderRx, this.shoulderRy, 0, Math.PI, 2 * Math.PI, false);
+        // Right side tangent line (shoulder right to hip right)
+        ctx.lineTo(rightHipMajorEnd.x, rightHipMajorEnd.y);
+        // Bottom hip arc (right major end to left major end)
+        ctx.ellipse(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y, this.hipRx, this.hipRy, 0, 0, Math.PI, false);
+        // Left side tangent line (hip left to shoulder left)
         ctx.lineTo(leftShoulderMajorEnd.x, leftShoulderMajorEnd.y);
         ctx.closePath();
 
-        ctx.fillStyle = "#000000"; // Solid 100% Black fill for left back polygon
-        ctx.fill();
-        ctx.strokeStyle = "#1e293b";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        // 🟢 RIGHT FRONT POLYGON (Blue Fill): Formed by spine line, shoulder right arc, right major tangent line, and hip right arc
-        ctx.beginPath();
-        // Top shoulder right arc (from shoulderMid center to right major end)
-        ctx.ellipse(shoulderMid.x, shoulderMid.y, this.shoulderRx, this.shoulderRy, 0, 1.5 * Math.PI, 2 * Math.PI, false);
-        // Right major tangent line down to right hip major end
-        ctx.lineTo(rightHipMajorEnd.x, rightHipMajorEnd.y);
-        // Bottom hip right arc (from right hip major end to hip center)
-        ctx.ellipse(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y, this.hipRx, this.hipRy, 0, 0, 0.5 * Math.PI, false);
-        // Spine line back up to shoulderMid center
-        ctx.lineTo(shoulderMid.x, shoulderMid.y);
-        ctx.closePath();
-
-        ctx.fillStyle = "#2563eb"; // Solid Blue fill for right front polygon
-        ctx.fill();
-        ctx.strokeStyle = "#1d4ed8";
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = "#38bdf8"; // Bright sky blue outer torso outline
+        ctx.lineWidth = 1.8;
         ctx.stroke();
         ctx.restore();
     }
@@ -1688,11 +1778,9 @@ export default class Bat {
     private drawHeadAndLegs(ctx: CanvasRenderingContext2D): void {
         const shoulderMid = this.SHOULDER_MID;
 
-        // 🟢 SHOULDER CAP ELLIPSE: Render dark navy top ellipse ON TOP of torso cylinder
+        // 🟢 SHOULDER CAP ELLIPSE: Outline only
         ctx.beginPath();
         ctx.ellipse(shoulderMid.x, shoulderMid.y, this.shoulderRx, this.shoulderRy, 0, 0, 2 * Math.PI);
-        ctx.fillStyle = "#0f172a"; // Deep navy blue top cap
-        ctx.fill();
         ctx.strokeStyle = "#38bdf8"; // Bright cyan outline
         ctx.lineWidth = 2;
         ctx.stroke();
@@ -1707,14 +1795,6 @@ export default class Bat {
         // --- HEAD & NECK DEBUG DRAWING ---
         const headCenterX = this.HEAD_CENTER.x;
         const headCenterY = this.HEAD_CENTER.y;
-
-        // Draw Neck Line from shoulderMid to headCenter
-        ctx.beginPath();
-        ctx.moveTo(shoulderMid.x, shoulderMid.y);
-        ctx.lineTo(headCenterX, headCenterY);
-        ctx.strokeStyle = "cyan";
-        ctx.lineWidth = 2.5;
-        ctx.stroke();
 
         // 🟢 PAPER-DOLL HEAD: real head.png (image load hone tak fallback ellipse neeche)
         if (this.headImageLoaded) {
@@ -1786,32 +1866,16 @@ export default class Bat {
         ctx.lineWidth = 1.5;
         ctx.stroke();
 
-        // Draw left leg (thigh + shin)
-        this.drawLimb(ctx, this.CURRENT_LEFT_HIP_POSITION, this.leftKnee, this.CURRENT_LEFT_LEG_POSTION_AT_GROUND, "red");
+        // Draw left leg (thigh + shin) with realistic muscles, blue lower, and grayish-white pads
+        this.drawRealisticLegWithPad(ctx, this.CURRENT_LEFT_HIP_POSITION, this.leftKnee, this.CURRENT_LEFT_LEG_POSTION_AT_GROUND, "left");
 
-        // Draw right leg (thigh + shin)
-        this.drawLimb(ctx, this.CURRENT_RIGHT_HIP_POSITION, this.rightKnee, this.CURRENT_RIGHT_LEG_POSTION_AT_GROUND, "blue");
+        // Draw right leg (thigh + shin) with realistic muscles, blue lower, and grayish-white pads
+        this.drawRealisticLegWithPad(ctx, this.CURRENT_RIGHT_HIP_POSITION, this.rightKnee, this.CURRENT_RIGHT_LEG_POSTION_AT_GROUND, "right");
 
         // Draw line from left hip to right hip
         ctx.beginPath();
         ctx.moveTo(this.CURRENT_LEFT_HIP_POSITION.x, this.CURRENT_LEFT_HIP_POSITION.y);
         ctx.lineTo(this.CURRENT_RIGHT_HIP_POSITION.x, this.CURRENT_RIGHT_HIP_POSITION.y);
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Draw line from left hip to front shoulder
-        ctx.beginPath();
-        ctx.moveTo(this.CURRENT_LEFT_HIP_POSITION.x, this.CURRENT_LEFT_HIP_POSITION.y);
-        ctx.lineTo(this.FRONT_SHOULDER.x, this.FRONT_SHOULDER.y);
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Draw line from right hip to back shoulder
-        ctx.beginPath();
-        ctx.moveTo(this.CURRENT_RIGHT_HIP_POSITION.x, this.CURRENT_RIGHT_HIP_POSITION.y);
-        ctx.lineTo(this.BACK_SHOULDER.x, this.BACK_SHOULDER.y);
         ctx.strokeStyle = "white";
         ctx.lineWidth = 2;
         ctx.stroke();
