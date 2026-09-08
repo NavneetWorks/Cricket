@@ -94,7 +94,7 @@ export const SHIN_LENGTH = 105;
 
 export const LEG_WIDTH_AT_GROUND = 100;
 
-export const LEG_WIDTH_AT_HIP = 40;
+export const LEG_WIDTH_AT_HIP = 0;
 
 export const OUTER_ARC_SCALE = 1.3;
 export const INNER_ARC_SCALE = 1.2;

@@ -100,7 +100,7 @@ export default class Bat {
     private readonly SHIN_LENGTH = this.FULL_LEG_LENGTH - this.THIGH_LENGTH;
 
 
-    private readonly NECT_TO_HIP_LENGTH = 2.6*PLAYER_LENGTH_FACTOR;
+    private readonly NECT_TO_HIP_LENGTH = 3.4*PLAYER_LENGTH_FACTOR;
 
   
 
@@ -115,7 +115,8 @@ export default class Bat {
     private targetHipPos : Vec2 = { ...this.ORIGINAL_HIP_POSITION };
     private hipVel : Vec2 = { x: 0, y: 0 };
 
-    private readonly LEG_WIDTH_AT_HIP = 1.2*PLAYER_LENGTH_FACTOR;
+    private readonly SHOULDER_JOINT_OFFSET = 68;
+    private readonly LEG_WIDTH_AT_HIP = 35;
 
     private CURRENT_LEFT_HIP_POSITION : Vec2  = {x:this.CURRENT_HIP_POSITION.x-this.LEG_WIDTH_AT_HIP/2,y:this.CURRENT_HIP_POSITION.y};
     private CURRENT_RIGHT_HIP_POSITION : Vec2  = {x:this.CURRENT_HIP_POSITION.x+this.LEG_WIDTH_AT_HIP/2,y:this.CURRENT_HIP_POSITION.y};
@@ -141,7 +142,7 @@ export default class Bat {
     private CURRENT_RIGHT_LEG_POSTION_AT_GROUND : Vec2 = {x:this.CURRENT_LEFT_LEG_POSTION_AT_GROUND.x + this.CURRENT_LEG_WIDTH_AT_GROUND,y:CANVAS_HEIGHT-GROUND_HEIGHT}
 
     private readonly SHOULDER_HEIGHT = CANVAS_HEIGHT - GROUND_HEIGHT - 168 * 1.2; // Y position of the shoulder joints
-    private readonly SHOULDER_JOINT_OFFSET = 50;
+    //private readonly SHOULDER_JOINT_OFFSET = 50;
 
 
 
@@ -479,16 +480,24 @@ export default class Bat {
             }
         }
 
-        // --- UPDATE SHOULDERS ALONG THE DEBUG ELLIPSE BASED ON HAND CONTACT POINTS ---
-        this.shoulderRx = this.SHOULDER_JOINT_OFFSET / 2;
-        this.shoulderRy = this.shoulderRx * 0.7;
+        // --- DYNAMIC CORE STRETCH PHYSICS (Stance vs. Shot Extension) ---
+        const handDist = Math.hypot(this.comActual.x - this.SHOULDER_MID.x, this.comActual.y - this.SHOULDER_MID.y);
+        const stretchFrac = Math.max(0, Math.min(1, (handDist - 110) / 110));
+
+        this.shoulderRx = 36; // Broad masculine athletic chest
+        this.shoulderRy = this.shoulderRx * 0.65;
+
+        // Waist/Hip width strictly driven by LEG_WIDTH_AT_HIP variable
+        const baseHipRx = this.LEG_WIDTH_AT_HIP / 2;
+        this.hipRx = baseHipRx * (1 - stretchFrac * 0.15); // Narrows slightly on shot extension relative to LEG_WIDTH_AT_HIP
+        this.hipRy = this.hipRx * 0.65;
 
         // Front hand contact point (left hand) offset relative to Hip Y-axis line (0.7x of previous speed)
         const frontDx = this.frontWristTarget.x - this.CURRENT_HIP_POSITION.x;
         const frontDy = this.frontWristTarget.y - this.CURRENT_HIP_POSITION.y;
         const frontShiftAngle = (frontDx * 0.0147) + (frontDy * 0.0098);
-        const scale = 1 // 0.7x rate of change
-        const frontAngle = Math.PI - frontShiftAngle*scale;
+        const scale = 1; // 0.7x rate of change
+        const frontAngle = Math.PI - frontShiftAngle * scale;
 
         this.FRONT_SHOULDER.x = this.SHOULDER_MID.x + this.shoulderRx * Math.cos(frontAngle);
         this.FRONT_SHOULDER.y = this.SHOULDER_MID.y + this.shoulderRy * Math.sin(frontAngle);
@@ -497,20 +506,17 @@ export default class Bat {
         const backDx = this.backWristTarget.x - this.CURRENT_HIP_POSITION.x;
         const backDy = this.backWristTarget.y - this.CURRENT_HIP_POSITION.y;
         const backShiftAngle = (backDx * 0.0147) + (backDy * 0.0098); // 0.7x rate of change
-        const backAngle = 0 - backShiftAngle*scale;
+        const backAngle = 0 - backShiftAngle * scale;
 
         this.BACK_SHOULDER.x = this.SHOULDER_MID.x + this.shoulderRx * Math.cos(backAngle);
         this.BACK_SHOULDER.y = this.SHOULDER_MID.y + this.shoulderRy * Math.sin(backAngle);
 
-        // --- UPDATE LEG / HIP JOINTS ALONG THE HIP DEBUG ELLIPSE (0.5x speed of shoulders, SAME direction) ---
-        this.hipRx = this.LEG_WIDTH_AT_HIP / 2;
-        this.hipRy = this.hipRx * 0.7;
-
-        const leftHipAngle = Math.PI - (frontShiftAngle * 0.5);
+        // --- UPDATE LEG / HIP JOINTS ALONG THE HIP DEBUG ELLIPSE ---
+        const leftHipAngle = Math.PI - (frontShiftAngle * 0.08);
         this.CURRENT_LEFT_HIP_POSITION.x = this.CURRENT_HIP_POSITION.x + this.hipRx * Math.cos(leftHipAngle);
         this.CURRENT_LEFT_HIP_POSITION.y = this.CURRENT_HIP_POSITION.y + this.hipRy * Math.sin(leftHipAngle);
 
-        const rightHipAngle = 0 - (backShiftAngle * 0.5);
+        const rightHipAngle = 0 - (backShiftAngle * 0.08);
         this.CURRENT_RIGHT_HIP_POSITION.x = this.CURRENT_HIP_POSITION.x + this.hipRx * Math.cos(rightHipAngle);
         this.CURRENT_RIGHT_HIP_POSITION.y = this.CURRENT_HIP_POSITION.y + this.hipRy * Math.sin(rightHipAngle);
 
@@ -1793,15 +1799,15 @@ export default class Bat {
         const sNx = -sUy; // Normal perpendicular vector
         const sNy = sUx;
 
-        // --- 2. PROPORTIONATE THIGH & SHIN RADIUS DIMENSIONS ---
-        const hipRadius = 13.5;
-        const quadBulgeRadius = 16.5; // Strong muscular thigh bulge
-        const kneeRadius = 10.5;
+        // --- 2. TAPERED MUSCULAR THIGH DIMENSIONS (Thick upper hip, tapering to normal knee) ---
+        const hipRadius = 18.0;       // Thick upper thigh base near hip
+        const quadBulgeRadius = 16.0; // Muscular upper-mid thigh taper
+        const kneeRadius = 10.0;      // Normal slim lower thigh near knee
 
         const midThighX = hip.x + tUx * (tLen * 0.5);
         const midThighY = hip.y + tUy * (tLen * 0.5);
 
-        const calfBulgeRadius = 11.5; // Muscular calf bulge
+        const calfBulgeRadius = 12.5; // Muscular calf bulge
         const ankleRadius = 7.5;
 
         const midShinX = knee.x + sUx * (sLen * 0.4);
@@ -1809,7 +1815,7 @@ export default class Bat {
 
         ctx.save();
 
-        // --- 1. ROUNDED HIP JOINT CONNECTION AT CROTCH/HIP ---
+        // --- 1. SMOOTH THIGH BASE (Blue Lower Trousers Body) ---
         const thighGrad = ctx.createLinearGradient(hip.x, hip.y, knee.x, knee.y);
         thighGrad.addColorStop(0, "#1d4ed8");
         thighGrad.addColorStop(0.5, "#2563eb");
@@ -1819,11 +1825,8 @@ export default class Bat {
         ctx.arc(hip.x, hip.y, hipRadius, 0, 2 * Math.PI);
         ctx.fillStyle = thighGrad;
         ctx.fill();
-        ctx.strokeStyle = "#091e42";
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
 
-        // --- 2. DRAW THIGH (Blue Lower Trousers Body) ---
+        // --- 2. DRAW FULL MUSCULAR THIGH POLYGON ---
         ctx.beginPath();
         ctx.moveTo(hip.x + tNx * hipRadius, hip.y + tNy * hipRadius);
         ctx.lineTo(midThighX + tNx * quadBulgeRadius, midThighY + tNy * quadBulgeRadius);
@@ -1836,7 +1839,7 @@ export default class Bat {
         ctx.fillStyle = thighGrad;
         ctx.fill();
 
-        ctx.strokeStyle = "#091e42";
+        ctx.strokeStyle = "#0f172a";
         ctx.lineWidth = 1.2;
         ctx.stroke();
 
@@ -2066,69 +2069,41 @@ export default class Bat {
     }
 
     private drawTorsoCylinder(ctx: CanvasRenderingContext2D): void {
-        const shoulderMid = this.SHOULDER_MID;
-        const leftShoulderMajorEnd = { x: shoulderMid.x - this.shoulderRx, y: shoulderMid.y };
-        const rightShoulderMajorEnd = { x: shoulderMid.x + this.shoulderRx, y: shoulderMid.y };
-        const leftHipMajorEnd = { x: this.CURRENT_HIP_POSITION.x - this.hipRx, y: this.CURRENT_HIP_POSITION.y };
-        const rightHipMajorEnd = { x: this.CURRENT_HIP_POSITION.x + this.hipRx, y: this.CURRENT_HIP_POSITION.y };
+        const hip = this.CURRENT_HIP_POSITION;
 
         ctx.save();
-        
-        // 🟢 TORSO SHIRT BODY (India Blue Jersey)
+        // 🔵 HIP ELLIPSE OUTLINE AT WAIST / HIP LEVEL
         ctx.beginPath();
-        // Top shoulder arc (left major end to right major end)
-        ctx.ellipse(shoulderMid.x, shoulderMid.y, this.shoulderRx, this.shoulderRy, 0, Math.PI, 2 * Math.PI, false);
-        // Right side tangent line (shoulder right to hip right)
-        ctx.lineTo(rightHipMajorEnd.x, rightHipMajorEnd.y);
-        // Bottom hip arc (right major end to left major end)
-        ctx.ellipse(this.CURRENT_HIP_POSITION.x, this.CURRENT_HIP_POSITION.y, this.hipRx, this.hipRy, 0, 0, Math.PI, false);
-        // Left side tangent line (hip left to shoulder left)
-        ctx.lineTo(leftShoulderMajorEnd.x, leftShoulderMajorEnd.y);
-        ctx.closePath();
-
-        // Fill Jersey Body with Electric Blue Gradient
-        const torsoGrad = ctx.createLinearGradient(shoulderMid.x - this.shoulderRx, shoulderMid.y, shoulderMid.x + this.shoulderRx, shoulderMid.y);
-        torsoGrad.addColorStop(0, "#1d4ed8");
-        torsoGrad.addColorStop(0.5, "#2563eb");
-        torsoGrad.addColorStop(1, "#3b82f6");
-        ctx.fillStyle = torsoGrad;
-        ctx.fill();
-
-        ctx.strokeStyle = "#0f172a"; // Dark jersey outline
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        // 🟢 V-NECK COLLAR TRIM AT SHOULDER MID
-        ctx.beginPath();
-        ctx.moveTo(shoulderMid.x - 10, shoulderMid.y - 2);
-        ctx.lineTo(shoulderMid.x, shoulderMid.y + 12);
-        ctx.lineTo(shoulderMid.x + 10, shoulderMid.y - 2);
-        ctx.strokeStyle = "#1e3a8a"; // Dark navy collar trim
-        ctx.lineWidth = 2.5;
+        ctx.ellipse(hip.x, hip.y, this.hipRx + 4, this.hipRy, 0, 0, 2 * Math.PI);
+        ctx.strokeStyle = "#38bdf8"; // Bright cyan hip ellipse outline
+        ctx.lineWidth = 2.0;
         ctx.stroke();
 
         ctx.restore();
     }
 
     private drawLegs(ctx: CanvasRenderingContext2D): void {
+        const leftHip = this.CURRENT_LEFT_HIP_POSITION;
+        const rightHip = this.CURRENT_RIGHT_HIP_POSITION;
+
         // Draw left leg (thigh + shin)
-        this.drawRealisticLegWithPad(ctx, this.CURRENT_LEFT_HIP_POSITION, this.leftKnee, this.CURRENT_LEFT_LEG_POSTION_AT_GROUND, "left");
+        this.drawRealisticLegWithPad(ctx, leftHip, this.leftKnee, this.CURRENT_LEFT_LEG_POSTION_AT_GROUND, "left");
 
         // Draw right leg (thigh + shin)
-        this.drawRealisticLegWithPad(ctx, this.CURRENT_RIGHT_HIP_POSITION, this.rightKnee, this.CURRENT_RIGHT_LEG_POSTION_AT_GROUND, "right");
+        this.drawRealisticLegWithPad(ctx, rightHip, this.rightKnee, this.CURRENT_RIGHT_LEG_POSTION_AT_GROUND, "right");
     }
 
     private drawHead(ctx: CanvasRenderingContext2D): void {
         const shoulderMid = this.SHOULDER_MID;
 
-        // 🟢 SHOULDER CAP ELLIPSE: Outline only
+        // 🟢 SHOULDER CAP ELLIPSE: Outline only (Level horizontal)
         ctx.beginPath();
         ctx.ellipse(shoulderMid.x, shoulderMid.y, this.shoulderRx, this.shoulderRy, 0, 0, 2 * Math.PI);
         ctx.strokeStyle = "#38bdf8"; // Bright cyan outline
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Inner shoulder ellipse
+        // Inner shoulder ellipse (Yellow collar ring - Level horizontal)
         ctx.beginPath();
         ctx.ellipse(shoulderMid.x, shoulderMid.y, this.shoulderRx, this.shoulderRy / 2, 0, 0, 2 * Math.PI);
         ctx.strokeStyle = "#facc15"; // Bright yellow inner ellipse
@@ -2152,7 +2127,7 @@ export default class Bat {
             const drawW = drawH * (imgW / imgH);
 
             const pivotX = (shoulderMid.x + headCenterX) / 2;
-            const pivotY = (shoulderMid.y + headCenterY) / 2;
+            const pivotY = (shoulderMid.y + headCenterY) / 2 - 10; // Shifted head slightly upward
 
             const lean = (this.CURRENT_ANGLE_OF_SPINE - Math.PI / 2) * LEAN_FOLLOW;
 
