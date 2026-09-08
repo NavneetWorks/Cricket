@@ -598,9 +598,74 @@ export default class Bat {
         // 1. Mouse Target Clamping (Safe Zone)
         const rawMouseX = this.mouse.x + this.GRIP_OFFSET_FROM_CURSOR;
         const rawMouseY = this.mouse.y + this.stanceOffsetY;
+
+        // 🟢 60 FPS LOCKED DELTA-TIME DISTANCE SMOOTHING (Multi-Frame Average Catchup)
+        if (!(this as any).laggingTarget) {
+            (this as any).laggingTarget = { x: rawMouseX, y: rawMouseY };
+            (this as any).prevMousePos = { x: rawMouseX, y: rawMouseY };
+            (this as any).prevStepPx = 0;
+        }
+
+        const lt = (this as any).laggingTarget;
+        const prevM = (this as any).prevMousePos;
+
+        // Calculate actual mouse displacement in pixels
+        const mouseDx = rawMouseX - prevM.x;
+        const mouseDy = rawMouseY - prevM.y;
+        const mouseDistPx = Math.hypot(mouseDx, mouseDy);
+
+        // Normalize distance to exact 60 FPS reference frame scale (1 frame = 0.01667s)
+        const frameDt = Math.max(0.001, dt || 0.01667);
+        const fpsScale = frameDt / 0.01667;
+        const currentNormDist = mouseDistPx / fpsScale;
+
+        // Distance between lagging point and current mouse position
+        const gapX = rawMouseX - lt.x;
+        const gapY = rawMouseY - lt.y;
+        const gapDist = Math.hypot(gapX, gapY);
+
+        const prevStep = (this as any).prevStepPx || 0;
+        let effectiveStep = 0;
+
+        // Threshold for rest (stationary state)
+        const REST_THRESHOLD = 0.8; // Normalized pixels
+
+        // Denominator Divisor for Tuning Acceleration Lag Rate (e.g. 2, 3, 4, 5)
+        const accelDivisor = 6;
+
+        if (currentNormDist < REST_THRESHOLD && gapDist < 2.0) {
+            // State 1: At Rest -> Reset step size to 0 for heavy initial breakout feel on next move
+            effectiveStep = 0;
+        } else if (prevStep === 0 && currentNormDist >= REST_THRESHOLD) {
+            // State 2: Initial Breakout from Rest -> Move 50% of the initial gap/distance (Heavy start)
+            effectiveStep = currentNormDist * 0.5;
+        } else if (gapDist > 3.0 || currentNormDist > prevStep) {
+            // State 3: Accelerating / Catching Up Phase -> (Current - Prev) / accelDivisor + Prev
+            effectiveStep = ((currentNormDist - prevStep) / accelDivisor) + prevStep;
+        } else {
+            // State 4: Decelerating Phase (currentNormDist <= prevStep) -> Instant 100% full movement
+            effectiveStep = currentNormDist;
+        }
+
+        // Save states for next frame
+        (this as any).prevMousePos = { x: rawMouseX, y: rawMouseY };
+        (this as any).prevStepPx = effectiveStep;
+
+        // Scale step back to frame time and move laggingTarget WITHOUT overwriting laggingTarget position
+        const frameStepPx = effectiveStep * fpsScale;
+
+        if (gapDist > 0.001) {
+            const stepPx = Math.min(gapDist, frameStepPx);
+            lt.x += (gapX / gapDist) * stepPx;
+            lt.y += (gapY / gapDist) * stepPx;
+        }
+
+        // Use persistent lagging target point as effective mouse input
+        const effectiveMouseX = lt.x;
+        const effectiveMouseY = lt.y;
         
-        const dxMouse = rawMouseX - shoulderMid.x;
-        const dyMouse = rawMouseY - shoulderMid.y;
+        const dxMouse = effectiveMouseX - shoulderMid.x;
+        const dyMouse = effectiveMouseY - shoulderMid.y;
         const mouseDist = Math.hypot(dxMouse, dyMouse);
         
         const maxSafeRadius = Math.max(
@@ -614,7 +679,7 @@ export default class Bat {
                 y: shoulderMid.y + (dyMouse / mouseDist) * maxSafeRadius
             };
         } else {
-            this.comTarget = { x: rawMouseX, y: rawMouseY };
+            this.comTarget = { x: effectiveMouseX, y: effectiveMouseY };
         }
 
         if (!this.prevComTarget) {
