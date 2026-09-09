@@ -495,12 +495,12 @@ export default class Bat {
         // Front hand contact point (left hand) offset relative to Hip Y-axis line
         const frontDx = this.frontWristTarget.x - this.CURRENT_HIP_POSITION.x;
         const frontDy = this.frontWristTarget.y - this.CURRENT_HIP_POSITION.y;
-        const frontShiftAngle = (frontDx * 0.0147) + (frontDy * 0.0098);
+        const frontShiftAngle = (frontDx * 0.0247) + (frontDy * 0.0098);
         const scale = 1;
         
         // Strict constraints for Left (Front) Shoulder rotation
         const rawFrontAngle = Math.PI - frontShiftAngle * scale;
-        const MIN_FRONT_SHOULDER_ANGLE = Math.PI * 0.75; // ~135 deg (prevents going too far back/down)
+        const MIN_FRONT_SHOULDER_ANGLE = Math.PI * 0.65; // ~135 deg (prevents going too far back/down)
         const MAX_FRONT_SHOULDER_ANGLE = Math.PI * 1.25; // ~225 deg (prevents going too far forward/up)
         const frontAngle = Math.max(MIN_FRONT_SHOULDER_ANGLE, Math.min(MAX_FRONT_SHOULDER_ANGLE, rawFrontAngle));
 
@@ -2269,19 +2269,89 @@ export default class Bat {
 
         const rightExtLen = 10; // Independent extension length for right leg
 
+        let rawLowerRightX = rightHip.x - rightThighUx * rightExtLen + rightPerpUx * dynamicRightOffset;
+        let rawLowerRightY = rightHip.y - rightThighUy * rightExtLen + rightPerpUy * dynamicRightOffset;
+
+        // 🟢 MINIMUM & MAXIMUM DISTANCE CLAMP BETWEEN LOWER GREEN DOTS
+        const MIN_LOWER_GREEN_DOTS_DIST =  PLAYER_LENGTH_FACTOR*1.5; // Tuneable minimum gap in pixels
+        const MAX_LOWER_GREEN_DOTS_DIST = PLAYER_LENGTH_FACTOR*2; // Tuneable maximum gap in pixels
+
+        const distLowerDots = Math.hypot(rawLowerRightX - lowerLeftGreenDot.x, rawLowerRightY - lowerLeftGreenDot.y);
+        
+        if (distLowerDots > 0) {
+            if (distLowerDots < MIN_LOWER_GREEN_DOTS_DIST) {
+                const clampRatio = MIN_LOWER_GREEN_DOTS_DIST / distLowerDots;
+                rawLowerRightX = lowerLeftGreenDot.x + (rawLowerRightX - lowerLeftGreenDot.x) * clampRatio;
+                rawLowerRightY = lowerLeftGreenDot.y + (rawLowerRightY - lowerLeftGreenDot.y) * clampRatio;
+            } else if (distLowerDots > MAX_LOWER_GREEN_DOTS_DIST) {
+                const clampRatio = MAX_LOWER_GREEN_DOTS_DIST / distLowerDots;
+                rawLowerRightX = lowerLeftGreenDot.x + (rawLowerRightX - lowerLeftGreenDot.x) * clampRatio;
+                rawLowerRightY = lowerLeftGreenDot.y + (rawLowerRightY - lowerLeftGreenDot.y) * clampRatio;
+            }
+        }
+
         const lowerRightGreenDot = {
-            x: rightHip.x - rightThighUx * rightExtLen + rightPerpUx * dynamicRightOffset,
-            y: rightHip.y - rightThighUy * rightExtLen + rightPerpUy * dynamicRightOffset
+            x: rawLowerRightX,
+            y: rawLowerRightY
         };
 
-        // 3. Dark connecting line joining right green dots
+        // 👕 TORSO T-SHIRT ORGANIC CURVED POLYGON FILL (Realistic Chest, Stomach & Back Curves)
+        ctx.beginPath();
+        ctx.moveTo(upperLeftGreenDot.x, upperLeftGreenDot.y);
+
+        // 1. Top Edge: Follow the shoulder ellipse arc curve from upperLeftGreenDot to upperRightGreenDot
+        const startArcAngle = Math.PI; // Left tangent of shoulder ellipse
+        const rightDx = upperRightGreenDot.x - this.SHOULDER_MID.x;
+        const rightDy = upperRightGreenDot.y - this.SHOULDER_MID.y;
+        const endArcAngle = Math.atan2(rightDy / (this.shoulderRy || 1), rightDx / (this.shoulderRx || 1));
+
+        ctx.ellipse(
+            this.SHOULDER_MID.x, 
+            this.SHOULDER_MID.y, 
+            this.shoulderRx, 
+            this.shoulderRy, 
+            0, 
+            startArcAngle, 
+            endArcAngle, 
+            false
+        );
+
+        // 2. Right Front Edge (Chest & Stomach Contour Curve):
+        // Midpoint control point with outward chest bulge & tapered waist
+        const midFrontX = (upperRightGreenDot.x + lowerRightGreenDot.x) / 2 + 10; // Outward chest/stomach curve bulge
+        const midFrontY = (upperRightGreenDot.y + lowerRightGreenDot.y) / 2;
+        ctx.quadraticCurveTo(midFrontX, midFrontY, lowerRightGreenDot.x, lowerRightGreenDot.y);
+
+        // 3. Bottom Edge: Connect to lower left green dot
+        ctx.lineTo(lowerLeftGreenDot.x, lowerLeftGreenDot.y);
+
+        // 4. Left Back Edge (Realistic Back/Spine Muscle Contour Curve):
+        const midBackX = (upperLeftGreenDot.x + lowerLeftGreenDot.x) / 2 - 8; // Outward back muscle curve
+        const midBackY = (upperLeftGreenDot.y + lowerLeftGreenDot.y) / 2;
+        ctx.quadraticCurveTo(midBackX, midBackY, upperLeftGreenDot.x, upperLeftGreenDot.y);
+
+        ctx.closePath();
+        ctx.fillStyle = "#1d4ed8"; // India Jersey Royal Blue
+        ctx.fill();
+
+        // 3. Dark connecting line joining right green dots with smooth chest curve
         ctx.beginPath();
         ctx.moveTo(upperRightGreenDot.x, upperRightGreenDot.y);
-        ctx.lineTo(lowerRightGreenDot.x, lowerRightGreenDot.y);
-        ctx.strokeStyle = "#4b5563"; // Dark grey line
-        ctx.lineWidth = 5.0;
+        ctx.quadraticCurveTo(midFrontX, midFrontY, lowerRightGreenDot.x, lowerRightGreenDot.y);
+        ctx.strokeStyle = "#4b5563"; // Dark grey outline
+        ctx.lineWidth = 4.0;
         ctx.lineCap = "round";
         ctx.stroke();
+
+        // 🟢 DEBUG LINE CONNECTING BOTH LOWER GREEN DOTS (Left Lower <-> Right Lower)
+        ctx.beginPath();
+        ctx.moveTo(lowerLeftGreenDot.x, lowerLeftGreenDot.y);
+        ctx.lineTo(lowerRightGreenDot.x, lowerRightGreenDot.y);
+        ctx.strokeStyle = "#22c55e"; // Bright green debug line
+        ctx.lineWidth = 2.0;
+        ctx.setLineDash([3, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
 
         // 4. Draw all 4 Green Dots (2 Left, 2 Right)
         ctx.fillStyle = "#22c55e"; // Bright green dot
@@ -2292,7 +2362,46 @@ export default class Bat {
             ctx.fill();
         }
 
-        // 🟡 SHOULDER ROTATION LIMIT DEBUG DOTS (Yellow = Left limit, Magenta = Right limit)
+        // 🔴 RED DEBUG DOTS FOR SHOULDER JOINTS (Front & Back Shoulder)
+        ctx.fillStyle = "#ff0000"; // Red dot
+        const shoulderJoints = [this.FRONT_SHOULDER, this.BACK_SHOULDER, this.SHOULDER_MID];
+        for (const sj of shoulderJoints) {
+            ctx.beginPath();
+            ctx.arc(sj.x, sj.y, 4.5, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        // 🔵 STRAIGHT DEBUG LINE: Upper Left Green Dot -> Right Shoulder Joint (BACK_SHOULDER)
+        ctx.beginPath();
+        ctx.moveTo(upperLeftGreenDot.x, upperLeftGreenDot.y);
+        ctx.lineTo(this.BACK_SHOULDER.x, this.BACK_SHOULDER.y);
+        ctx.strokeStyle = "#3b82f6"; // Bright blue debug line
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([4, 4]); // Dashed line for visual distinction
+        ctx.stroke();
+        ctx.setLineDash([]); // Reset line dash
+
+        // 🟡 LEFT (FRONT) SHOULDER ROTATION LIMIT DEBUG DOTS (Yellow)
+        const MIN_FRONT_SHOULDER_ANGLE = Math.PI * 0.55;
+        const MAX_FRONT_SHOULDER_ANGLE = Math.PI * 1.25;
+
+        const frontMinDot = {
+            x: this.SHOULDER_MID.x + this.shoulderRx * Math.cos(MIN_FRONT_SHOULDER_ANGLE),
+            y: this.SHOULDER_MID.y + this.shoulderRy * Math.sin(MIN_FRONT_SHOULDER_ANGLE)
+        };
+        const frontMaxDot = {
+            x: this.SHOULDER_MID.x + this.shoulderRx * Math.cos(MAX_FRONT_SHOULDER_ANGLE),
+            y: this.SHOULDER_MID.y + this.shoulderRy * Math.sin(MAX_FRONT_SHOULDER_ANGLE)
+        };
+
+        ctx.fillStyle = "#eab308"; // Yellow dot
+        for (const dot of [frontMinDot, frontMaxDot]) {
+            ctx.beginPath();
+            ctx.arc(dot.x, dot.y, 4.5, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        // 💗 RIGHT (BACK) SHOULDER ROTATION LIMIT DEBUG DOTS (Magenta)
         const MIN_BACK_SHOULDER_ANGLE = -Math.PI * 0.25;
         const MAX_BACK_SHOULDER_ANGLE = Math.PI * 0.35;
 
@@ -2305,11 +2414,10 @@ export default class Bat {
             y: this.SHOULDER_MID.y + this.shoulderRy * Math.sin(MAX_BACK_SHOULDER_ANGLE)
         };
 
-        // Draw Right Shoulder Angle Limit Debug Dots (Magenta)
-        ctx.fillStyle = "#ec4899";
+        ctx.fillStyle = "#ec4899"; // Magenta dot
         for (const dot of [backMinDot, backMaxDot]) {
             ctx.beginPath();
-            ctx.arc(dot.x, dot.y, 4, 0, 2 * Math.PI);
+            ctx.arc(dot.x, dot.y, 4.5, 0, 2 * Math.PI);
             ctx.fill();
         }
 
