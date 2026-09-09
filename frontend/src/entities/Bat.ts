@@ -490,7 +490,7 @@ export default class Bat {
         // Waist/Hip width strictly driven by LEG_WIDTH_AT_HIP variable
         const baseHipRx = this.LEG_WIDTH_AT_HIP / 2;
         this.hipRx = baseHipRx * (1 - stretchFrac * 0.15); // Narrows slightly on shot extension relative to LEG_WIDTH_AT_HIP
-        this.hipRy = this.hipRx * 0.65;
+        this.hipRy = this.hipRx * 0.35;
 
         // Front hand contact point (left hand) offset relative to Hip Y-axis line
         const frontDx = this.frontWristTarget.x - this.CURRENT_HIP_POSITION.x;
