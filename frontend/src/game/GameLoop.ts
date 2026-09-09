@@ -402,6 +402,8 @@ private getProjectileStateWithBounce(
                 );
             }
             this.renderer.wicket.checkHit(this.ball, batHitResult.hit, batHitResult.hitSubStep);
+        } else if (this.renderer.gameMode === 'NEW_BOWLER') {
+            this.renderer.bowler.update(dt);
         } else {
             // BOWLING MODE: Update bowling area, ball & wicket
             this.renderer.bowlingArea.releaseDelaySeconds = (this.isOnlineMode && this.network) ? this.network.getRTT() / 1000 : 0;

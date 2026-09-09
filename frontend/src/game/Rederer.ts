@@ -1,5 +1,6 @@
 import Bat from "../entities/Bat";
 import Ball from "../entities/Ball";
+import { Bowler } from "../entities/Bowler";
 import Wicket from "../entities/Wicket";
 import BowlingArea from "../entities/BowlingArea";
 import Input from "./Input";
@@ -17,10 +18,11 @@ export default class Renderer{
     private input: Input;
     private bat:Bat;
     private ball: Ball;
+    public bowler: Bowler;
     public wicket: Wicket;
     public bowlingArea: BowlingArea;
     
-    public gameMode: 'BATTING' | 'BOWLING' = 'BATTING';
+    public gameMode: 'BATTING' | 'BOWLING' | 'NEW_BOWLER' = 'BATTING';
     public useImageGround: boolean = true;
     private groundImage: HTMLImageElement;
 
@@ -29,6 +31,7 @@ export default class Renderer{
         this.bat = bat;
         this.input = input;
         this.ball = ball;
+        this.bowler = new Bowler(1500);
         this.wicket = new Wicket(this.bat);
         this.bowlingArea = new BowlingArea();
         
@@ -52,9 +55,14 @@ export default class Renderer{
         this.wicket.draw(this.ctx);
 
         this.drawBat();
-        // ⚾ BOWLING Mode me Bowling Arc Overlay bhi draw hoga:
+        // ⚾ BOWLING Mode me purana Bowling Arc Overlay draw hoga:
         if (this.gameMode === 'BOWLING') {
             this.bowlingArea.draw(this.ctx);
+        }
+
+        // 🏃 NEW BOWLER Mode me Naya Bowler Skeleton draw hoga:
+        if (this.gameMode === 'NEW_BOWLER') {
+            this.bowler.drawDebugSkeleton(this.ctx);
         }
 
         this.ball.draw(this.ctx, alpha);

@@ -18,7 +18,7 @@ function GameCanvas({ isOnline = false,onBackToHome }: GameCanvasProps) {
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const gameLoopRef = useRef<GameLoop | null>(null);
-    const [gameMode, setGameMode] = useState<'BATTING' | 'BOWLING'>('BATTING');
+    const [gameMode, setGameMode] = useState<'BATTING' | 'BOWLING' | 'NEW_BOWLER'>('BATTING');
 
     useEffect(() => {
 
@@ -41,7 +41,7 @@ function GameCanvas({ isOnline = false,onBackToHome }: GameCanvasProps) {
 
     }, []);
 
-    const handleModeSwitch = (mode: 'BATTING' | 'BOWLING') => {
+    const handleModeSwitch = (mode: 'BATTING' | 'BOWLING' | 'NEW_BOWLER') => {
         setGameMode(mode);
         if (gameLoopRef.current) {
             (gameLoopRef.current as any).setGameMode(mode);
@@ -115,6 +115,24 @@ function GameCanvas({ isOnline = false,onBackToHome }: GameCanvasProps) {
                         }}
                     >
                         ⚾ BOWLING MODE
+                    </button>
+
+                    <button
+                        onClick={() => handleModeSwitch('NEW_BOWLER')}
+                        style={{
+                            padding: "8px 16px",
+                            backgroundColor: gameMode === 'NEW_BOWLER' ? "#10b981" : "rgba(15, 23, 42, 0.85)",
+                            color: gameMode === 'NEW_BOWLER' ? "#ffffff" : "#94a3b8",
+                            border: `1.5px solid ${gameMode === 'NEW_BOWLER' ? "#34d399" : "rgba(255,255,255,0.2)"}`,
+                            borderRadius: "6px",
+                            cursor: "pointer",
+                            fontWeight: "bold",
+                            fontSize: "13px",
+                            boxShadow: gameMode === 'NEW_BOWLER' ? "0 0 12px rgba(16, 185, 129, 0.5)" : "none",
+                            transition: "all 0.2s ease"
+                        }}
+                    >
+                        🏃 NEW BOWLER MODE
                     </button>
                 </div>
             )}
