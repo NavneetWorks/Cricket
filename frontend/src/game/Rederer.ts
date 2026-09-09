@@ -22,7 +22,7 @@ export default class Renderer{
     public wicket: Wicket;
     public bowlingArea: BowlingArea;
     
-    public gameMode: 'BATTING' | 'BOWLING' | 'NEW_BOWLER' = 'BATTING';
+    public gameMode: 'BATTING' | 'BOWLING' | 'NEW_BOWLER' | 'DEBUG_13_FRAMES' = 'BATTING';
     public useImageGround: boolean = true;
     private groundImage: HTMLImageElement;
 
@@ -49,6 +49,42 @@ export default class Renderer{
         this.ctx.clearRect(
             0,0,CANVAS_WIDTH,CANVAS_HEIGHT
         );
+
+        if (this.gameMode === 'DEBUG_13_FRAMES') {
+            this.drawSky();
+            this.drawGround();
+            // Draw Frame 1 to 14 from right to left
+            const x1 = CANVAS_WIDTH - 20; // Shifted slightly more to rightmost
+            const spacing = 85; // Reduced spacing to fit all 14 frames
+            const x2 = x1 - spacing; 
+            const x3 = x2 - spacing;
+            const x4 = x3 - spacing;
+            const x5 = x4 - spacing;
+            const x6 = x5 - spacing;
+            const x7 = x6 - spacing;
+            const x8 = x7 - spacing;
+            const x9 = x8 - spacing;
+            const x10 = x9 - spacing;
+            const x11 = x10 - spacing;
+            const x12 = x11 - spacing;
+            const x13 = x12 - spacing;
+            const x14 = x13 - spacing;
+            this.bowler.drawStaticPose(this.ctx, 0, x1);
+            this.bowler.drawStaticPose(this.ctx, 1, x2);
+            this.bowler.drawStaticPose(this.ctx, 2, x3);
+            this.bowler.drawStaticPose(this.ctx, 3, x4);
+            this.bowler.drawStaticPose(this.ctx, 4, x5);
+            this.bowler.drawStaticPose(this.ctx, 5, x6);
+            this.bowler.drawStaticPose(this.ctx, 6, x7);
+            this.bowler.drawStaticPose(this.ctx, 7, x8);
+            this.bowler.drawStaticPose(this.ctx, 8, x9);
+            this.bowler.drawStaticPose(this.ctx, 9, x10);
+            this.bowler.drawStaticPose(this.ctx, 10, x11);
+            this.bowler.drawStaticPose(this.ctx, 11, x12);
+            this.bowler.drawStaticPose(this.ctx, 12, x13);
+            this.bowler.drawStaticPose(this.ctx, 13, x14);
+            return;
+        }
 
         this.drawSky();
         this.drawGround();

@@ -18,7 +18,7 @@ function GameCanvas({ isOnline = false,onBackToHome }: GameCanvasProps) {
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const gameLoopRef = useRef<GameLoop | null>(null);
-    const [gameMode, setGameMode] = useState<'BATTING' | 'BOWLING' | 'NEW_BOWLER'>('BATTING');
+    const [gameMode, setGameMode] = useState<'BATTING' | 'BOWLING' | 'NEW_BOWLER' | 'DEBUG_13_FRAMES'>('BATTING');
 
     useEffect(() => {
 
@@ -41,7 +41,7 @@ function GameCanvas({ isOnline = false,onBackToHome }: GameCanvasProps) {
 
     }, []);
 
-    const handleModeSwitch = (mode: 'BATTING' | 'BOWLING' | 'NEW_BOWLER') => {
+    const handleModeSwitch = (mode: 'BATTING' | 'BOWLING' | 'NEW_BOWLER' | 'DEBUG_13_FRAMES') => {
         setGameMode(mode);
         if (gameLoopRef.current) {
             (gameLoopRef.current as any).setGameMode(mode);
@@ -133,6 +133,24 @@ function GameCanvas({ isOnline = false,onBackToHome }: GameCanvasProps) {
                         }}
                     >
                         🏃 NEW BOWLER MODE
+                    </button>
+
+                    <button
+                        onClick={() => handleModeSwitch('DEBUG_13_FRAMES')}
+                        style={{
+                            padding: "8px 16px",
+                            backgroundColor: gameMode === 'DEBUG_13_FRAMES' ? "#8b5cf6" : "rgba(15, 23, 42, 0.85)",
+                            color: gameMode === 'DEBUG_13_FRAMES' ? "#ffffff" : "#94a3b8",
+                            border: `1.5px solid ${gameMode === 'DEBUG_13_FRAMES' ? "#c4b5fd" : "rgba(255,255,255,0.2)"}`,
+                            borderRadius: "6px",
+                            cursor: "pointer",
+                            fontWeight: "bold",
+                            fontSize: "13px",
+                            boxShadow: gameMode === 'DEBUG_13_FRAMES' ? "0 0 12px rgba(139, 92, 246, 0.5)" : "none",
+                            transition: "all 0.2s ease"
+                        }}
+                    >
+                        🐛 13 FRAMES DEBUG
                     </button>
                 </div>
             )}

@@ -167,21 +167,29 @@ export default class GameLoop{
 
         // 2. Keyboard par 'Space' button dabane par ball fenkna (Only in OFFLINE BATTING mode)
         window.addEventListener("keydown", (event) => {
-            if (!this.isOnlineMode && event.code === "Space" && this.renderer.gameMode === 'BATTING') {
-                throwNewBall();
+            if (event.code === "Space") {
+                if (!this.isOnlineMode && this.renderer.gameMode === 'BATTING') {
+                    throwNewBall();
+                } else if (this.renderer.gameMode === 'NEW_BOWLER') {
+                    this.renderer.bowler.startRunning();
+                }
             }
         });
 
         // 3. Keyboard par 'R' button dabane par Bowling ball & Wickets reset karna
         window.addEventListener("keydown", (event) => {
             if (event.code === "KeyR" || event.key.toLowerCase() === 'r') {
-                this.renderer.bowlingArea.reset(this.ball);
-                this.renderer.wicket.reset();
-                this.hasSentReleasePacket = false;
-                // 🟢 STEP 3: naye ball cycle ke liye prediction flags fresh
-                this.localPredictedHit = false;
-                this.suppressNextPacketSound = false;
-                this.hasAuthoritativeResult = false;
+                if (this.renderer.gameMode === 'NEW_BOWLER') {
+                    this.renderer.bowler.resetToIdle();
+                } else {
+                    this.renderer.bowlingArea.reset(this.ball);
+                    this.renderer.wicket.reset();
+                    this.hasSentReleasePacket = false;
+                    // 🟢 STEP 3: naye ball cycle ke liye prediction flags fresh
+                    this.localPredictedHit = false;
+                    this.suppressNextPacketSound = false;
+                    this.hasAuthoritativeResult = false;
+                }
             }
         });
 
