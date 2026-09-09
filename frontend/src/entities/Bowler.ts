@@ -110,15 +110,9 @@ export class Bowler {
         this.targetIntensity = 0.0;
         this.runIntensity = 0.0;
         this.stridePhase = 0;
-        this.leftAnkleLock = null;
-        this.rightAnkleLock = null;
         this.currentHipPosition.x = 1100;
         this.setInitialRunPose();
     }
-
-    // ── Ankle planting (foot doesn't slide on ground) ─────────────────────
-    private leftAnkleLock:  Vec2 | null = null;
-    private rightAnkleLock: Vec2 | null = null;
 
     // ─────────────────────────────────────────────────────────────────────────
     //  STATIC 13 FRAMES ARRAY (Populated with initial values)
@@ -366,10 +360,8 @@ export class Bowler {
 
     // ─────────────────────────────────────────────────────────────────────────
     constructor(startX = 1100) {
-        const baseHipY = this.baseHipY();
-        this.currentHipPosition = { x: startX, y: baseHipY };
-        this._rebuildUpperBody(this.currentHipPosition, -0.20);
-        this._rebuildLegs();
+        this.currentHipPosition = { x: startX, y: 0 };
+        this.setInitialRunPose();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -388,217 +380,162 @@ export class Bowler {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  MAIN GAIT UPDATE
+    public static interpolatePose(p1: KeyframePose, p2: KeyframePose, t: number): KeyframePose {
+        const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+        return {
+            spineAngleDeg: lerp(p1.spineAngleDeg, p2.spineAngleDeg, t),
+            shoulderJointDist: lerp(p1.shoulderJointDist, p2.shoulderJointDist, t),
+            shoulderJointAngleDeg: lerp(p1.shoulderJointAngleDeg, p2.shoulderJointAngleDeg, t),
+            leftUpperArmAngleDeg: lerp(p1.leftUpperArmAngleDeg, p2.leftUpperArmAngleDeg, t),
+            leftElbowAngleDeg: lerp(p1.leftElbowAngleDeg, p2.leftElbowAngleDeg, t),
+            rightUpperArmAngleDeg: lerp(p1.rightUpperArmAngleDeg, p2.rightUpperArmAngleDeg, t),
+            rightElbowAngleDeg: lerp(p1.rightElbowAngleDeg, p2.rightElbowAngleDeg, t),
+            pelvisJointDist: lerp(p1.pelvisJointDist, p2.pelvisJointDist, t),
+            pelvisJointAngleDeg: lerp(p1.pelvisJointAngleDeg, p2.pelvisJointAngleDeg, t),
+            leftThighAngleDeg: lerp(p1.leftThighAngleDeg, p2.leftThighAngleDeg, t),
+            rightThighAngleDeg: lerp(p1.rightThighAngleDeg, p2.rightThighAngleDeg, t),
+            leftKneeAngleDeg: lerp(p1.leftKneeAngleDeg, p2.leftKneeAngleDeg, t),
+            rightKneeAngleDeg: lerp(p1.rightKneeAngleDeg, p2.rightKneeAngleDeg, t),
+            hipYOffset: lerp(p1.hipYOffset, p2.hipYOffset, t)
+        };
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
+    public applyKeyframePose(pose: KeyframePose, worldX: number): void {
+        const deg2rad = Math.PI / 180;
+        
+        const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
+        const hipY = groundY - this.FULL_LEG_LENGTH * 0.85 + pose.hipYOffset;
+        this.currentHipPosition = { x: worldX, y: hipY };
+
+        // 1. Spine
+        const spineAng = pose.spineAngleDeg * deg2rad;
+        this.shoulderMid = {
+            x: this.currentHipPosition.x + Math.cos(spineAng) * this.NECK_TO_HIP_LENGTH,
+            y: this.currentHipPosition.y + Math.sin(spineAng) * this.NECK_TO_HIP_LENGTH
+        };
+        this.headCenter = {
+            x: this.shoulderMid.x + Math.cos(spineAng) * 20,
+            y: this.shoulderMid.y + Math.sin(spineAng) * 20
+        };
+
+        // 2. Pelvis
+        const pelvisLineAng = spineAng + pose.pelvisJointAngleDeg * deg2rad;
+        this.currentLeftHipPosition = {
+            x: this.currentHipPosition.x - Math.cos(pelvisLineAng) * (pose.pelvisJointDist / 2),
+            y: this.currentHipPosition.y - Math.sin(pelvisLineAng) * (pose.pelvisJointDist / 2)
+        };
+        this.currentRightHipPosition = {
+            x: this.currentHipPosition.x + Math.cos(pelvisLineAng) * (pose.pelvisJointDist / 2),
+            y: this.currentHipPosition.y + Math.sin(pelvisLineAng) * (pose.pelvisJointDist / 2)
+        };
+
+        // 3. Shoulders
+        const shoulderLineAng = spineAng + pose.shoulderJointAngleDeg * deg2rad;
+        this.frontShoulder = {
+            x: this.shoulderMid.x - Math.cos(shoulderLineAng) * (pose.shoulderJointDist / 2),
+            y: this.shoulderMid.y - Math.sin(shoulderLineAng) * (pose.shoulderJointDist / 2)
+        };
+        this.backShoulder = {
+            x: this.shoulderMid.x + Math.cos(shoulderLineAng) * (pose.shoulderJointDist / 2),
+            y: this.shoulderMid.y + Math.sin(shoulderLineAng) * (pose.shoulderJointDist / 2)
+        };
+
+        // 4. Left Leg
+        const lThighAng = pelvisLineAng + pose.leftThighAngleDeg * deg2rad;
+        this.leftKnee = {
+            x: this.currentLeftHipPosition.x + Math.cos(lThighAng) * this.THIGH_LENGTH,
+            y: this.currentLeftHipPosition.y + Math.sin(lThighAng) * this.THIGH_LENGTH
+        };
+        const lShinAng = lThighAng + pose.leftKneeAngleDeg * deg2rad;
+        this.leftAnkle = {
+            x: this.leftKnee.x + Math.cos(lShinAng) * this.SHIN_LENGTH,
+            y: this.leftKnee.y + Math.sin(lShinAng) * this.SHIN_LENGTH
+        };
+
+        // 5. Right Leg
+        const rThighAng = pelvisLineAng + pose.rightThighAngleDeg * deg2rad;
+        this.rightKnee = {
+            x: this.currentRightHipPosition.x + Math.cos(rThighAng) * this.THIGH_LENGTH,
+            y: this.currentRightHipPosition.y + Math.sin(rThighAng) * this.THIGH_LENGTH
+        };
+        const rShinAng = rThighAng + pose.rightKneeAngleDeg * deg2rad;
+        this.rightAnkle = {
+            x: this.rightKnee.x + Math.cos(rShinAng) * this.SHIN_LENGTH,
+            y: this.rightKnee.y + Math.sin(rShinAng) * this.SHIN_LENGTH
+        };
+
+        // 6. Left Arm
+        const lUpperArmAng = shoulderLineAng + pose.leftUpperArmAngleDeg * deg2rad;
+        this.leftElbow = {
+            x: this.frontShoulder.x + Math.cos(lUpperArmAng) * this.FRONT_UPPER_ARM,
+            y: this.frontShoulder.y + Math.sin(lUpperArmAng) * this.FRONT_UPPER_ARM
+        };
+        const lForearmAng = lUpperArmAng + pose.leftElbowAngleDeg * deg2rad;
+        this.leftWrist = {
+            x: this.leftElbow.x + Math.cos(lForearmAng) * this.FRONT_LOWER_ARM,
+            y: this.leftElbow.y + Math.sin(lForearmAng) * this.FRONT_LOWER_ARM
+        };
+
+        // 7. Right Arm
+        const rUpperArmAng = shoulderLineAng + pose.rightUpperArmAngleDeg * deg2rad;
+        this.rightElbow = {
+            x: this.backShoulder.x + Math.cos(rUpperArmAng) * this.BACK_UPPER_ARM,
+            y: this.backShoulder.y + Math.sin(rUpperArmAng) * this.BACK_UPPER_ARM
+        };
+        const rForearmAng = rUpperArmAng + pose.rightElbowAngleDeg * deg2rad;
+        this.rightWrist = {
+            x: this.rightElbow.x + Math.cos(rForearmAng) * this.BACK_LOWER_ARM,
+            y: this.rightElbow.y + Math.sin(rForearmAng) * this.BACK_LOWER_ARM
+        };
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Adjustable variable for how much physical distance one full cycle of 14 frames covers.
+    public runCycleDistance: number = 240; 
+
     public updateRunPose(dt: number): void {
+        // 1. Update frequency based on intensity
+        this.strideFrequency = 0.5 + 1.5 * this.runIntensity;
 
-        // ── 1. Dynamic Freq & Stride based on Intensity ────────────────────
-        // Walking freq ~0.8, Sprinting ~1.9
-        this.strideFrequency = 0.8 + 1.1 * this.runIntensity;
-
-        // ── 2. Advance stride phase ────────────────────────────────────────
+        // 2. Advance stride phase (0 to 1)
         this.stridePhase = (this.stridePhase + this.strideFrequency * dt) % 1.0;
-        const phase = this.stridePhase;
 
-        // ── 3. Move body forward (left on canvas) ─────────────────────────
-        // Walking stride len ~0.4, Sprinting ~0.95
-        const strideLen = 2 * this.FULL_LEG_LENGTH * (0.4 + 0.55 * this.runIntensity);
-        const horizontalSpeed = strideLen * this.strideFrequency;   // px/s
+        // 3. Move body forward (left on canvas)
+        const horizontalSpeed = this.runCycleDistance * this.strideFrequency * this.runIntensity;
         this.currentHipPosition.x -= horizontalSpeed * dt;
 
         // Reset when off screen
         if (this.currentHipPosition.x < 100) {
             this.currentHipPosition.x = 1100;
             this.stridePhase = 0;
-            this.leftAnkleLock  = null;
-            this.rightAnkleLock = null;
         }
 
-        // ── 4. Hip vertical bob ────────────────────────────────────────────
-        //  Scale bob amplitude based on speed (walking has less bob)
-        const bobPrimary   = -Math.cos(phase * Math.PI * 2) * (4 + 10 * this.runIntensity);   // ±4 to ±14 px
-        const bobSecondary =  Math.cos(phase * Math.PI * 4) * (2 + 2.5 * this.runIntensity);  // ±2 to ±4.5 px
-        const hipBob = bobPrimary + bobSecondary;
+        // 4. Keyframe Interpolation
+        const totalFrames = Bowler.STATIC_FRAMES.length;
+        const frameFloat = this.stridePhase * totalFrames;
         
-        // Hip lowers as speed increases
-        const dynamicHipY = this.baseHipY() + (1 - this.runIntensity) * (this.FULL_LEG_LENGTH * 0.15);
-        this.currentHipPosition.y = dynamicHipY + hipBob;
+        const idx0 = Math.floor(frameFloat) % totalFrames;
+        const idx1 = (idx0 + 1) % totalFrames;
+        const t = frameFloat - Math.floor(frameFloat);
 
-        const hip = this.currentHipPosition;
+        const pose1 = Bowler.STATIC_FRAMES[idx0];
+        const pose2 = Bowler.STATIC_FRAMES[idx1];
 
-        // ── 5. Pelvis lateral sway ─────────────────────────────────────────
-        const lateralSway = Math.sin(phase * Math.PI * 2) * (2 + 2 * this.runIntensity);
-        this.currentLeftHipPosition  = { x: hip.x - 10 - lateralSway, y: hip.y };
-        this.currentRightHipPosition = { x: hip.x + 10 + lateralSway, y: hip.y };
+        const interpolatedPose = Bowler.interpolatePose(pose1, pose2, t);
 
-        // ── 6. Spine forward lean ──────────────────────────────────────────
-        //  More lean at higher speeds
-        const baseLean = -0.05 - 0.15 * this.runIntensity; 
-        const pushSurge   = Math.exp(-Math.pow((phase - 0.30) / 0.10, 2)) * (0.04 * this.runIntensity);
-        const spineAngle  = baseLean - pushSurge;
-        this._rebuildUpperBody(hip, spineAngle);
-
-        // ── 7. Sample gait keyframes for each leg ─────────────────────────
-        const leftPose  = this._sampleGait(phase);
-        const rightPose = this._sampleGait((phase + 0.5) % 1.0);
-
-        // Interpolate poses based on intensity: at low speed, poses are less extreme
-        const damp = 0.5 + 0.5 * this.runIntensity; // dampens angles by 50% when walking
-        leftPose.thigh *= damp; leftPose.kneeFold *= damp;
-        rightPose.thigh *= damp; rightPose.kneeFold *= damp;
-
-        // ── 8. FK: hip → knee → ankle ─────────────────────────────────────
-        const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
-
-        // LEFT leg
-        const fkL = this._legFK(this.currentLeftHipPosition,  leftPose.thigh,  leftPose.kneeFold);
-        let lKnee = fkL.knee, lAnkle = fkL.ankle;
-
-        // RIGHT leg
-        const fkR = this._legFK(this.currentRightHipPosition, rightPose.thigh, rightPose.kneeFold);
-        let rKnee = fkR.knee, rAnkle = fkR.ankle;
-
-        // ── 8. Ankle foot-plant lock (IK) ─────────────────────────────────
-        //  When FK ankle reaches the ground → lock it in world-space.
-        //  The body then passes OVER the planted foot (no sliding).
-        //  Knee position is resolved with 2-bone IK each frame.
-        const LOCK_TOLERANCE = 8; // px above ground to trigger lock
-
-        // LEFT
-        if (lAnkle.y >= groundY - LOCK_TOLERANCE) {
-            if (!this.leftAnkleLock)
-                this.leftAnkleLock = { x: lAnkle.x, y: groundY };
-            const ik = this._legIK(this.currentLeftHipPosition, this.leftAnkleLock);
-            lKnee  = ik.knee;
-            lAnkle = this.leftAnkleLock;
-        } else {
-            this.leftAnkleLock = null;
-        }
-
-        // RIGHT
-        if (rAnkle.y >= groundY - LOCK_TOLERANCE) {
-            if (!this.rightAnkleLock)
-                this.rightAnkleLock = { x: rAnkle.x, y: groundY };
-            const ik = this._legIK(this.currentRightHipPosition, this.rightAnkleLock);
-            rKnee  = ik.knee;
-            rAnkle = this.rightAnkleLock;
-        } else {
-            this.rightAnkleLock = null;
-        }
-
-        // ── 9. Commit ──────────────────────────────────────────────────────
-        this.leftKnee   = lKnee;
-        this.leftAnkle  = lAnkle;
-        this.rightKnee  = rKnee;
-        this.rightAnkle = rAnkle;
+        // Dampen the pose towards a neutral standing state if runIntensity is low
+        const damp = this.runIntensity;
+        const standingPose = Bowler.STATIC_FRAMES[0]; // Fallback neutral pose
+        const finalPose = Bowler.interpolatePose(standingPose, interpolatedPose, damp);
+        
+        // 5. Apply the interpolated pose to the real skeleton
+        this.applyKeyframePose(finalPose, this.currentHipPosition.x);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  HELPERS
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /** Neutral hip Y (no bob applied) */
-    private baseHipY(): number {
-        // Lowered from 0.96 to 0.83 for a deep sprinting crouch
-        return CANVAS_HEIGHT - GROUND_HEIGHT - this.FULL_LEG_LENGTH * 0.83;
-    }
-
-    /** Interpolate gait keyframes with smoothstep easing */
-    private _sampleGait(phase: number): { thigh: number; kneeFold: number } {
-        // Fallback for procedural rendering to keep it working during transition
-        return { thigh: -0.65, kneeFold: 0.10 };
-    }
-
-    /**
-     * Forward Kinematics — 2-bone leg
-     * thighAngle : vs global vertical (−=forward, +=backward)
-     * kneeFold   : additive bend at knee joint (0=straight, π=folded fully)
-     *
-     * Shin always folds BEHIND the thigh direction (anatomically correct).
-     * The shin direction angle = thighAngle + kneeFold.
-     * Since kneeFold ≥ 0, shin angles MORE toward back/ground = correct knee-bend.
-     */
-    private _legFK(
-        hip: Vec2, thighAngle: number, kneeFold: number
-    ): { knee: Vec2; ankle: Vec2 } {
-        const knee = {
-            x: hip.x + Math.sin(thighAngle) * this.THIGH_LENGTH,
-            y: hip.y + Math.cos(thighAngle) * this.THIGH_LENGTH,
-        };
-        // Shin direction: thighAngle + kneeFold (positive kneeFold bends knee backward)
-        const shinAngle = thighAngle + kneeFold;
-        const ankle = {
-            x: knee.x + Math.sin(shinAngle) * this.SHIN_LENGTH,
-            y: knee.y + Math.cos(shinAngle) * this.SHIN_LENGTH,
-        };
-        return { knee, ankle };
-    }
-
-    /**
-     * Inverse Kinematics — 2-bone leg, knee bends FORWARD (in running direction)
-     * Uses law of cosines.  Knee always prefers the forward-bent solution.
-     */
-    private _legIK(hip: Vec2, ankle: Vec2): { knee: Vec2 } {
-        const dx = ankle.x - hip.x;
-        const dy = ankle.y - hip.y;
-        const dist = Math.min(Math.hypot(dx, dy), this.THIGH_LENGTH + this.SHIN_LENGTH - 1);
-
-        const baseAngle = Math.atan2(dx, dy); // angle of hip→ankle vs vertical
-        const cosAlpha  = (
-            this.THIGH_LENGTH * this.THIGH_LENGTH +
-            dist              * dist              -
-            this.SHIN_LENGTH  * this.SHIN_LENGTH
-        ) / (2 * this.THIGH_LENGTH * dist);
-        const alpha = Math.acos(Math.max(-1, Math.min(1, cosAlpha)));
-
-        // Knee forward → subtract alpha from baseAngle (knee pops to the left / fwd)
-        const thighAngle = baseAngle - alpha;
-        return {
-            knee: {
-                x: hip.x + Math.sin(thighAngle) * this.THIGH_LENGTH,
-                y: hip.y + Math.cos(thighAngle) * this.THIGH_LENGTH,
-            }
-        };
-    }
-
-    /** Rebuild spine + shoulders + head from hip */
-    private _rebuildUpperBody(hip: Vec2, spineAngle: number): void {
-        // Spine runs from hip UPWARD at spineAngle vs vertical
-        this.shoulderMid = {
-            x: hip.x + Math.sin(spineAngle) * this.NECK_TO_HIP_LENGTH,
-            y: hip.y - Math.cos(spineAngle) * this.NECK_TO_HIP_LENGTH,
-        };
-        // Shoulder bar: perpendicular to spine direction, ±10 px
-        this.frontShoulder = { x: this.shoulderMid.x - 10, y: this.shoulderMid.y };
-        this.backShoulder  = { x: this.shoulderMid.x + 10, y: this.shoulderMid.y };
-        // Head sits ~20 px above shoulder mid
-        this.headCenter = {
-            x: this.shoulderMid.x + Math.sin(spineAngle) * 12,
-            y: this.shoulderMid.y - 20,
-        };
-    }
-
-    /** Quick FK for initial pose (called once in constructor) */
-    private _rebuildLegs(): void {
-        // LEFT — reaching forward for heel strike
-        const fkL = this._legFK(this.currentLeftHipPosition, -0.65, 0.10);
-        this.leftKnee  = fkL.knee;
-        this.leftAnkle = fkL.ankle;
-        // RIGHT — toe-off, fully extended back
-        const fkR = this._legFK(this.currentRightHipPosition, 0.85, 0.10);
-        this.rightKnee  = fkR.knee;
-        this.rightAnkle = fkR.ankle;
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    //  setInitialRunPose — kept for external callers, delegates to _rebuildLegs
     // ─────────────────────────────────────────────────────────────────────────
     public setInitialRunPose(): void {
-        const hip = this.currentHipPosition;
-        this.currentLeftHipPosition  = { x: hip.x - 10, y: hip.y };
-        this.currentRightHipPosition = { x: hip.x + 10, y: hip.y };
-        this._rebuildUpperBody(hip, -0.20);
-        this._rebuildLegs();
+        this.applyKeyframePose(Bowler.STATIC_FRAMES[0], this.currentHipPosition.x);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
