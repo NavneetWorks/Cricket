@@ -26,6 +26,8 @@ export default class Renderer{
     public debugSelectedFrames: number[] = []; // Empty = all, or 1-based indices e.g. [3, 6, 7]
     public debugFrameSource: 'RUNUP' | 'JUMP' = 'RUNUP';
 
+    public cameraX: number = 0;
+
     public useImageGround: boolean = true;
     private groundImage: HTMLImageElement;
 
@@ -48,85 +50,37 @@ export default class Renderer{
             }
         });
     }
+
+    private updateCamera() {
+        if (this.gameMode === 'NEW_BOWLER' || this.gameMode === 'BOWLING') {
+            // Anchor bowler near right edge with ~50px margin for back leg/foot
+            const rightOffset = 120; // leaves 50px gap from right canvas border
+            const targetCamX = this.bowler.currentHipPosition.x - (CANVAS_WIDTH - rightOffset);
+            this.cameraX = Math.max(0, targetCamX);
+        } else {
+            this.cameraX = 0;
+        }
+    }
+
     public render(alpha: number = 1){
         this.ctx.clearRect(
             0,0,CANVAS_WIDTH,CANVAS_HEIGHT
         );
 
         if (this.gameMode === 'DEBUG_13_FRAMES') {
-            this.drawSky();
-            this.drawGround();
-            const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
-
-            // Draw ground baseline
-            this.ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
-            this.ctx.lineWidth = 2;
-            this.ctx.setLineDash([8, 4]);
-            this.ctx.beginPath();
-            this.ctx.moveTo(0, groundY);
-            this.ctx.lineTo(CANVAS_WIDTH, groundY);
-            this.ctx.stroke();
-            this.ctx.setLineDash([]);
-
-            // Choose keyframe array source
-            const sourceFrames = this.debugFrameSource === 'JUMP' ? Bowler.PRE_DELIVERY_JUMP : Bowler.STATIC_FRAMES;
-            const totalAvailable = sourceFrames.length;
-
-            // Determine 0-based frame indices to render
-            let indicesToRender: number[] = [];
-            if (this.debugSelectedFrames && this.debugSelectedFrames.length > 0) {
-                indicesToRender = this.debugSelectedFrames
-                    .map(n => n - 1) // convert 1-based to 0-based
-                    .filter(idx => idx >= 0 && idx < totalAvailable);
-            }
-
-            // If no valid filter specified, render all available frames
-            if (indicesToRender.length === 0) {
-                for (let i = 0; i < totalAvailable; i++) indicesToRender.push(i);
-            }
-
-            // Clean layout spacing calculations
-            const count = indicesToRender.length;
-            const margin = 100;
-            const usableWidth = CANVAS_WIDTH - margin * 2;
-            const spacing = count > 1 ? usableWidth / (count - 1) : 0;
-
-            indicesToRender.forEach((frameIdx, order) => {
-                const xPos = count === 1 ? CANVAS_WIDTH / 2 : CANVAS_WIDTH - margin - order * spacing;
-
-                // Render skeleton pose
-                this.bowler.drawStaticPose(this.ctx, frameIdx, xPos, groundY, sourceFrames);
-
-                // Render Frame Number Badge above skeleton
-                const labelText = `FRAME ${frameIdx + 1}`;
-                const badgeY = groundY - 260;
-
-                this.ctx.save();
-                this.ctx.font = "bold 13px Inter, Arial, sans-serif";
-                const textWidth = this.ctx.measureText(labelText).width;
-                
-                // Badge background pill
-                this.ctx.fillStyle = this.debugFrameSource === 'JUMP' ? "rgba(225, 29, 72, 0.9)" : "rgba(139, 92, 246, 0.9)";
-                this.ctx.beginPath();
-                this.ctx.roundRect(xPos - textWidth / 2 - 10, badgeY - 14, textWidth + 20, 24, 6);
-                this.ctx.fill();
-                this.ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
-                this.ctx.lineWidth = 1;
-                this.ctx.stroke();
-
-                // Text
-                this.ctx.fillStyle = "#ffffff";
-                this.ctx.textAlign = "center";
-                this.ctx.textBaseline = "middle";
-                this.ctx.fillText(labelText, xPos, badgeY - 2);
-                this.ctx.restore();
-            });
-
+            this.drawDebug13Frames();
             return;
         }
 
+        this.updateCamera();
+
         this.drawSky();
         this.drawGround();
+
+        // 🎥 Translate World Entities by -cameraX for camera tracking
+        this.ctx.save();
+        this.ctx.translate(-this.cameraX, 0);
+
         this.wicket.draw(this.ctx);
 
         // 🏏 Bat & Batsman Skeleton ONLY drawn in BATTING mode:
@@ -140,7 +94,7 @@ export default class Renderer{
         }
 
         // 🏏 Bowler End Wicket (Right Wicket at X = CANVAS_WIDTH - 250 = 1550px) drawn BEFORE bowler
-        this.wicket.drawAt(this.ctx, CANVAS_WIDTH - 250);
+        this.wicket.drawAt(this.ctx, CANVAS_WIDTH - 50);
 
         // 🏃 Bowler Skeleton draw in NEW_BOWLER, BOWLING, and BATTING modes:
         if (this.gameMode === 'NEW_BOWLER' || this.gameMode === 'BOWLING' || this.gameMode === 'BATTING') {
@@ -148,6 +102,9 @@ export default class Renderer{
         }
 
         this.ball.draw(this.ctx, alpha);
+
+        this.ctx.restore(); // Restore context for fixed HUD / UI overlays
+
         this.drawDebug();
 
         // 📌 Bat control overlay ONLY in BATTING mode:
@@ -157,6 +114,77 @@ export default class Renderer{
 
         this.drawMiniScreen(alpha);
     }
+
+    private drawDebug13Frames() {
+        this.drawSky();
+        this.drawGround();
+        const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
+
+        // Draw ground baseline
+        this.ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+        this.ctx.lineWidth = 2;
+        this.ctx.setLineDash([8, 4]);
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, groundY);
+        this.ctx.lineTo(CANVAS_WIDTH, groundY);
+        this.ctx.stroke();
+        this.ctx.setLineDash([]);
+
+        // Choose keyframe array source
+        const sourceFrames = this.debugFrameSource === 'JUMP' ? Bowler.PRE_DELIVERY_JUMP : Bowler.STATIC_FRAMES;
+        const totalAvailable = sourceFrames.length;
+
+        // Determine 0-based frame indices to render
+        let indicesToRender: number[] = [];
+        if (this.debugSelectedFrames && this.debugSelectedFrames.length > 0) {
+            indicesToRender = this.debugSelectedFrames
+                .map(n => n - 1) // convert 1-based to 0-based
+                .filter(idx => idx >= 0 && idx < totalAvailable);
+        }
+
+        // If no valid filter specified, render all available frames
+        if (indicesToRender.length === 0) {
+            for (let i = 0; i < totalAvailable; i++) indicesToRender.push(i);
+        }
+
+        // Clean layout spacing calculations
+        const count = indicesToRender.length;
+        const margin = 100;
+        const usableWidth = CANVAS_WIDTH - margin * 2;
+        const spacing = count > 1 ? usableWidth / (count - 1) : 0;
+
+        indicesToRender.forEach((frameIdx, order) => {
+            const xPos = count === 1 ? CANVAS_WIDTH / 2 : CANVAS_WIDTH - margin - order * spacing;
+
+            // Render skeleton pose
+            this.bowler.drawStaticPose(this.ctx, frameIdx, xPos, groundY, sourceFrames);
+
+            // Render Frame Number Badge above skeleton
+            const labelText = `FRAME ${frameIdx + 1}`;
+            const badgeY = groundY - 260;
+
+            this.ctx.save();
+            this.ctx.font = "bold 13px Inter, Arial, sans-serif";
+            const textWidth = this.ctx.measureText(labelText).width;
+            
+            // Badge background pill
+            this.ctx.fillStyle = this.debugFrameSource === 'JUMP' ? "rgba(225, 29, 72, 0.9)" : "rgba(139, 92, 246, 0.9)";
+            this.ctx.beginPath();
+            this.ctx.roundRect(xPos - textWidth / 2 - 10, badgeY - 14, textWidth + 20, 24, 6);
+            this.ctx.fill();
+            this.ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
+            this.ctx.lineWidth = 1;
+            this.ctx.stroke();
+
+            // Text
+            this.ctx.fillStyle = "#ffffff";
+            this.ctx.textAlign = "center";
+            this.ctx.textBaseline = "middle";
+            this.ctx.fillText(labelText, xPos, badgeY - 2);
+            this.ctx.restore();
+        });
+    }
+
     private drawOverlay() {
         if (!this.input.isMouseActive) {
             this.ctx.save();
@@ -196,12 +224,73 @@ export default class Renderer{
         t = ((t ^ (t >>> 13)) * 3266489917) >>> 0;
         return ((t ^ (t >>> 16)) >>> 0) / 4294967296; // Returns 0.0 to 1.0
     }
-        private drawGround(){
-        const groundY = CANVAS_HEIGHT - GROUND_HEIGHT; 
-        
-        // Fast 60-144 FPS Solid Ground Fill (Zero Image/Loop Overhead)
-        this.ctx.fillStyle = GAME_COLORS.GROUND; // "#3CB043" (Solid Green)
+    private drawGround() {
+        const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
+
+        // 1. BASE SOLID GROUND FILL
+        this.ctx.fillStyle = GAME_COLORS.GROUND; // "#3CB043"
         this.ctx.fillRect(0, groundY, CANVAS_WIDTH, GROUND_HEIGHT);
+
+        // 2. ALTERNATING LAWN MOWER STRIPES (Every 100px in world space)
+        const stripeWidth = 100;
+        const minWorldX = -500;
+        const maxWorldX = 4000;
+
+        for (let wx = minWorldX; wx <= maxWorldX; wx += stripeWidth) {
+            const screenX = wx - this.cameraX;
+            if (screenX + stripeWidth < 0 || screenX > CANVAS_WIDTH) continue;
+
+            const stripeIndex = Math.floor((wx - minWorldX) / stripeWidth);
+            if (stripeIndex % 2 === 0) {
+                this.ctx.fillStyle = "rgba(0, 0, 0, 0.08)"; // Darker green stripe overlay
+                this.ctx.fillRect(screenX, groundY, stripeWidth, GROUND_HEIGHT);
+            }
+        }
+
+        // 3. DENSE PROCEDURAL GRASS SPIKES ALONG TOP GROUND EDGE
+        this.ctx.strokeStyle = "#1b5220";
+        this.ctx.lineWidth = 1.2;
+
+        const bladeSpacing = 16; // Grass tuft every 16px
+        for (let wx = minWorldX; wx <= maxWorldX; wx += bladeSpacing) {
+            const screenX = wx - this.cameraX;
+            if (screenX < -20 || screenX > CANVAS_WIDTH + 20) continue;
+
+            // Deterministic height pseudo-noise using world position wx
+            const noise = this.getStaticNoise(wx, 42);
+            const bladeH = 6 + noise * 10; // 6px to 16px height spikes
+            const tilt = (this.getStaticNoise(wx, 99) - 0.5) * 6; // Slight left/right tilt
+
+            // Draw grass tuft (3 blades per tuft)
+            this.ctx.beginPath();
+            // Center blade
+            this.ctx.moveTo(screenX, groundY);
+            this.ctx.lineTo(screenX + tilt, groundY - bladeH);
+            // Left blade
+            this.ctx.moveTo(screenX - 3, groundY);
+            this.ctx.lineTo(screenX - 3 + tilt - 3, groundY - bladeH * 0.75);
+            // Right blade
+            this.ctx.moveTo(screenX + 3, groundY);
+            this.ctx.lineTo(screenX + 3 + tilt + 3, groundY - bladeH * 0.85);
+            this.ctx.stroke();
+        }
+
+        // 4. RUN-UP DISTANCE CHALK MARKERS & CREASE LINES
+        const chalkMarkerPositions = [150, 700, 1000, 1300, 1600, 1900, 2200, 2500];
+
+        this.ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+        this.ctx.lineWidth = 2.0;
+
+        chalkMarkerPositions.forEach(wx => {
+            const screenX = wx - this.cameraX;
+            if (screenX >= -50 && screenX <= CANVAS_WIDTH + 50) {
+                // Vertical chalk line
+                this.ctx.beginPath();
+                this.ctx.moveTo(screenX, groundY);
+                this.ctx.lineTo(screenX, groundY + 25);
+                this.ctx.stroke();
+            }
+        });
     }
 
     // private drawGround(){

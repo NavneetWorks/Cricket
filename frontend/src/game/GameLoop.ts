@@ -170,23 +170,41 @@ export default class GameLoop{
             this.ball.prevPos.y = bowler.leftWrist.y;
         };
 
-        // 1. Mouse Click (Left Click): BATTING me start bowler delivery, NEW_BOWLER me start runup
+        // 1. Mouse Click (Left Click): BATTING & NEW_BOWLER me start bowler delivery
         window.addEventListener("mousedown", (event) => {
             if (event.button !== 0) return; // Only Left Click
+            const bowler = this.renderer.bowler;
             if (!this.isOnlineMode && this.renderer.gameMode === 'BATTING') {
                 startBowlerDelivery();
             } else if (this.renderer.gameMode === 'NEW_BOWLER') {
-                this.renderer.bowler.startRunning();
+                if (!bowler.isRunning && !bowler.isExecutingJump) {
+                    bowler.resetToIdle();
+                    bowler.currentHipPosition.x = 3*CANVAS_WIDTH; // Far right starting position for camera tracking run-up
+                    bowler.startRunning();
+                    this.ball.isHeldInHand = true;
+                    this.ball.isActive = true;
+                } else if (bowler.isRunning) {
+                    bowler.triggerPreJump();
+                }
             }
         });
 
-        // 2. Keyboard Space Key: BATTING me start bowler delivery, NEW_BOWLER me trigger pre-jump transition
+        // 2. Keyboard Space Key: BATTING & NEW_BOWLER me start delivery or trigger pre-jump
         window.addEventListener("keydown", (event) => {
             if (event.code === "Space") {
+                const bowler = this.renderer.bowler;
                 if (!this.isOnlineMode && this.renderer.gameMode === 'BATTING') {
                     startBowlerDelivery();
                 } else if (this.renderer.gameMode === 'NEW_BOWLER') {
-                    this.renderer.bowler.triggerPreJump();
+                    if (!bowler.isRunning && !bowler.isExecutingJump) {
+                        bowler.resetToIdle();
+                        bowler.currentHipPosition.x = 2600;
+                        bowler.startRunning();
+                        this.ball.isHeldInHand = true;
+                        this.ball.isActive = true;
+                    } else if (bowler.isRunning) {
+                        bowler.triggerPreJump();
+                    }
                 }
             }
         });
@@ -458,7 +476,57 @@ private getProjectileStateWithBounce(
             }
             this.renderer.wicket.checkHit(this.ball, batHitResult.hit, batHitResult.hitSubStep);
         } else if (this.renderer.gameMode === 'NEW_BOWLER') {
-            this.renderer.bowler.update(dt);
+            const bowler = this.renderer.bowler;
+
+            // 🏃 A/D or Arrow keys move bowler character Left / Right
+            const moveSpeed = 450; // px/sec movement speed
+            let moved = false;
+            if (this.input.isKeyPressed("a") || this.input.isKeyPressed("KeyA") || this.input.isKeyPressed("ArrowLeft")) {
+                bowler.currentHipPosition.x -= moveSpeed * dt;
+                moved = true;
+            }
+            if (this.input.isKeyPressed("d") || this.input.isKeyPressed("KeyD") || this.input.isKeyPressed("ArrowRight")) {
+                bowler.currentHipPosition.x += moveSpeed * dt;
+                moved = true;
+            }
+
+            if (moved && !bowler.isRunning && !bowler.isExecutingJump) {
+                bowler.setInitialRunPose();
+            }
+
+            bowler.update(dt);
+
+            if (this.ball.isHeldInHand) {
+                this.ball.pos.x = bowler.leftWrist.x;
+                this.ball.pos.y = bowler.leftWrist.y;
+                this.ball.prevPos.x = bowler.leftWrist.x;
+                this.ball.prevPos.y = bowler.leftWrist.y;
+            }
+
+            if (this.ball.isHeldInHand && (bowler.isRunning || bowler.isPreJumpTransitioning || bowler.isExecutingJump)) {
+                this.ball.isActive = true;
+
+                // Auto pre-jump trigger near crease (x <= 750)
+                if (bowler.isRunning && bowler.currentHipPosition.x <= 750 && !bowler.isPreJumpTransitioning && !bowler.isExecutingJump) {
+                    bowler.triggerPreJump();
+                }
+
+                // Release ball dynamically synchronized between Keyframe 38 and 39
+                if (bowler.isExecutingJump && bowler.jumpPhase >= this.targetReleasePhase && !bowler.hasReleasedBall) {
+                    bowler.hasReleasedBall = true;
+                    this.ball.isHeldInHand = false;
+
+                    this.renderer.wicket.reset();
+                    this.ball.throwBall(
+                        bowler.leftWrist.x,
+                        bowler.leftWrist.y,
+                        this.currentDeliverySpeed,
+                        this.currentDeliveryAngle
+                    );
+                }
+            }
+            this.ball.update(dt);
+            this.renderer.wicket.update(dt);
         } else {
             // BOWLING MODE: Update bowling area, ball & wicket
             this.renderer.bowlingArea.releaseDelaySeconds = (this.isOnlineMode && this.network) ? this.network.getRTT() / 1000 : 0;
