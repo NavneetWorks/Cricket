@@ -23,6 +23,9 @@ export default class Renderer{
     public bowlingArea: BowlingArea;
     
     public gameMode: 'BATTING' | 'BOWLING' | 'NEW_BOWLER' | 'DEBUG_13_FRAMES' = 'BATTING';
+    public debugSelectedFrames: number[] = []; // Empty = all, or 1-based indices e.g. [3, 6, 7]
+    public debugFrameSource: 'RUNUP' | 'JUMP' = 'RUNUP';
+
     public useImageGround: boolean = true;
     private groundImage: HTMLImageElement;
 
@@ -53,38 +56,72 @@ export default class Renderer{
         if (this.gameMode === 'DEBUG_13_FRAMES') {
             this.drawSky();
             this.drawGround();
-            // Upper Row Ground Level for Frames 1 to 14
-            const upperGroundY = 410;
+            const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
 
-            // Draw baseline for Upper Row
+            // Draw ground baseline
             this.ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
             this.ctx.lineWidth = 2;
             this.ctx.setLineDash([8, 4]);
             this.ctx.beginPath();
-            this.ctx.moveTo(0, upperGroundY);
-            this.ctx.lineTo(CANVAS_WIDTH, upperGroundY);
+            this.ctx.moveTo(0, groundY);
+            this.ctx.lineTo(CANVAS_WIDTH, groundY);
             this.ctx.stroke();
             this.ctx.setLineDash([]);
 
-            // Dynamic 2-row rendering loop for ALL frames in Bowler.STATIC_FRAMES (supports 38+ frames)
-            const totalFrames = Bowler.STATIC_FRAMES.length;
-            const halfFrames = totalFrames > 28 ? Math.ceil(totalFrames / 2) : 14;
-            const startX = CANVAS_WIDTH - 40;
-            const spacing = Math.min(125, (CANVAS_WIDTH - 80) / halfFrames);
-            const bottomGroundY = CANVAS_HEIGHT - GROUND_HEIGHT;
+            // Choose keyframe array source
+            const sourceFrames = this.debugFrameSource === 'JUMP' ? Bowler.PRE_DELIVERY_JUMP : Bowler.STATIC_FRAMES;
+            const totalAvailable = sourceFrames.length;
 
-            for (let i = 0; i < totalFrames; i++) {
-                if (i < halfFrames) {
-                    // Upper Row
-                    const xPos = startX - i * spacing;
-                    this.bowler.drawStaticPose(this.ctx, i, xPos, upperGroundY);
-                } else {
-                    // Bottom Row (Row 2)
-                    const row2Idx = i - halfFrames;
-                    const xPos = startX - row2Idx * spacing;
-                    this.bowler.drawStaticPose(this.ctx, i, xPos, bottomGroundY);
-                }
+            // Determine 0-based frame indices to render
+            let indicesToRender: number[] = [];
+            if (this.debugSelectedFrames && this.debugSelectedFrames.length > 0) {
+                indicesToRender = this.debugSelectedFrames
+                    .map(n => n - 1) // convert 1-based to 0-based
+                    .filter(idx => idx >= 0 && idx < totalAvailable);
             }
+
+            // If no valid filter specified, render all available frames
+            if (indicesToRender.length === 0) {
+                for (let i = 0; i < totalAvailable; i++) indicesToRender.push(i);
+            }
+
+            // Clean layout spacing calculations
+            const count = indicesToRender.length;
+            const margin = 100;
+            const usableWidth = CANVAS_WIDTH - margin * 2;
+            const spacing = count > 1 ? usableWidth / (count - 1) : 0;
+
+            indicesToRender.forEach((frameIdx, order) => {
+                const xPos = count === 1 ? CANVAS_WIDTH / 2 : CANVAS_WIDTH - margin - order * spacing;
+
+                // Render skeleton pose
+                this.bowler.drawStaticPose(this.ctx, frameIdx, xPos, groundY, sourceFrames);
+
+                // Render Frame Number Badge above skeleton
+                const labelText = `FRAME ${frameIdx + 1}`;
+                const badgeY = groundY - 260;
+
+                this.ctx.save();
+                this.ctx.font = "bold 13px Inter, Arial, sans-serif";
+                const textWidth = this.ctx.measureText(labelText).width;
+                
+                // Badge background pill
+                this.ctx.fillStyle = this.debugFrameSource === 'JUMP' ? "rgba(225, 29, 72, 0.9)" : "rgba(139, 92, 246, 0.9)";
+                this.ctx.beginPath();
+                this.ctx.roundRect(xPos - textWidth / 2 - 10, badgeY - 14, textWidth + 20, 24, 6);
+                this.ctx.fill();
+                this.ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
+                this.ctx.lineWidth = 1;
+                this.ctx.stroke();
+
+                // Text
+                this.ctx.fillStyle = "#ffffff";
+                this.ctx.textAlign = "center";
+                this.ctx.textBaseline = "middle";
+                this.ctx.fillText(labelText, xPos, badgeY - 2);
+                this.ctx.restore();
+            });
+
             return;
         }
 

@@ -5,25 +5,6 @@ export interface Vec2 {
     y: number;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  BOWLING RUN-UP – Biomechanically Accurate Gait System
-//  Based on frame-by-frame analysis of screenshots 1.png → 7.png
-//
-//  COORDINATE CONVENTION:
-//    x  → positive = right on canvas (bowler runs LEFT, so x decreases)
-//    y  → positive = DOWN  (0 = top)
-//
-//  THIGH ANGLE  (relative to global vertical, i.e. straight-down = 0):
-//    negative  = leg swings FORWARD (knee ahead of hip)
-//    positive  = leg extends BACKWARD (knee behind hip)
-//
-//  KNEE FOLD    (local bend ADDED to thigh angle, always ≥ 0):
-//    0 = fully straight   |  π = fully folded (shin points up)
-//
-//  ANKLE DIRECTION: shin terminus always computed from knee forward.
-// ─────────────────────────────────────────────────────────────────────────────
-//  EXPLICIT KEYFRAME ARCHITECTURE (DEGREES)
-// ─────────────────────────────────────────────────────────────────────────────
 
 export interface KeyframePose {
     // 4. Spine
@@ -58,19 +39,20 @@ export interface KeyframePose {
 export class Bowler {
 
     // ── Segment lengths ────────────────────────────────────────────────────
-    public readonly TOTAL_RIGHT_ARM_LENGTH = 3.4 * PLAYER_LENGTH_FACTOR;
-    public readonly TOTAL_LEFT_ARM_LENGTH  = 3.5 * PLAYER_LENGTH_FACTOR;
+    private readonly BOWLER_SCALE = 1.2;
+    public readonly TOTAL_RIGHT_ARM_LENGTH = 3.4 * PLAYER_LENGTH_FACTOR*this.BOWLER_SCALE;
+    public readonly TOTAL_LEFT_ARM_LENGTH  = 3.5 * PLAYER_LENGTH_FACTOR*this.BOWLER_SCALE;
 
     public readonly FRONT_UPPER_ARM = this.TOTAL_LEFT_ARM_LENGTH  * 0.5;
     public readonly FRONT_LOWER_ARM = this.TOTAL_LEFT_ARM_LENGTH  - this.FRONT_UPPER_ARM;
     public readonly BACK_UPPER_ARM  = this.TOTAL_RIGHT_ARM_LENGTH * 0.5;
     public readonly BACK_LOWER_ARM  = this.TOTAL_RIGHT_ARM_LENGTH - this.BACK_UPPER_ARM;
 
-    public readonly FULL_LEG_LENGTH     = 5.2 * PLAYER_LENGTH_FACTOR;
+    public readonly FULL_LEG_LENGTH     = 5.2 * PLAYER_LENGTH_FACTOR*this.BOWLER_SCALE;
     public readonly THIGH_LENGTH        = this.FULL_LEG_LENGTH * 0.50;
     public readonly SHIN_LENGTH         = this.FULL_LEG_LENGTH - this.THIGH_LENGTH;
 
-    public readonly NECK_TO_HIP_LENGTH  = 3.4 * PLAYER_LENGTH_FACTOR;
+    public readonly NECK_TO_HIP_LENGTH  = 3.4 * PLAYER_LENGTH_FACTOR*this.BOWLER_SCALE;
     
     // ── World positions (computed every frame) ────────────────────────────
     public currentHipPosition:      Vec2 = { x: 0, y: 0 };
@@ -7585,6 +7567,114 @@ export class Bowler {
     ];
 
     // ─────────────────────────────────────────────────────────────────────────
+    //  PRE-DELIVERY JUMP & LANDING KEYFRAMES ARRAY (For tuning gather, landing, & delivery)
+    // ─────────────────────────────────────────────────────────────────────────
+    public static readonly PRE_DELIVERY_JUMP: KeyframePose[] = [
+        {
+            // FRAME 1: JUMP GATHER / TAKEOFF (Pushing off back foot into the air)
+            spineAngleDeg: -125.0,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 100.0,
+            leftUpperArmAngleDeg: 110.0,
+            leftElbowAngleDeg: 80.0,
+            rightUpperArmAngleDeg: -30.0,
+            rightElbowAngleDeg: 90.0,
+            pelvisJointDist: 10.0,
+            pelvisJointAngleDeg: 100.0,
+            leftThighAngleDeg: 170.0,
+            rightThighAngleDeg: 60.0,
+            leftKneeAngleDeg: -30.0,
+            rightKneeAngleDeg: -60.0,
+            hipYOffset: -25.0
+        },
+        {
+            // FRAME 2: AIRBORNE APEX (Both feet off ground, high gather elevation)
+            spineAngleDeg: -115.0,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 100.0,
+            leftUpperArmAngleDeg: 140.0,
+            leftElbowAngleDeg: 60.0,
+            rightUpperArmAngleDeg: -80.0,
+            rightElbowAngleDeg: 45.0,
+            pelvisJointDist: 10.0,
+            pelvisJointAngleDeg: 100.0,
+            leftThighAngleDeg: 150.0,
+            rightThighAngleDeg: 90.0,
+            leftKneeAngleDeg: -55.0,
+            rightKneeAngleDeg: -75.0,
+            hipYOffset: -60.0
+        },
+        {
+            // FRAME 3: BACK FOOT LANDING (Back leg touches crease, torso side-on)
+            spineAngleDeg: -105.0,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 100.0,
+            leftUpperArmAngleDeg: 160.0,
+            leftElbowAngleDeg: 40.0,
+            rightUpperArmAngleDeg: -140.0,
+            rightElbowAngleDeg: 20.0,
+            pelvisJointDist: 10.0,
+            pelvisJointAngleDeg: 100.0,
+            leftThighAngleDeg: 110.0,
+            rightThighAngleDeg: 160.0,
+            leftKneeAngleDeg: -80.0,
+            rightKneeAngleDeg: -20.0,
+            hipYOffset: -15.0
+        },
+        {
+            // FRAME 4: FRONT FOOT PLANT / STRIDE (Front leg plants firmly, chest turning front-on)
+            spineAngleDeg: -95.0,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 100.0,
+            leftUpperArmAngleDeg: 120.0,
+            leftElbowAngleDeg: 50.0,
+            rightUpperArmAngleDeg: -180.0,
+            rightElbowAngleDeg: 10.0,
+            pelvisJointDist: 10.0,
+            pelvisJointAngleDeg: 100.0,
+            leftThighAngleDeg: 60.0,
+            rightThighAngleDeg: 175.0,
+            leftKneeAngleDeg: -15.0,
+            rightKneeAngleDeg: -10.0,
+            hipYOffset: -5.0
+        },
+        {
+            // FRAME 5: BALL RELEASE EXTENSION (Torso flexing forward over front leg)
+            spineAngleDeg: -70.0,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 100.0,
+            leftUpperArmAngleDeg: 40.0,
+            leftElbowAngleDeg: 90.0,
+            rightUpperArmAngleDeg: 60.0,
+            rightElbowAngleDeg: 5.0,
+            pelvisJointDist: 10.0,
+            pelvisJointAngleDeg: 100.0,
+            leftThighAngleDeg: 50.0,
+            rightThighAngleDeg: 140.0,
+            leftKneeAngleDeg: -5.0,
+            rightKneeAngleDeg: -45.0,
+            hipYOffset: 10.0
+        },
+        {
+            // FRAME 6: FOLLOW-THROUGH (Deceleration & falling forward)
+            spineAngleDeg: -50.0,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 100.0,
+            leftUpperArmAngleDeg: 10.0,
+            leftElbowAngleDeg: 110.0,
+            rightUpperArmAngleDeg: 120.0,
+            rightElbowAngleDeg: 30.0,
+            pelvisJointDist: 10.0,
+            pelvisJointAngleDeg: 100.0,
+            leftThighAngleDeg: 45.0,
+            rightThighAngleDeg: 110.0,
+            leftKneeAngleDeg: -35.0,
+            rightKneeAngleDeg: -70.0,
+            hipYOffset: 25.0
+        }
+    ];
+
+    // ─────────────────────────────────────────────────────────────────────────
     constructor(startX = 1100) {
         this.currentHipPosition = { x: startX, y: 0 };
         this.setInitialRunPose();
@@ -7592,8 +7682,8 @@ export class Bowler {
 
     // ─────────────────────────────────────────────────────────────────────────
     public update(dt: number): void {
-        // Smoothly interpolate run intensity
-        const accel = 1.5; // Smooth acceleration factor
+        // Smoothly interpolate run intensity gradually over runup
+        const accel = 0.90; // Fast punchy run-up acceleration factor
         this.runIntensity += (this.targetIntensity - this.runIntensity) * accel * dt;
 
         if (this.runIntensity > 0.01) {
@@ -7771,19 +7861,26 @@ export class Bowler {
         };
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Adjustable variable for how much physical distance one full cycle of 14 frames covers.
-    public runCycleDistance: number = 420; 
+    // Dynamic distance one full cycle of 2 steps covers, calculated from bowler leg length
+    public get runCycleDistance(): number {
+        return this.FULL_LEG_LENGTH * 3.1;
+    }
 
     public updateRunPose(dt: number): void {
-        // 1. Update frequency based on intensity
-        this.strideFrequency = 0.5 + 1 * this.runIntensity;
+        // 1. Dynamic Stride Frequency (Animation frame execution speed)
+        // Starts at slow step frequency (0.45 Hz) and accelerates smoothly to a sprint frequency (2.0 Hz)
+        const minFrequency = 0.45;
+        const maxFrequency = 2.00;
+        this.strideFrequency = minFrequency + (maxFrequency - minFrequency) * Math.pow(this.runIntensity, 1.1);
 
         // 2. Advance stride phase (0 to 1)
         this.stridePhase = (this.stridePhase + this.strideFrequency * dt) % 1.0;
 
-        // 3. Move body forward (left on canvas)
-        const horizontalSpeed = this.runCycleDistance * this.strideFrequency * this.runIntensity;
+        // 3. Forward speed locked directly to leg-length stride distance and frame execution rate
+        const pushImpulse = 0.85 + 0.35 * Math.abs(Math.sin(this.stridePhase * Math.PI * 2));
+        const rawSpeed = this.runCycleDistance * this.strideFrequency * pushImpulse;
+        const MAX_RUN_SPEED = 1200; // Constant top speed limit in px/sec
+        const horizontalSpeed = Math.min(rawSpeed, MAX_RUN_SPEED);
         this.currentHipPosition.x -= horizontalSpeed * dt;
 
         // Reset when off screen
@@ -8038,8 +8135,9 @@ export class Bowler {
         ctx.restore();
     }
 
-    public drawStaticPose(ctx: CanvasRenderingContext2D, frameIndex: number, worldX: number, customGroundY?: number): void {
-        const pose = Bowler.STATIC_FRAMES[frameIndex];
+    public drawStaticPose(ctx: CanvasRenderingContext2D, frameIndex: number, worldX: number, customGroundY?: number, customFrames?: KeyframePose[]): void {
+        const frames = customFrames || Bowler.STATIC_FRAMES;
+        const pose = frames[frameIndex];
         if (!pose) return;
 
         const deg2rad = Math.PI / 180;
