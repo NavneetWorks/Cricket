@@ -82,9 +82,12 @@ export class Bowler {
     public stridePhase: number = 0;
     public strideFrequency: number = 1.9;
 
-    // ── Pre-Jump Adaptive Transition & Freeze State ───────────────────────────
+    // ── Pre-Jump Adaptive Transition & Flight Execution State ───────────────────────────
     public isPreJumpTransitioning: boolean = false;
     public isPreJumpFrozen: boolean = false;
+    public isExecutingJump: boolean = false;
+    public jumpPhase: number = 0; // 0.0 to 1.0 progression through 42 frames
+
     private preJumpStartX: number = 0;
     private preJumpTargetDistance: number = 40; // Max ceiling 40px
     private preJumpStartPose: KeyframePose | null = null;
@@ -95,11 +98,13 @@ export class Bowler {
         this.isRunning = true;
         this.isPreJumpTransitioning = false;
         this.isPreJumpFrozen = false;
+        this.isExecutingJump = false;
+        this.jumpPhase = 0;
         this.targetIntensity = 1.0;
     }
 
     public triggerPreJump(): void {
-        if (!this.isRunning || this.isPreJumpTransitioning || this.isPreJumpFrozen) return;
+        if (!this.isRunning || this.isPreJumpTransitioning || this.isPreJumpFrozen || this.isExecutingJump) return;
 
         this.isPreJumpTransitioning = true;
         this.preJumpStartX = this.currentHipPosition.x;
@@ -136,6 +141,8 @@ export class Bowler {
         this.isRunning = false;
         this.isPreJumpTransitioning = false;
         this.isPreJumpFrozen = false;
+        this.isExecutingJump = false;
+        this.jumpPhase = 0;
         this.targetIntensity = 0.0;
         this.runIntensity = 0.0;
         this.stridePhase = 0;
@@ -8392,6 +8399,40 @@ export class Bowler {
         return Bowler.catmullRom(v0, v1, v2, v3, t);
     }
 
+    // Generator function that expands N base keyframes into 420+ ultra-dense Catmull-Rom sub-frames
+    public static generateExpandedFrames(baseFrames: KeyframePose[], targetCount: number = 420): KeyframePose[] {
+        const result: KeyframePose[] = [];
+        const totalBase = baseFrames.length;
+        if (totalBase === 0) return result;
+        if (totalBase === 1) return Array(targetCount).fill(baseFrames[0]);
+
+        for (let i = 0; i < targetCount; i++) {
+            const progress = i / (targetCount - 1);
+            const frameFloat = progress * (totalBase - 1);
+            const idx1 = Math.floor(frameFloat);
+            const idx0 = Math.max(0, idx1 - 1);
+            const idx2 = Math.min(totalBase - 1, idx1 + 1);
+            const idx3 = Math.min(totalBase - 1, idx1 + 2);
+            const t = frameFloat - Math.floor(frameFloat);
+
+            const pose0 = baseFrames[idx0];
+            const pose1 = baseFrames[idx1];
+            const pose2 = baseFrames[idx2];
+            const pose3 = baseFrames[idx3];
+
+            result.push(Bowler.interpolateCatmullRom(pose0, pose1, pose2, pose3, t));
+        }
+        return result;
+    }
+
+    private static _cachedExpandedJumpFrames: KeyframePose[] | null = null;
+    public static getExpandedJumpFrames(): KeyframePose[] {
+        if (!Bowler._cachedExpandedJumpFrames || Bowler._cachedExpandedJumpFrames.length === 0) {
+            Bowler._cachedExpandedJumpFrames = Bowler.generateExpandedFrames(Bowler.PRE_DELIVERY_JUMP, 420);
+        }
+        return Bowler._cachedExpandedJumpFrames;
+    }
+
     public static interpolateCatmullRom(p0: KeyframePose, p1: KeyframePose, p2: KeyframePose, p3: KeyframePose, t: number): KeyframePose {
         return {
             spineAngleDeg: Bowler.catmullRomDeg(p0.spineAngleDeg, p1.spineAngleDeg, p2.spineAngleDeg, p3.spineAngleDeg, t),
@@ -8536,10 +8577,54 @@ export class Bowler {
     }
 
     public updateRunPose(dt: number): void {
-        // A. Frozen State after Pre-Jump Transition Complete (Freeze at Frame 420 for inspection)
+        // A. Executing Jump Animation (420-Frame Expanded Catmull-Rom Ultra-FPS Interpolation)
+        if (this.isExecutingJump) {
+            // Slower, graceful jump playback duration (~2.8 seconds total duration)
+            this.jumpPhase += dt * (1.0 / 2.8);
+            if (this.jumpPhase >= 1.0) {
+                this.jumpPhase = 1.0;
+            }
+
+            const jumpFrames = Bowler.getExpandedJumpFrames();
+            const totalJumpFrames = jumpFrames.length;
+            const frameFloat = Math.min(totalJumpFrames - 1, this.jumpPhase * (totalJumpFrames - 1));
+            
+            const idx1 = Math.floor(frameFloat);
+            const idx0 = Math.max(0, idx1 - 1);
+            const idx2 = Math.min(totalJumpFrames - 1, idx1 + 1);
+            const idx3 = Math.min(totalJumpFrames - 1, idx1 + 2);
+            const t = frameFloat - Math.floor(frameFloat);
+
+            const pose0 = jumpFrames[idx0];
+            const pose1 = jumpFrames[idx1];
+            const pose2 = jumpFrames[idx2];
+            const pose3 = jumpFrames[idx3];
+
+            const interpolatedJumpPose = Bowler.interpolateCatmullRom(pose0, pose1, pose2, pose3, t);
+
+            // Slower forward ground velocity during jump trajectory (220 px/sec)
+            const jumpSpeed = 220;
+            if (this.jumpPhase < 1.0) {
+                this.currentHipPosition.x -= jumpSpeed * dt;
+            }
+
+            // Airborne flight gravity arc (Lift during takeoff, land at plant)
+            if (this.jumpPhase <= 0.6) {
+                const flightProgress = this.jumpPhase / 0.6;
+                const flightArc = Math.sin(flightProgress * Math.PI) * -35.0;
+                interpolatedJumpPose.hipYOffset += flightArc;
+            }
+
+            this.lastPoseSnapshot = interpolatedJumpPose;
+            this.applyKeyframePose(interpolatedJumpPose, this.currentHipPosition.x);
+            return;
+        }
+
+        // B. Frozen State after Jump Complete
         if (this.isPreJumpFrozen) {
-            const frame420 = Bowler.STATIC_FRAMES[419] || Bowler.STATIC_FRAMES[Bowler.STATIC_FRAMES.length - 1];
-            this.applyKeyframePose(frame420, this.currentHipPosition.x);
+            const jumpFrames = Bowler.getExpandedJumpFrames();
+            const lastFrame = jumpFrames[jumpFrames.length - 1] || Bowler.STATIC_FRAMES[419];
+            this.applyKeyframePose(lastFrame, this.currentHipPosition.x);
             return;
         }
 
@@ -8557,7 +8642,7 @@ export class Bowler {
         const MAX_RUN_SPEED = 1200; // Constant top speed limit in px/sec
         let horizontalSpeed = Math.min(rawSpeed, MAX_RUN_SPEED);
 
-        // B. Pre-Jump Transition State (Dynamic Adaptive Blend within max 40px)
+        // C. Pre-Jump Transition State (Dynamic Adaptive Blend within max 40px)
         if (this.isPreJumpTransitioning) {
             // Speed dip during gathering deceleration
             horizontalSpeed *= 0.65;
@@ -8582,10 +8667,11 @@ export class Bowler {
             this.lastPoseSnapshot = blendedPose;
             this.applyKeyframePose(blendedPose, this.currentHipPosition.x);
 
-            // Completion check
+            // Completion check -> Automatically launch into 42-Frame Jump Animation!
             if (alpha >= 1.0) {
                 this.isPreJumpTransitioning = false;
-                this.isPreJumpFrozen = true;
+                this.isExecutingJump = true;
+                this.jumpPhase = 0;
             }
             return;
         }
