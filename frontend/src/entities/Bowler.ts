@@ -7825,12 +7825,153 @@ export class Bowler {
     // ─────────────────────────────────────────────────────────────────────────
     //  DRAW DEBUG SKELETON
     // ─────────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    //  DRAW DEBUG SKELETON (Brett Lee Motion Tracking Overlay Style)
+    // ─────────────────────────────────────────────────────────────────────────
+    public drawMuscularLeg(
+        ctx: CanvasRenderingContext2D,
+        hip: Vec2,
+        knee: Vec2,
+        ankle: Vec2,
+        color: string = "#2563eb"
+    ): void {
+        // --- VECTOR MATH FOR CONTOURS ---
+        const tDx = knee.x - hip.x;
+        const tDy = knee.y - hip.y;
+        const tLen = Math.hypot(tDx, tDy) || 1;
+        const tUx = tDx / tLen;
+        const tUy = tDy / tLen;
+        const tNx = -tUy;
+        const tNy = tUx;
+
+        const sDx = ankle.x - knee.x;
+        const sDy = ankle.y - knee.y;
+        const sLen = Math.hypot(sDx, sDy) || 1;
+        const sUx = sDx / sLen;
+        const sUy = sDy / sLen;
+        const sNx = -sUy;
+        const sNy = sUx;
+
+        // --- TAPERED MUSCULAR THIGH & CALF DIMENSIONS ---
+        const hipRadius = 17.0;       // Upper thigh near hip
+        const quadBulgeRadius = 15.0; // Quad muscle bulge
+        const kneeRadius = 9.5;       // Knee joint
+
+        const midThighX = hip.x + tUx * (tLen * 0.5);
+        const midThighY = hip.y + tUy * (tLen * 0.5);
+
+        const calfBulgeRadius = 12.0; // Muscular calf bulge
+        const ankleRadius = 7.0;
+
+        const midShinX = knee.x + sUx * (sLen * 0.4);
+        const midShinY = knee.y + sUy * (sLen * 0.4);
+
+        ctx.save();
+
+        const upOffset = 14;
+        const hipUpX = hip.x - tUx * upOffset;
+        const hipUpY = hip.y - tUy * upOffset;
+
+        // 1. Muscular Thigh Base & Polygon
+        const thighGrad = ctx.createLinearGradient(hipUpX, hipUpY, knee.x, knee.y);
+        thighGrad.addColorStop(0, color);
+        thighGrad.addColorStop(0.5, "#3b82f6");
+        thighGrad.addColorStop(1, "#1d4ed8");
+
+        ctx.beginPath();
+        ctx.arc(hipUpX, hipUpY, hipRadius, 0, 2 * Math.PI);
+        ctx.fillStyle = thighGrad;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(hipUpX + tNx * hipRadius, hipUpY + tNy * hipRadius);
+        ctx.lineTo(midThighX + tNx * quadBulgeRadius, midThighY + tNy * quadBulgeRadius);
+        ctx.lineTo(knee.x + tNx * kneeRadius, knee.y + tNy * kneeRadius);
+        ctx.lineTo(knee.x - tNx * kneeRadius, knee.y - tNy * kneeRadius);
+        ctx.lineTo(midThighX - tNx * quadBulgeRadius, midThighY - tNy * quadBulgeRadius);
+        ctx.lineTo(hipUpX - tNx * hipRadius, hipUpY - tNy * hipRadius);
+        ctx.closePath();
+
+        ctx.fillStyle = thighGrad;
+        ctx.fill();
+        ctx.strokeStyle = "#0f172a";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // 2. Muscular Calf / Shin Polygon
+        ctx.beginPath();
+        ctx.moveTo(knee.x + sNx * kneeRadius, knee.y + sNy * kneeRadius);
+        ctx.lineTo(midShinX + sNx * calfBulgeRadius, midShinY + sNy * calfBulgeRadius);
+        ctx.lineTo(ankle.x + sNx * ankleRadius, ankle.y + sNy * ankleRadius);
+        ctx.lineTo(ankle.x - sNx * ankleRadius, ankle.y - sNy * ankleRadius);
+        ctx.lineTo(midShinX - sNx * calfBulgeRadius, midShinY - sNy * calfBulgeRadius);
+        ctx.lineTo(knee.x - sNx * kneeRadius, knee.y - sNy * kneeRadius);
+        ctx.closePath();
+
+        const shinGrad = ctx.createLinearGradient(knee.x, knee.y, ankle.x, ankle.y);
+        shinGrad.addColorStop(0, "#1d4ed8");
+        shinGrad.addColorStop(1, "#1e3a8a");
+        ctx.fillStyle = shinGrad;
+        ctx.fill();
+
+        ctx.strokeStyle = "#0f172a";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // 3. Smooth Circular Knee Cap Joint (Batsman Style)
+        ctx.beginPath();
+        ctx.arc(knee.x, knee.y, kneeRadius + 1.0, 0, 2 * Math.PI);
+        ctx.fillStyle = "#1d4ed8";
+        ctx.fill();
+        ctx.strokeStyle = "#0f172a";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // 4. Athletic Running Shoes at 90° to Shin (Bigger Proportional Shoes)
+        const shoeAngle = Math.atan2(sNy, sNx);
+        const shoeCenterX = ankle.x - sUx * 2 + sNx * 10;
+        const shoeCenterY = ankle.y - sUy * 2 + sNy * 10;
+
+        // Shoe Sole Base (Dark Rubber Spikes)
+        ctx.fillStyle = "#0f172a";
+        ctx.beginPath();
+        ctx.ellipse(shoeCenterX, shoeCenterY + 3, 19.0, 6.5, shoeAngle, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // White Athletic Running Shoe Upper Body
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.ellipse(shoeCenterX, shoeCenterY, 18.0, 8.5, shoeAngle, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.strokeStyle = "#0284c7";
+        ctx.lineWidth = 2.0;
+        ctx.stroke();
+
+        // Cyan Accent Stripe / Brand Logo
+        ctx.fillStyle = "#00e5ff";
+        ctx.beginPath();
+        ctx.ellipse(shoeCenterX + sNx * 3, shoeCenterY + sNy * 3, 7.5, 3.5, shoeAngle, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // Shoe Toe Cap Detail
+        ctx.fillStyle = "#e2e8f0";
+        ctx.beginPath();
+        ctx.arc(shoeCenterX + sNx * 12, shoeCenterY + sNy * 12, 4.5, 0, 2 * Math.PI);
+        ctx.fill();
+
+        ctx.restore();
+    }
+
     public drawDebugSkeleton(ctx: CanvasRenderingContext2D): void {
         ctx.save();
 
-        // ── Bone lines ──────────────────────────────────────────────────────
+        // ── Draw Muscular 3D Legs & Trousers Anatomy ────────────────────────
+        this.drawMuscularLeg(ctx, this.currentRightHipPosition, this.rightKnee, this.rightAnkle, "#1d4ed8");
+        this.drawMuscularLeg(ctx, this.currentLeftHipPosition, this.leftKnee, this.leftAnkle, "#2563eb");
+
+        // ── Thick White Bone lines ───────────────────────────────────────────
         ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth   = 3.0;
+        ctx.lineWidth   = 4.5;
         ctx.lineCap     = "round";
         ctx.lineJoin    = "round";
 
@@ -7841,27 +7982,27 @@ export class Bowler {
             ctx.stroke();
         };
 
-        // Spine
+        // Spine (Neck to Hips)
+        line(this.headCenter, this.shoulderMid);
         line(this.shoulderMid, this.currentHipPosition);
         // Shoulder bar
         line(this.frontShoulder, this.backShoulder);
         // Pelvis bar
         line(this.currentLeftHipPosition, this.currentRightHipPosition);
-        // Left leg (front in 2.5D view)
+        
+        // Legs
         line(this.currentLeftHipPosition, this.leftKnee);
         line(this.leftKnee, this.leftAnkle);
-        // Right leg (back in 2.5D view)
         line(this.currentRightHipPosition, this.rightKnee);
         line(this.rightKnee, this.rightAnkle);
 
-        // Left Arm
+        // Arms
         line(this.frontShoulder, this.leftElbow);
         line(this.leftElbow, this.leftWrist);
-        // Right Arm
         line(this.backShoulder, this.rightElbow);
         line(this.rightElbow, this.rightWrist);
 
-        // ── Cyan joint dots ─────────────────────────────────────────────────
+        // ── Bright Cyan Joint Dots (Brett Lee Tracking Nodes) ────────────────
         const joints: Vec2[] = [
             this.headCenter,
             this.shoulderMid,
@@ -7879,11 +8020,19 @@ export class Bowler {
             this.leftWrist,
             this.rightWrist,
         ];
-        ctx.fillStyle = "#00d8ff";
+        
+        // Draw Cyan Joint Circles with subtle white border
         for (const j of joints) {
+            ctx.fillStyle = "#00e5ff"; // Bright Cyan
             ctx.beginPath();
-            ctx.arc(j.x, j.y, 4.5, 0, Math.PI * 2);
+            ctx.arc(j.x, j.y, 5.5, 0, Math.PI * 2);
             ctx.fill();
+
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(j.x, j.y, 5.5, 0, Math.PI * 2);
+            ctx.stroke();
         }
 
         ctx.restore();
@@ -7981,10 +8130,14 @@ export class Bowler {
             y: rElbow.y + Math.sin(rForearmAng) * this.BACK_LOWER_ARM
         };
 
-        // Draw it
+        // Draw Muscular 3D Legs & Trousers Anatomy
+        this.drawMuscularLeg(ctx, rHip, rKnee, rAnkle, "#1d4ed8");
+        this.drawMuscularLeg(ctx, lHip, lKnee, lAnkle, "#2563eb");
+
+        // Draw Skeleton Line Structure
         ctx.save();
         ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 3.0;
+        ctx.lineWidth = 4.0;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
 
@@ -7995,9 +8148,10 @@ export class Bowler {
             ctx.stroke();
         };
 
-        // Spine
+        // Head/Neck & Spine
+        line(head, spineEnd);
         line(spineEnd, hipCenter);
-        // Shoulders/Pelvis
+        // Shoulders & Pelvis bars
         line(lShoulder, rShoulder);
         line(lHip, rHip);
         // Legs
@@ -8007,22 +8161,31 @@ export class Bowler {
         line(lShoulder, lElbow); line(lElbow, lWrist);
         line(rShoulder, rElbow); line(rElbow, rWrist);
 
-        // Draw Left Joints (Green) and Right Joints (Blue) to distinguish
-        const drawJoints = (color: string, points: Vec2[]) => {
-            ctx.fillStyle = color;
-            for (const j of points) {
-                ctx.beginPath();
-                ctx.arc(j.x, j.y, 4.5, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        };
+        // Draw Brett Lee Style Cyan Joint Dots (#00e5ff)
+        const joints: Vec2[] = [
+            head,
+            spineEnd,
+            hipCenter,
+            lShoulder, rShoulder,
+            lHip, rHip,
+            lKnee, rKnee,
+            lAnkle, rAnkle,
+            lElbow, rElbow,
+            lWrist, rWrist
+        ];
 
-        // Center / Spine joints (White)
-        drawJoints("#ffffff", [head, spineEnd, hipCenter]);
-        // Left joints (Green)
-        drawJoints("#10b981", [lShoulder, lHip, lKnee, lAnkle, lElbow, lWrist]);
-        // Right joints (Blue)
-        drawJoints("#3b82f6", [rShoulder, rHip, rKnee, rAnkle, rElbow, rWrist]);
+        for (const j of joints) {
+            ctx.fillStyle = "#00e5ff"; // Bright Cyan
+            ctx.beginPath();
+            ctx.arc(j.x, j.y, 5.0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.arc(j.x, j.y, 5.0, 0, Math.PI * 2);
+            ctx.stroke();
+        }
 
         // Frame label
         ctx.fillStyle = "#ffffff";
