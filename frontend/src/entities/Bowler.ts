@@ -86,7 +86,11 @@ export class Bowler {
     public isPreJumpTransitioning: boolean = false;
     public isPreJumpFrozen: boolean = false;
     public isExecutingJump: boolean = false;
-    public jumpPhase: number = 0; // 0.0 to 1.0 progression through 42 frames
+    public jumpPhase: number = 0; // 0.0 to 1.0 progression through 420 frames
+
+    // Dedicated controls for jump action speed and body/limb movement frequency
+    public jumpAnimationDuration: number = 1.2; // Time in seconds to complete the full 420-frame jump (arm/leg speed)
+    public jumpForwardSpeed: number = 350;       // Forward displacement speed during jump in px/sec (step forward speed)
 
     private preJumpStartX: number = 0;
     private preJumpTargetDistance: number = 40; // Max ceiling 40px
@@ -94,9 +98,9 @@ export class Bowler {
     private preJumpJointVelocities: Record<string, number> = {};
     private lastPoseSnapshot: KeyframePose | null = null;
 
-    public startRunning(): void {
+    public startRunning(): void {     
         this.isRunning = true;
-        this.isPreJumpTransitioning = false;
+        this.isPreJumpTransitioning = false;   
         this.isPreJumpFrozen = false;
         this.isExecutingJump = false;
         this.jumpPhase = 0;
@@ -113,8 +117,9 @@ export class Bowler {
         const currentPose = this.lastPoseSnapshot ? { ...this.lastPoseSnapshot } : { ...Bowler.STATIC_FRAMES[0] };
         this.preJumpStartPose = currentPose;
 
-        // Target pose is Frame 420 (index 419)
-        const targetPose = Bowler.STATIC_FRAMES[419] || Bowler.STATIC_FRAMES[Bowler.STATIC_FRAMES.length - 1];
+        // Target pose is Frame 1 of the Jump action
+        const jumpFrames = Bowler.getExpandedJumpFrames();
+        const targetPose = jumpFrames[0] || Bowler.STATIC_FRAMES[0];
 
         // Calculate total angle distance to adaptively scale transition distance (10px to 40px)
         let totalAngleDiff = 0;
@@ -8577,12 +8582,14 @@ export class Bowler {
     }
 
     public updateRunPose(dt: number): void {
-        // A. Executing Jump Animation (420-Frame Expanded Catmull-Rom Ultra-FPS Interpolation)
+        // A. Executing Jump Animation (420-Frame Expanded Ultra-Smooth Playback)
         if (this.isExecutingJump) {
-            // Slower, graceful jump playback duration (~2.8 seconds total duration)
-            this.jumpPhase += dt * (1.0 / 2.8);
+            // Slow, graceful jump playback duration using jumpAnimationDuration
+            this.jumpPhase += dt * (1.0 / Math.max(0.1, this.jumpAnimationDuration));
             if (this.jumpPhase >= 1.0) {
                 this.jumpPhase = 1.0;
+                this.isExecutingJump = false;
+                this.isPreJumpFrozen = true;
             }
 
             const jumpFrames = Bowler.getExpandedJumpFrames();
@@ -8590,29 +8597,18 @@ export class Bowler {
             const frameFloat = Math.min(totalJumpFrames - 1, this.jumpPhase * (totalJumpFrames - 1));
             
             const idx1 = Math.floor(frameFloat);
-            const idx0 = Math.max(0, idx1 - 1);
             const idx2 = Math.min(totalJumpFrames - 1, idx1 + 1);
-            const idx3 = Math.min(totalJumpFrames - 1, idx1 + 2);
-            const t = frameFloat - Math.floor(frameFloat);
+            const t = frameFloat - idx1;
 
-            const pose0 = jumpFrames[idx0];
             const pose1 = jumpFrames[idx1];
             const pose2 = jumpFrames[idx2];
-            const pose3 = jumpFrames[idx3];
 
-            const interpolatedJumpPose = Bowler.interpolateCatmullRom(pose0, pose1, pose2, pose3, t);
+            // Smooth lerp between pre-computed Catmull-Rom dense sub-frames
+            const interpolatedJumpPose = Bowler.interpolatePose(pose1, pose2, t);
 
-            // Slower forward ground velocity during jump trajectory (220 px/sec)
-            const jumpSpeed = 220;
-            if (this.jumpPhase < 1.0) {
-                this.currentHipPosition.x -= jumpSpeed * dt;
-            }
-
-            // Airborne flight gravity arc (Lift during takeoff, land at plant)
-            if (this.jumpPhase <= 0.6) {
-                const flightProgress = this.jumpPhase / 0.6;
-                const flightArc = Math.sin(flightProgress * Math.PI) * -35.0;
-                interpolatedJumpPose.hipYOffset += flightArc;
+            // Forward ground velocity during jump using jumpForwardSpeed
+            if (this.isExecutingJump) {
+                this.currentHipPosition.x -= this.jumpForwardSpeed * dt;
             }
 
             this.lastPoseSnapshot = interpolatedJumpPose;
@@ -8655,9 +8651,10 @@ export class Bowler {
             const easedAlpha = 1 - Math.pow(1 - alpha, 2);
 
             const startPose = this.preJumpStartPose || Bowler.STATIC_FRAMES[0];
-            const targetPose = Bowler.STATIC_FRAMES[419] || Bowler.STATIC_FRAMES[Bowler.STATIC_FRAMES.length - 1];
+            const jumpFrames = Bowler.getExpandedJumpFrames();
+            const targetPose = jumpFrames[0] || Bowler.STATIC_FRAMES[0];
 
-            // Interpolate current running pose -> Frame 420
+            // Interpolate current running pose -> Frame 1 of Jump
             const blendedPose = Bowler.interpolatePose(startPose, targetPose, easedAlpha);
             
             // Add subtle gravity dip during gathering stance
@@ -8667,7 +8664,7 @@ export class Bowler {
             this.lastPoseSnapshot = blendedPose;
             this.applyKeyframePose(blendedPose, this.currentHipPosition.x);
 
-            // Completion check -> Automatically launch into 42-Frame Jump Animation!
+            // Completion check -> Automatically launch into 420-Frame Jump Animation!
             if (alpha >= 1.0) {
                 this.isPreJumpTransitioning = false;
                 this.isExecutingJump = true;
