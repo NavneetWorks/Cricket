@@ -82,13 +82,60 @@ export class Bowler {
     public stridePhase: number = 0;
     public strideFrequency: number = 1.9;
 
+    // ── Pre-Jump Adaptive Transition & Freeze State ───────────────────────────
+    public isPreJumpTransitioning: boolean = false;
+    public isPreJumpFrozen: boolean = false;
+    private preJumpStartX: number = 0;
+    private preJumpTargetDistance: number = 40; // Max ceiling 40px
+    private preJumpStartPose: KeyframePose | null = null;
+    private preJumpJointVelocities: Record<string, number> = {};
+    private lastPoseSnapshot: KeyframePose | null = null;
+
     public startRunning(): void {
         this.isRunning = true;
+        this.isPreJumpTransitioning = false;
+        this.isPreJumpFrozen = false;
         this.targetIntensity = 1.0;
+    }
+
+    public triggerPreJump(): void {
+        if (!this.isRunning || this.isPreJumpTransitioning || this.isPreJumpFrozen) return;
+
+        this.isPreJumpTransitioning = true;
+        this.preJumpStartX = this.currentHipPosition.x;
+        
+        // Capture current snapshot pose
+        const currentPose = this.lastPoseSnapshot ? { ...this.lastPoseSnapshot } : { ...Bowler.STATIC_FRAMES[0] };
+        this.preJumpStartPose = currentPose;
+
+        // Target pose is Frame 420 (index 419)
+        const targetPose = Bowler.STATIC_FRAMES[419] || Bowler.STATIC_FRAMES[Bowler.STATIC_FRAMES.length - 1];
+
+        // Calculate total angle distance to adaptively scale transition distance (10px to 40px)
+        let totalAngleDiff = 0;
+        const keys: (keyof KeyframePose)[] = [
+            'spineAngleDeg', 'shoulderJointAngleDeg', 'leftUpperArmAngleDeg', 'leftElbowAngleDeg',
+            'rightUpperArmAngleDeg', 'rightElbowAngleDeg', 'leftThighAngleDeg', 'rightThighAngleDeg',
+            'leftKneeAngleDeg', 'rightKneeAngleDeg'
+        ];
+
+        keys.forEach(k => {
+            let diff = Math.abs((targetPose[k] as number) - (currentPose[k] as number));
+            if (diff > 180) diff = 360 - diff;
+            totalAngleDiff += diff;
+            
+            // Estimate joint angular velocity direction from stride phase derivative
+            this.preJumpJointVelocities[k] = ((targetPose[k] as number) - (currentPose[k] as number) > 0 ? 1 : -1) * 15.0;
+        });
+
+        // Adaptive blend distance: 10px minimum, 40px maximum
+        this.preJumpTargetDistance = Math.min(40, Math.max(10, Math.round(totalAngleDiff * 0.08)));
     }
 
     public resetToIdle(): void {
         this.isRunning = false;
+        this.isPreJumpTransitioning = false;
+        this.isPreJumpFrozen = false;
         this.targetIntensity = 0.0;
         this.runIntensity = 0.0;
         this.stridePhase = 0;
@@ -7571,107 +7618,729 @@ export class Bowler {
     // ─────────────────────────────────────────────────────────────────────────
     public static readonly PRE_DELIVERY_JUMP: KeyframePose[] = [
         {
-            // FRAME 1: JUMP GATHER / TAKEOFF (Pushing off back foot into the air)
-            spineAngleDeg: -125.0,
+            // FRAME 1
+            spineAngleDeg: -115.6,
             shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 90.0,
+            leftUpperArmAngleDeg: 110.0,
+            leftElbowAngleDeg: 105.0,
+            rightUpperArmAngleDeg: 40.6,
+            rightElbowAngleDeg: 76.99,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 110.0,
+            leftThighAngleDeg: 150.0,
+            rightThighAngleDeg: 74.52,
+            leftKneeAngleDeg: -104.52,
+            rightKneeAngleDeg: -30.0,
+            hipYOffset: -17.2
+        },
+         {
+            // FRAME 2
+            spineAngleDeg: -108,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 85.0,
+            leftUpperArmAngleDeg: 115.0,
+            leftElbowAngleDeg: 112.0,
+            rightUpperArmAngleDeg: 45,
+            rightElbowAngleDeg: 76.99,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 110.0,
+            leftThighAngleDeg: 145.0,
+            rightThighAngleDeg: 70,
+            leftKneeAngleDeg: -104.52,
+            rightKneeAngleDeg: -30.0,
+            hipYOffset: -17.2
+        },
+       
+        {
+            // FRAME 3
+            spineAngleDeg: -98,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 120.0,
+            leftElbowAngleDeg: 120.0,
+            rightUpperArmAngleDeg: 50.6,
+            rightElbowAngleDeg: 76.99,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 110.0,
+            leftThighAngleDeg: 140.0,
+            rightThighAngleDeg: 60,
+            leftKneeAngleDeg: -104.52,
+            rightKneeAngleDeg: -30.0,
+            hipYOffset: -17.2
+        },
+         {
+            // FRAME 4
+            spineAngleDeg: -96,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 135.0,
+            leftElbowAngleDeg: 110.0,
+            rightUpperArmAngleDeg: 52.6,
+            rightElbowAngleDeg: 76.99,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 100.0,//
+            leftThighAngleDeg: 150.0,
+            rightThighAngleDeg: 65,
+            leftKneeAngleDeg: -85,
+            rightKneeAngleDeg: -23.0,
+            hipYOffset: -17.2
+        },
+        {
+            // FRAME 5
+            spineAngleDeg: -94,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 142.0,
+            leftElbowAngleDeg: 105.0,
+            rightUpperArmAngleDeg: 52.6,
+            rightElbowAngleDeg: 76.99,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 90.0,//
+            leftThighAngleDeg: 155.0,
+            rightThighAngleDeg: 68,
+            leftKneeAngleDeg: -80,
+            rightKneeAngleDeg: -21.0,
+            hipYOffset: -17.2
+        },
+        {
+            // FRAME 6
+            spineAngleDeg: -92,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 150.0,
+            leftElbowAngleDeg: 100.0,
+            rightUpperArmAngleDeg: 55.6,
+            rightElbowAngleDeg: 76.99,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 80.0,
+            leftThighAngleDeg: 160.0,
+            rightThighAngleDeg: 70,
+            leftKneeAngleDeg: -75,
+            rightKneeAngleDeg: -20.0,
+            hipYOffset: -17.2
+        },//2 end
+         {
+            // FRAME 7
+            spineAngleDeg: -89,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 155.0,
+            leftElbowAngleDeg: 100.0,
+            rightUpperArmAngleDeg: 48,
+            rightElbowAngleDeg: 80,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 80.0,
+            leftThighAngleDeg: 155.0,
+            rightThighAngleDeg: 65.0,
+            leftKneeAngleDeg: -67,
+            rightKneeAngleDeg: -25.0,
+            hipYOffset: -17.2
+        },
+        {
+            // FRAME 8
+            spineAngleDeg: -86,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 160.0,
+            leftElbowAngleDeg: 100.0,
+            rightUpperArmAngleDeg: 40,
+            rightElbowAngleDeg: 85,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 80.0,
+            leftThighAngleDeg: 150.0,
+            rightThighAngleDeg: 60.0,
+            leftKneeAngleDeg: -60,
+            rightKneeAngleDeg: -30.0,
+            hipYOffset: -17.2
+        },
+        {
+            // FRAME 9
+            spineAngleDeg: -90,
+            shoulderJointDist: 50.0,
+            shoulderJointAngleDeg: 90.0,
+            leftUpperArmAngleDeg: 175.0,
+            leftElbowAngleDeg: 90.0,
+            rightUpperArmAngleDeg: 40,
+            rightElbowAngleDeg: 85,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 80.0,
+            leftThighAngleDeg: 140.0,
+            rightThighAngleDeg: 65.0,
+            leftKneeAngleDeg: -43,
+            rightKneeAngleDeg: -45.0,
+            hipYOffset: -17.2
+        },//till 4th
+
+          {
+            // FRAME 10
+            spineAngleDeg: -90,
+            shoulderJointDist: 50.0,
+            shoulderJointAngleDeg: 90.0,
+            leftUpperArmAngleDeg: 185.0,
+            leftElbowAngleDeg: 90.0,
+            rightUpperArmAngleDeg: 45,
+            rightElbowAngleDeg: 85,
+            pelvisJointDist: -5.0,
+            pelvisJointAngleDeg: 80.0,
+            leftThighAngleDeg: 140.0,
+            rightThighAngleDeg: 70.0,
+            leftKneeAngleDeg: -43,
+            rightKneeAngleDeg: -70.0,
+            hipYOffset: -17.2
+        },//till 5th
+           {
+            // FRAME 11
+            spineAngleDeg: -95,
+            shoulderJointDist: 50.0,
             shoulderJointAngleDeg: 100.0,
+            leftUpperArmAngleDeg: 185.0,
+            leftElbowAngleDeg: 90.0,
+            rightUpperArmAngleDeg: 45,
+            rightElbowAngleDeg: 85,
+            pelvisJointDist: -15.0,
+            pelvisJointAngleDeg: 80.0,
+            leftThighAngleDeg: 135.0,
+            rightThighAngleDeg: 80.0,
+            leftKneeAngleDeg: -50,
+            rightKneeAngleDeg: -90.0,
+            hipYOffset: -17.2
+        },//till 6th
+            {
+            // FRAME 12
+            spineAngleDeg: -90,
+            shoulderJointDist: 50.0,
+            shoulderJointAngleDeg: 100.0,
+            leftUpperArmAngleDeg: 200.0,
+            leftElbowAngleDeg: 50.0,
+            rightUpperArmAngleDeg: 60,
+            rightElbowAngleDeg: 85,
+            pelvisJointDist: -25.0,
+            pelvisJointAngleDeg: 90.0,
+            leftThighAngleDeg: 125.0,
+            rightThighAngleDeg: 60.0,
+            leftKneeAngleDeg: -25,
+            rightKneeAngleDeg: -90.0,
+            hipYOffset: -17.2
+        },//till 7th
+           {
+            // FRAME 13
+            spineAngleDeg: -90,
+            shoulderJointDist: 50.0,
+            shoulderJointAngleDeg: 100.0,
+            leftUpperArmAngleDeg: 220.0,
+            leftElbowAngleDeg: 35.0,
+            rightUpperArmAngleDeg: 65,
+            rightElbowAngleDeg: 75,
+            pelvisJointDist: -25.0,
+            pelvisJointAngleDeg: 90.0,
+            leftThighAngleDeg: 130.0,
+            rightThighAngleDeg: 80.0,
+            leftKneeAngleDeg: -25,
+            rightKneeAngleDeg: -90.0,
+            hipYOffset: -17.2
+        },//till 8th
+         {
+            // FRAME 14
+            spineAngleDeg: -88,
+            shoulderJointDist: 50.0,
+            shoulderJointAngleDeg: 105.0,
+            leftUpperArmAngleDeg: 210.0,
+            leftElbowAngleDeg: 45.0,
+            rightUpperArmAngleDeg: 70,
+            rightElbowAngleDeg: 75,
+            pelvisJointDist: -25.0,
+            pelvisJointAngleDeg: 90.0,
+            leftThighAngleDeg: 115.0,
+            rightThighAngleDeg: 100.0,
+            leftKneeAngleDeg: -20,
+            rightKneeAngleDeg: -125.0,
+            hipYOffset: -17.2
+        },//till 9th
+         {
+            // FRAME 15
+            spineAngleDeg: -88,
+            shoulderJointDist: 50.0,
+            shoulderJointAngleDeg: 105.0,
+            leftUpperArmAngleDeg: 205.0,
+            leftElbowAngleDeg: 45.0,
+            rightUpperArmAngleDeg: 80,
+            rightElbowAngleDeg: 75,
+            pelvisJointDist: -25.0,
+            pelvisJointAngleDeg: 90.0,
+            leftThighAngleDeg: 115.0,
+            rightThighAngleDeg: 90.0,
+            leftKneeAngleDeg: -25,
+            rightKneeAngleDeg: -115.0,
+            hipYOffset: -21.2
+        },//till 11h
+         {
+            // FRAME 16
+            spineAngleDeg: -88,
+            shoulderJointDist: 50.0,
+            shoulderJointAngleDeg: 105.0,
+            leftUpperArmAngleDeg: 190.0,
+            leftElbowAngleDeg: 45.0,
+            rightUpperArmAngleDeg: 95,
+            rightElbowAngleDeg: 75,
+            pelvisJointDist: -25.0,
+            pelvisJointAngleDeg: 90.0,
+            leftThighAngleDeg: 105.0,
+            rightThighAngleDeg: 105.0,
+            leftKneeAngleDeg: -25,
+            rightKneeAngleDeg: -120.0,
+            hipYOffset: -25.2
+        },//till 12h
+           {
+            // FRAME 17
+            spineAngleDeg: -88,
+            shoulderJointDist: 25.0,
+            shoulderJointAngleDeg: 105.0,
+            leftUpperArmAngleDeg: 150.0,
+            leftElbowAngleDeg: 60.0,
+            rightUpperArmAngleDeg: 110,
+            rightElbowAngleDeg: 75,
+            pelvisJointDist: -25.0,
+            pelvisJointAngleDeg: 90.0,
+            leftThighAngleDeg: 98.0,
+            rightThighAngleDeg: 122.0,
+            leftKneeAngleDeg: -25,
+            rightKneeAngleDeg: -120.0,
+            hipYOffset: -26.2
+        },//till 14h 13 missing
+          {
+            // FRAME 18
+            spineAngleDeg: -88, 
+            shoulderJointDist: 15.0,
+            shoulderJointAngleDeg: 105.0,
             leftUpperArmAngleDeg: 110.0,
             leftElbowAngleDeg: 80.0,
-            rightUpperArmAngleDeg: -30.0,
-            rightElbowAngleDeg: 90.0,
-            pelvisJointDist: 10.0,
+            rightUpperArmAngleDeg: 100,
+            rightElbowAngleDeg: 75,
+            pelvisJointDist: -25.0,
             pelvisJointAngleDeg: 100.0,
-            leftThighAngleDeg: 170.0,
-            rightThighAngleDeg: 60.0,
-            leftKneeAngleDeg: -30.0,
-            rightKneeAngleDeg: -60.0,
-            hipYOffset: -25.0
-        },
-        {
-            // FRAME 2: AIRBORNE APEX (Both feet off ground, high gather elevation)
-            spineAngleDeg: -115.0,
-            shoulderJointDist: 40.0,
-            shoulderJointAngleDeg: 100.0,
-            leftUpperArmAngleDeg: 140.0,
-            leftElbowAngleDeg: 60.0,
-            rightUpperArmAngleDeg: -80.0,
-            rightElbowAngleDeg: 45.0,
-            pelvisJointDist: 10.0,
+            leftThighAngleDeg: 90.0,
+            rightThighAngleDeg: 122.0,
+            leftKneeAngleDeg: -25,
+            rightKneeAngleDeg: -120.0,
+            hipYOffset: -26.2
+        },//till 15th
+         {
+            // FRAME 19
+            spineAngleDeg: -80, 
+            shoulderJointDist: 15.0,
+            shoulderJointAngleDeg: 105.0,
+            leftUpperArmAngleDeg: 90.0,
+            leftElbowAngleDeg: 80.0,
+            rightUpperArmAngleDeg: 100,
+            rightElbowAngleDeg: 75,
+            pelvisJointDist: -25.0,
             pelvisJointAngleDeg: 100.0,
-            leftThighAngleDeg: 150.0,
-            rightThighAngleDeg: 90.0,
-            leftKneeAngleDeg: -55.0,
-            rightKneeAngleDeg: -75.0,
-            hipYOffset: -60.0
-        },
+            leftThighAngleDeg: 70.0,
+            rightThighAngleDeg: 122.0,
+            leftKneeAngleDeg: -25,
+            rightKneeAngleDeg: -105.0,
+            hipYOffset: -25.2
+        },//till 16th
         {
-            // FRAME 3: BACK FOOT LANDING (Back leg touches crease, torso side-on)
-            spineAngleDeg: -105.0,
-            shoulderJointDist: 40.0,
-            shoulderJointAngleDeg: 100.0,
-            leftUpperArmAngleDeg: 160.0,
-            leftElbowAngleDeg: 40.0,
-            rightUpperArmAngleDeg: -140.0,
-            rightElbowAngleDeg: 20.0,
-            pelvisJointDist: 10.0,
-            pelvisJointAngleDeg: 100.0,
-            leftThighAngleDeg: 110.0,
-            rightThighAngleDeg: 160.0,
-            leftKneeAngleDeg: -80.0,
-            rightKneeAngleDeg: -20.0,
-            hipYOffset: -15.0
-        },
-        {
-            // FRAME 4: FRONT FOOT PLANT / STRIDE (Front leg plants firmly, chest turning front-on)
-            spineAngleDeg: -95.0,
-            shoulderJointDist: 40.0,
-            shoulderJointAngleDeg: 100.0,
-            leftUpperArmAngleDeg: 120.0,
-            leftElbowAngleDeg: 50.0,
-            rightUpperArmAngleDeg: -180.0,
-            rightElbowAngleDeg: 10.0,
-            pelvisJointDist: 10.0,
+            // FRAME 20
+            spineAngleDeg: -80, 
+            shoulderJointDist: 15.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 110.0,
+            leftElbowAngleDeg: 120.0,
+            rightUpperArmAngleDeg: 120,
+            rightElbowAngleDeg: 95,
+            pelvisJointDist: -35.0,
             pelvisJointAngleDeg: 100.0,
             leftThighAngleDeg: 60.0,
-            rightThighAngleDeg: 175.0,
-            leftKneeAngleDeg: -15.0,
-            rightKneeAngleDeg: -10.0,
-            hipYOffset: -5.0
-        },
-        {
-            // FRAME 5: BALL RELEASE EXTENSION (Torso flexing forward over front leg)
-            spineAngleDeg: -70.0,
-            shoulderJointDist: 40.0,
-            shoulderJointAngleDeg: 100.0,
-            leftUpperArmAngleDeg: 40.0,
-            leftElbowAngleDeg: 90.0,
-            rightUpperArmAngleDeg: 60.0,
-            rightElbowAngleDeg: 5.0,
-            pelvisJointDist: 10.0,
+            rightThighAngleDeg: 122.0,
+            leftKneeAngleDeg: -25,
+            rightKneeAngleDeg: -100.0,
+            hipYOffset: -25.2
+        },// 18th
+         {
+            // FRAME 21
+            spineAngleDeg: -75, 
+            shoulderJointDist: -10.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 60.0,
+            leftElbowAngleDeg: 100.0,
+            rightUpperArmAngleDeg: 130,
+            rightElbowAngleDeg: 105,
+            pelvisJointDist: -35.0,
             pelvisJointAngleDeg: 100.0,
-            leftThighAngleDeg: 50.0,
-            rightThighAngleDeg: 140.0,
-            leftKneeAngleDeg: -5.0,
-            rightKneeAngleDeg: -45.0,
-            hipYOffset: 10.0
-        },
-        {
-            // FRAME 6: FOLLOW-THROUGH (Deceleration & falling forward)
-            spineAngleDeg: -50.0,
-            shoulderJointDist: 40.0,
-            shoulderJointAngleDeg: 100.0,
-            leftUpperArmAngleDeg: 10.0,
-            leftElbowAngleDeg: 110.0,
-            rightUpperArmAngleDeg: 120.0,
-            rightElbowAngleDeg: 30.0,
-            pelvisJointDist: 10.0,
-            pelvisJointAngleDeg: 100.0,
-            leftThighAngleDeg: 45.0,
-            rightThighAngleDeg: 110.0,
-            leftKneeAngleDeg: -35.0,
+            leftThighAngleDeg: 55.0,
+            rightThighAngleDeg: 122.0,
+            leftKneeAngleDeg: -25,
             rightKneeAngleDeg: -70.0,
-            hipYOffset: 25.0
-        }
+            hipYOffset: -29.2
+        },// 19th
+
+        {
+            // FRAME 22
+            spineAngleDeg: -75, 
+            shoulderJointDist: -30.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 70.0,
+            leftElbowAngleDeg: 80.0,
+            rightUpperArmAngleDeg: 130,
+            rightElbowAngleDeg: 135,
+            pelvisJointDist: -35.0,
+            pelvisJointAngleDeg: 80.0,
+            leftThighAngleDeg: 70.0,
+            rightThighAngleDeg: 135.0,
+            leftKneeAngleDeg: -30,
+            rightKneeAngleDeg: -50.0,
+            hipYOffset: -29.2
+        },// 21st
+        {
+            // FRAME 23
+            spineAngleDeg: -75, 
+            shoulderJointDist: -30.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 65.0,
+            leftElbowAngleDeg: 80.0,
+            rightUpperArmAngleDeg: 130,
+            rightElbowAngleDeg: 140,
+            pelvisJointDist: -35.0,
+            pelvisJointAngleDeg: 70.0,
+            leftThighAngleDeg: 90.0,
+            rightThighAngleDeg: 160.0,
+            leftKneeAngleDeg: -80,
+            rightKneeAngleDeg: -50.0,
+            hipYOffset: -29.2
+        },// 23
+
+           {
+            // FRAME 24
+            spineAngleDeg: -80, 
+            shoulderJointDist: -50.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 80.0,
+            leftElbowAngleDeg: 80.0,
+            rightUpperArmAngleDeg: 130,
+            rightElbowAngleDeg: 140,
+            pelvisJointDist: 20.0,
+            pelvisJointAngleDeg: 80.0, 
+            leftThighAngleDeg: 90.0,
+            rightThighAngleDeg: 140.0,
+            leftKneeAngleDeg: -100,
+            rightKneeAngleDeg: -25.0,
+            hipYOffset: -29.2
+        },// 26
+           {
+            // FRAME 25
+            spineAngleDeg: -80, 
+            shoulderJointDist: -60.0,
+            shoulderJointAngleDeg: 100.0,
+            leftUpperArmAngleDeg: 80.0,
+            leftElbowAngleDeg: 60.0,
+            rightUpperArmAngleDeg: 130,
+            rightElbowAngleDeg: 140,
+            pelvisJointDist: 35.0,
+            pelvisJointAngleDeg: 80.0, 
+            leftThighAngleDeg: 110.0,
+            rightThighAngleDeg: 140.0,
+            leftKneeAngleDeg: -130,
+            rightKneeAngleDeg: -15.0,
+            hipYOffset: -24.2
+        },// 29
+
+           {
+            // FRAME 26
+            spineAngleDeg: -80, 
+            shoulderJointDist: -60.0,
+            shoulderJointAngleDeg: 100.0,
+            leftUpperArmAngleDeg: 80.0,
+            leftElbowAngleDeg: 60.0,
+            rightUpperArmAngleDeg: 150,
+            rightElbowAngleDeg: 120,
+            pelvisJointDist: 35.0,
+            pelvisJointAngleDeg: 80.0, 
+            leftThighAngleDeg: 140.0,
+            rightThighAngleDeg: 130.0,
+            leftKneeAngleDeg: -130,
+            rightKneeAngleDeg: -15.0,
+            hipYOffset: -20.2
+        },// 31
+             {
+            // FRAME 27
+            spineAngleDeg: -90, 
+            shoulderJointDist: -60.0,
+            shoulderJointAngleDeg: 100.0,
+            leftUpperArmAngleDeg: 90.0,
+            leftElbowAngleDeg: 60.0,
+            rightUpperArmAngleDeg: 160,
+            rightElbowAngleDeg: 120,
+            pelvisJointDist: 35.0,
+            pelvisJointAngleDeg: 100.0, 
+            leftThighAngleDeg: 140.0,
+            rightThighAngleDeg: 110.0,
+            leftKneeAngleDeg: -120,
+            rightKneeAngleDeg: -15.0,
+            hipYOffset: -20.2
+        },// 33
+           {
+            // FRAME 28
+            spineAngleDeg: -95, 
+            shoulderJointDist: -60.0,
+            shoulderJointAngleDeg: 100.0,
+            leftUpperArmAngleDeg: 95.0,
+            leftElbowAngleDeg: 60.0,
+            rightUpperArmAngleDeg: 180,
+            rightElbowAngleDeg: 100,
+            pelvisJointDist: 35.0,
+            pelvisJointAngleDeg: 110.0, 
+            leftThighAngleDeg: 160.0,
+            rightThighAngleDeg: 110.0,
+            leftKneeAngleDeg: -120,
+            rightKneeAngleDeg: -25.0,
+            hipYOffset: -29.2
+        },// 36+
+           {
+            // FRAME 29
+            spineAngleDeg: -95, 
+            shoulderJointDist: -60.0,
+            shoulderJointAngleDeg: 120.0,
+            leftUpperArmAngleDeg: 80.0,
+            leftElbowAngleDeg: 30.0,
+            rightUpperArmAngleDeg: 190,
+            rightElbowAngleDeg: 60,
+            pelvisJointDist: 35.0,
+            pelvisJointAngleDeg: 120.0, 
+            leftThighAngleDeg: 165.0,
+            rightThighAngleDeg: 90.0,
+            leftKneeAngleDeg: -90,
+            rightKneeAngleDeg: -25.0,
+            hipYOffset: -29.2
+        },// 39
+           {
+            // FRAME 30
+            spineAngleDeg: -95, 
+            shoulderJointDist: -60.0,
+            shoulderJointAngleDeg: 120.0,
+            leftUpperArmAngleDeg: 80.0,
+            leftElbowAngleDeg: 30.0,
+            rightUpperArmAngleDeg: 210,
+            rightElbowAngleDeg: 30,
+            pelvisJointDist: 35.0,
+            pelvisJointAngleDeg: 120.0, 
+            leftThighAngleDeg: 160.0,
+            rightThighAngleDeg: 85.0,
+            leftKneeAngleDeg: -45,
+            rightKneeAngleDeg: -35.0,
+            hipYOffset: -29.2
+        },// 41
+          {
+            // FRAME 31
+            spineAngleDeg: -95, 
+            shoulderJointDist: -60.0,
+            shoulderJointAngleDeg: 120.0,
+            leftUpperArmAngleDeg: 80.0,
+            leftElbowAngleDeg: 70.0,
+            rightUpperArmAngleDeg: 210,
+            rightElbowAngleDeg: 30,
+            pelvisJointDist: 35.0,
+            pelvisJointAngleDeg: 110.0, 
+            leftThighAngleDeg: 155.0,
+            rightThighAngleDeg: 85.0,
+            leftKneeAngleDeg: -25,
+            rightKneeAngleDeg: -50.0,
+            hipYOffset: -24.2
+        },// 44
+        {
+            // FRAME 32
+            spineAngleDeg: -90, 
+            shoulderJointDist: -60.0,
+            shoulderJointAngleDeg: 110.0,
+            leftUpperArmAngleDeg: 70.0,
+            leftElbowAngleDeg: 10.0,
+            rightUpperArmAngleDeg: 195.0,
+            rightElbowAngleDeg: 30,
+            pelvisJointDist: 35.0,
+            pelvisJointAngleDeg: 110.0, 
+            leftThighAngleDeg: 145.0,
+            rightThighAngleDeg: 75.0,
+            leftKneeAngleDeg: -0,
+            rightKneeAngleDeg: -60.0,
+            hipYOffset: -19.2
+        },// 47
+         {
+            // FRAME 33
+            spineAngleDeg: -90, 
+            shoulderJointDist: -60.0,
+            shoulderJointAngleDeg: 100.0,
+            leftUpperArmAngleDeg: 50.0,
+            leftElbowAngleDeg: -10.0,
+            rightUpperArmAngleDeg: 178.0,
+            rightElbowAngleDeg: 30,
+            pelvisJointDist: 35.0,
+            pelvisJointAngleDeg: 100.0, 
+            leftThighAngleDeg: 145.0,
+            rightThighAngleDeg: 75.0,
+            leftKneeAngleDeg: -0,
+            rightKneeAngleDeg: -60.0,
+            hipYOffset: 0.2
+        },// 50
+        {
+            // FRAME 34
+            spineAngleDeg: -90, 
+            shoulderJointDist: -60.0,
+            shoulderJointAngleDeg: 100.0,
+            leftUpperArmAngleDeg: 25.0,
+            leftElbowAngleDeg: -15.0,
+            rightUpperArmAngleDeg: 150.0,
+            rightElbowAngleDeg: 30,
+            pelvisJointDist: 35.0,
+            pelvisJointAngleDeg: 85.0, 
+            leftThighAngleDeg: 145.0,
+            rightThighAngleDeg: 75.0,
+            leftKneeAngleDeg: -15,
+            rightKneeAngleDeg: -40.0,
+            hipYOffset: 0.2
+        },// 55
+
+        {
+            // FRAME 35
+            spineAngleDeg: -90, 
+            shoulderJointDist: -60.0,
+            shoulderJointAngleDeg: 85.0,
+            leftUpperArmAngleDeg: 25.0,
+            leftElbowAngleDeg: -15.0,
+            rightUpperArmAngleDeg: 150.0,
+            rightElbowAngleDeg: 30,
+            pelvisJointDist: 35.0,
+            pelvisJointAngleDeg: 85.0, 
+            leftThighAngleDeg: 155.0,
+            rightThighAngleDeg: 75.0,
+            leftKneeAngleDeg: -15,
+            rightKneeAngleDeg: -50.0,
+            hipYOffset: 20
+        },// 55
+         {
+            // FRAME 36
+            spineAngleDeg: -90, 
+            shoulderJointDist: -60.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 10.0,
+            leftElbowAngleDeg: -15.0,
+            rightUpperArmAngleDeg: 135.0,
+            rightElbowAngleDeg: 30,
+            pelvisJointDist: 35.0,
+            pelvisJointAngleDeg: 85.0, 
+            leftThighAngleDeg: 140.0,
+            rightThighAngleDeg: 75.0,
+            leftKneeAngleDeg: -0,
+            rightKneeAngleDeg: -50.0,
+            hipYOffset: 20
+        },// my
+        {
+            // FRAME 37
+            spineAngleDeg: -100, 
+            shoulderJointDist: -70.0,
+            shoulderJointAngleDeg: 65.0,
+            leftUpperArmAngleDeg: 10.0,
+            leftElbowAngleDeg: -5.0,
+            rightUpperArmAngleDeg: 130.0,
+            rightElbowAngleDeg: 30,
+            pelvisJointDist: 15.0, 
+            pelvisJointAngleDeg: 85.0, 
+            leftThighAngleDeg: 140.0,
+            rightThighAngleDeg: 100.0,
+            leftKneeAngleDeg: 2,
+            rightKneeAngleDeg: -60.0, 
+            hipYOffset: 5
+        },// my
+        {
+            // FRAME 38  
+            spineAngleDeg: -120, 
+            shoulderJointDist: -70.0,
+            shoulderJointAngleDeg: 40.0,
+            leftUpperArmAngleDeg: 15.0,
+            leftElbowAngleDeg: 0, 
+            rightUpperArmAngleDeg: 140.0,
+            rightElbowAngleDeg: 50,
+            pelvisJointDist: 0.0,
+            pelvisJointAngleDeg: 80.0, 
+            leftThighAngleDeg: 165.0,
+            rightThighAngleDeg: 125.0, 
+            leftKneeAngleDeg: -5, 
+            rightKneeAngleDeg: -60.0,
+            hipYOffset: 5   
+        },// my
+        {
+            // FRAME 39    
+            spineAngleDeg: -130, 
+            shoulderJointDist: -70.0,
+            shoulderJointAngleDeg: 10.0,
+            leftUpperArmAngleDeg: 10.0,
+            leftElbowAngleDeg: 10, 
+            rightUpperArmAngleDeg: 190.0, 
+            rightElbowAngleDeg: 50,
+            pelvisJointDist: 0.0,
+            pelvisJointAngleDeg: 80.0,  
+            leftThighAngleDeg: 175.0,  
+            rightThighAngleDeg: 150.0, 
+            leftKneeAngleDeg: 2, 
+            rightKneeAngleDeg: -70.0,
+            hipYOffset: 1     
+        },// my
+         {
+            // FRAME 40
+            spineAngleDeg: -130, 
+            shoulderJointDist: -70.0,
+            shoulderJointAngleDeg: 10.0,
+            leftUpperArmAngleDeg: -10.0,
+            leftElbowAngleDeg: -10, 
+            rightUpperArmAngleDeg: 190.0, 
+            rightElbowAngleDeg: 50,
+            pelvisJointDist: 0.0,
+            pelvisJointAngleDeg: 80.0,  
+            leftThighAngleDeg: 175.0,  
+            rightThighAngleDeg: 160.0, 
+            leftKneeAngleDeg: 2, 
+            rightKneeAngleDeg: -75.0,
+            hipYOffset: 1     
+        },// my
+
+         {
+            // FRAME 41
+            spineAngleDeg: -150, 
+            shoulderJointDist: -70.0,
+            shoulderJointAngleDeg: 10.0,
+            leftUpperArmAngleDeg: -30.0,
+            leftElbowAngleDeg: -10,                   
+            rightUpperArmAngleDeg: 190.0, 
+            rightElbowAngleDeg: 50,
+            pelvisJointDist: 0.0,
+            pelvisJointAngleDeg: 80.0,  
+            leftThighAngleDeg: 175.0,  
+            rightThighAngleDeg: 185.0, 
+            leftKneeAngleDeg: 2, 
+            rightKneeAngleDeg: -75.0,
+            hipYOffset: -15  
+        },// my   
+        {
+            // FRAME 42
+            spineAngleDeg: -170, 
+            shoulderJointDist: -70.0,
+            shoulderJointAngleDeg: 10.0,
+            leftUpperArmAngleDeg: -70.0,
+            leftElbowAngleDeg: -10,                    
+            rightUpperArmAngleDeg: 200.0, 
+            rightElbowAngleDeg: 60,
+            pelvisJointDist: 0.0,          
+            pelvisJointAngleDeg: 80.0,    
+            leftThighAngleDeg: 190.0,  
+            rightThighAngleDeg: 215.0,  
+            leftKneeAngleDeg: 2, 
+            rightKneeAngleDeg: -75.0,
+            hipYOffset: -25  
+        },// my   
+
+
+
     ];
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -7867,8 +8536,14 @@ export class Bowler {
     }
 
     public updateRunPose(dt: number): void {
+        // A. Frozen State after Pre-Jump Transition Complete (Freeze at Frame 420 for inspection)
+        if (this.isPreJumpFrozen) {
+            const frame420 = Bowler.STATIC_FRAMES[419] || Bowler.STATIC_FRAMES[Bowler.STATIC_FRAMES.length - 1];
+            this.applyKeyframePose(frame420, this.currentHipPosition.x);
+            return;
+        }
+
         // 1. Dynamic Stride Frequency (Animation frame execution speed)
-        // Starts at slow step frequency (0.45 Hz) and accelerates smoothly to a sprint frequency (2.0 Hz)
         const minFrequency = 0.45;
         const maxFrequency = 2.00;
         this.strideFrequency = minFrequency + (maxFrequency - minFrequency) * Math.pow(this.runIntensity, 1.1);
@@ -7880,7 +8555,42 @@ export class Bowler {
         const pushImpulse = 0.85 + 0.35 * Math.abs(Math.sin(this.stridePhase * Math.PI * 2));
         const rawSpeed = this.runCycleDistance * this.strideFrequency * pushImpulse;
         const MAX_RUN_SPEED = 1200; // Constant top speed limit in px/sec
-        const horizontalSpeed = Math.min(rawSpeed, MAX_RUN_SPEED);
+        let horizontalSpeed = Math.min(rawSpeed, MAX_RUN_SPEED);
+
+        // B. Pre-Jump Transition State (Dynamic Adaptive Blend within max 40px)
+        if (this.isPreJumpTransitioning) {
+            // Speed dip during gathering deceleration
+            horizontalSpeed *= 0.65;
+            this.currentHipPosition.x -= horizontalSpeed * dt;
+
+            const distTraveled = Math.abs(this.preJumpStartX - this.currentHipPosition.x);
+            const alpha = Math.min(1.0, distTraveled / Math.max(1, this.preJumpTargetDistance));
+            
+            // Ease-Out Quad curve for athletic spring-loaded takeoff
+            const easedAlpha = 1 - Math.pow(1 - alpha, 2);
+
+            const startPose = this.preJumpStartPose || Bowler.STATIC_FRAMES[0];
+            const targetPose = Bowler.STATIC_FRAMES[419] || Bowler.STATIC_FRAMES[Bowler.STATIC_FRAMES.length - 1];
+
+            // Interpolate current running pose -> Frame 420
+            const blendedPose = Bowler.interpolatePose(startPose, targetPose, easedAlpha);
+            
+            // Add subtle gravity dip during gathering stance
+            const gatheringDip = Math.sin(alpha * Math.PI) * 4.0;
+            blendedPose.hipYOffset += gatheringDip;
+
+            this.lastPoseSnapshot = blendedPose;
+            this.applyKeyframePose(blendedPose, this.currentHipPosition.x);
+
+            // Completion check
+            if (alpha >= 1.0) {
+                this.isPreJumpTransitioning = false;
+                this.isPreJumpFrozen = true;
+            }
+            return;
+        }
+
+        // C. Normal Runup Motion
         this.currentHipPosition.x -= horizontalSpeed * dt;
 
         // Reset when off screen
@@ -7889,7 +8599,7 @@ export class Bowler {
             this.stridePhase = 0;
         }
 
-        // 4. Catmull-Rom Keyframe Interpolation across 4 points
+        // Catmull-Rom Keyframe Interpolation across 4 points
         const totalFrames = Bowler.STATIC_FRAMES.length;
         const frameFloat = this.stridePhase * totalFrames;
         
@@ -7906,11 +8616,11 @@ export class Bowler {
 
         const interpolatedPose = Bowler.interpolateCatmullRom(pose0, pose1, pose2, pose3, t);
 
-        // 5. Vertical Gravity Bounce Arc (Apex floating feel when running)
+        // Vertical Gravity Bounce Arc
         const gravityBounce = Math.sin(this.stridePhase * Math.PI * 2) * 6.0;
         interpolatedPose.hipYOffset += gravityBounce;
 
-        // 6. Apply the interpolated pose to the real skeleton directly
+        this.lastPoseSnapshot = interpolatedPose;
         this.applyKeyframePose(interpolatedPose, this.currentHipPosition.x);
     }
 

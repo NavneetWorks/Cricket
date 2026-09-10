@@ -158,20 +158,23 @@ export default class GameLoop{
             this.renderer.wicket.reset();
             this.ball.throwBall(startX, startY, randomSpeed, randomAngle); 
         };
-        // 1. Mouse Click (Left Click) par ball fenkna (Only in OFFLINE BATTING mode)
-        window.addEventListener("mousedown", () => {
+        // 1. Mouse Click (Left Click): BATTING me throw ball, NEW_BOWLER me start runup
+        window.addEventListener("mousedown", (event) => {
+            if (event.button !== 0) return; // Only Left Click
             if (!this.isOnlineMode && this.renderer.gameMode === 'BATTING') {
                 throwNewBall();
+            } else if (this.renderer.gameMode === 'NEW_BOWLER') {
+                this.renderer.bowler.startRunning();
             }
         });
 
-        // 2. Keyboard par 'Space' button dabane par ball fenkna (Only in OFFLINE BATTING mode)
+        // 2. Keyboard Space Key: BATTING me throw ball, NEW_BOWLER me trigger pre-jump transition to Frame 420
         window.addEventListener("keydown", (event) => {
             if (event.code === "Space") {
                 if (!this.isOnlineMode && this.renderer.gameMode === 'BATTING') {
                     throwNewBall();
                 } else if (this.renderer.gameMode === 'NEW_BOWLER') {
-                    this.renderer.bowler.startRunning();
+                    this.renderer.bowler.triggerPreJump();
                 }
             }
         });
