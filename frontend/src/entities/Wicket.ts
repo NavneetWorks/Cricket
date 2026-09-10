@@ -288,4 +288,67 @@ export default class Wicket {
 
         ctx.restore();
     }
+
+    /**
+     * Draw Static Wicket at any specified X coordinate (e.g. Bowler End Wicket)
+     */
+    public drawAt(ctx: CanvasRenderingContext2D, customX: number): void {
+        const sx = customX;
+        const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
+        const w = this.STUMP_DIAMETER;
+
+        ctx.save();
+
+        // 1. BASE SHADOW ON GROUND
+        ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+        ctx.beginPath();
+        ctx.ellipse(sx, groundY + 1, 6, 2.5, 0, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // 2. STATIC ICC DEEP BLUE STUMP
+        ctx.save();
+        ctx.translate(sx, groundY);
+
+        const stumpGrad = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
+        stumpGrad.addColorStop(0.0, "#030a1c");
+        stumpGrad.addColorStop(0.3, "#0b2553");
+        stumpGrad.addColorStop(0.55, "#1d4ed8");
+        stumpGrad.addColorStop(0.8, "#0f2e6b");
+        stumpGrad.addColorStop(1.0, "#020713");
+
+        ctx.fillStyle = stumpGrad;
+        ctx.fillRect(-w / 2, -this.WICKET_HEIGHT, w, this.WICKET_HEIGHT);
+
+        ctx.strokeStyle = "rgba(147, 197, 253, 0.5)";
+        ctx.lineWidth = 0.6;
+        ctx.strokeRect(-w / 2, -this.WICKET_HEIGHT, w, this.WICKET_HEIGHT);
+
+        ctx.fillStyle = "#030a1c";
+        ctx.fillRect(-w / 2 + 1.0, -this.WICKET_HEIGHT, w - 2.0, 2.0);
+
+        // Seated bail
+        const bailRadius = this.BAIL_BARREL_DIAMETER / 2;
+        const bailCenterY = -this.WICKET_HEIGHT - bailRadius + 1.0;
+
+        ctx.fillStyle = "#1d4ed8";
+        ctx.fillRect(-1.25, -this.WICKET_HEIGHT - 0.5, 2.5, 1.5);
+
+        const circleGrad = ctx.createRadialGradient(-0.8, bailCenterY - 0.8, 0.5, 0, bailCenterY, bailRadius);
+        circleGrad.addColorStop(0.0, "#93c5fd");
+        circleGrad.addColorStop(0.4, "#2563eb");
+        circleGrad.addColorStop(0.85, "#0b2553");
+        circleGrad.addColorStop(1.0, "#020713");
+
+        ctx.fillStyle = circleGrad;
+        ctx.beginPath();
+        ctx.arc(0, bailCenterY, bailRadius, 0, 2 * Math.PI);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+        ctx.lineWidth = 0.6;
+        ctx.stroke();
+
+        ctx.restore();
+        ctx.restore();
+    }
 }

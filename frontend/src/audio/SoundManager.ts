@@ -119,7 +119,7 @@ export class SoundManager {
         const isHandle = hitPixelOffset < 56; // First 56px = Handle
 
         // 2. Quartic Power-Law Dynamic Collision Impulse Speed Scaling (v^4.0 exponent curve)
-        const speedRatio = Math.max(.001, (impactSpeed-1000) / 220.0);
+        const speedRatio = Math.max(.001, (impactSpeed-0) / 220.0);
         const impactGain = Math.pow(speedRatio, 1.5); // Quartic curve: 0.0001 at defense to 1.0 at power shot
 
         // 3. Wood Thickness Normalization (12mm to 42mm)

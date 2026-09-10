@@ -1,4 +1,4 @@
-import { CANVAS_HEIGHT, GROUND_HEIGHT, PLAYER_LENGTH_FACTOR } from "../game/constants";
+import { CANVAS_WIDTH, CANVAS_HEIGHT, GROUND_HEIGHT, PLAYER_LENGTH_FACTOR } from "../game/constants";
 
 export interface Vec2 {
     x: number;
@@ -87,6 +87,7 @@ export class Bowler {
     public isPreJumpFrozen: boolean = false;
     public isExecutingJump: boolean = false;
     public jumpPhase: number = 0; // 0.0 to 1.0 progression through 420 frames
+    public hasReleasedBall: boolean = false; // Flag to track ball release instant during jump
 
     // Dedicated controls for jump action speed and body/limb movement frequency
     public jumpAnimationDuration: number = 1.2; // Time in seconds to complete the full 420-frame jump (arm/leg speed)
@@ -104,6 +105,7 @@ export class Bowler {
         this.isPreJumpFrozen = false;
         this.isExecutingJump = false;
         this.jumpPhase = 0;
+        this.hasReleasedBall = false;
         this.targetIntensity = 1.0;
     }
 
@@ -148,10 +150,11 @@ export class Bowler {
         this.isPreJumpFrozen = false;
         this.isExecutingJump = false;
         this.jumpPhase = 0;
+        this.hasReleasedBall = false;
         this.targetIntensity = 0.0;
         this.runIntensity = 0.0;
         this.stridePhase = 0;
-        this.currentHipPosition.x = 1100;
+        this.currentHipPosition.x = CANVAS_WIDTH;
         this.setInitialRunPose();
     }
 

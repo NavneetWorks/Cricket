@@ -135,8 +135,11 @@ export default class Renderer{
             this.bowlingArea.draw(this.ctx);
         }
 
-        // 🏃 NEW BOWLER Mode me Naya Bowler Skeleton draw hoga:
-        if (this.gameMode === 'NEW_BOWLER') {
+        // 🏏 Bowler End Wicket (Right Wicket at X = CANVAS_WIDTH - 250 = 1550px) drawn BEFORE bowler
+        this.wicket.drawAt(this.ctx, CANVAS_WIDTH - 50);
+
+        // 🏃 NEW BOWLER & BATTING Mode me Bowler Skeleton draw hoga:
+        if (this.gameMode === 'NEW_BOWLER' || this.gameMode === 'BATTING') {
             this.bowler.drawDebugSkeleton(this.ctx);
         }
 
@@ -338,7 +341,7 @@ export default class Renderer{
         this.ctx.lineTo(boxX + boxW, miniGroundY);
         this.ctx.stroke();
 
-        // 4. TINY VERTICAL WICKET LINE (AT WORLD X = 150)
+        // 4. TINY VERTICAL WICKET LINE (AT WORLD X = 150) - Batsman End Wicket
         const wicketWorldX = this.wicket ? this.wicket.FIXED_X : 150;
         const miniWicketX = boxX + (wicketWorldX - minWorldX) * scaleX;
         this.ctx.strokeStyle = "#38bdf8"; // Bright cyan wicket line
@@ -346,6 +349,16 @@ export default class Renderer{
         this.ctx.beginPath();
         this.ctx.moveTo(miniWicketX, miniGroundY);
         this.ctx.lineTo(miniWicketX, miniGroundY - 14); // 14px height
+        this.ctx.stroke();
+
+        // 4b. TINY VERTICAL BOWLER WICKET LINE (AT WORLD X = CANVAS_WIDTH - 250 = 1550px)
+        const bowlerWicketX = CANVAS_WIDTH - 250;
+        const miniBowlerWicketX = boxX + (bowlerWicketX - minWorldX) * scaleX;
+        this.ctx.strokeStyle = "#38bdf8"; // Bright cyan wicket line
+        this.ctx.lineWidth = 2.0;
+        this.ctx.beginPath();
+        this.ctx.moveTo(miniBowlerWicketX, miniGroundY);
+        this.ctx.lineTo(miniBowlerWicketX, miniGroundY - 14); // 14px height
         this.ctx.stroke();
 
         // 5. FULL PARABOLIC TRAJECTORY ARC AFTER HIT (0..10,000 px)

@@ -39,6 +39,10 @@ export default class GameLoop{
   
     private hasAuthoritativeResult: boolean = false; // 🐛 DOUBLE-COLLISION FIX: HIT_RESULT
    
+    private currentDeliverySpeed: number = 3000;
+    private currentDeliveryAngle: number = 180;
+    private targetReleasePhase: number = 37.5 / 41.0;
+
     private batPoseQueue: BatSnapshot[] = [];        // time-sorted snapshots (naye end me)
     private batInterpTick: number = 0;               // playhead (float tick-space me)
     private readonly FIXED_DT: number = 1 / 60;      // Physics tick = 16.67ms
@@ -137,42 +141,50 @@ export default class GameLoop{
                 };
             }
         }
-        const throwNewBall = () => {
+        const startBowlerDelivery = () => {
+            const bowler = this.renderer.bowler;
+            bowler.resetToIdle();
+            bowler.currentHipPosition.x = 1.4*CANVAS_WIDTH;
+            bowler.startRunning();
+
             const minSpeed = 2500;
-            const maxSpeed = 4000;
-            const randomSpeed = minSpeed + Math.random() * (maxSpeed - minSpeed);
-            
-            const minAngle = 0;
-            const maxAngle = 8;
-            
-            // RIGHT se LEFT fenkne ke liye changes:
-            
-            // 1. Bowler screen ke Right side (jaise X = 1200) se fenkega
-            const startX = CANVAS_WIDTH;
-            const startY = (CANVAS_HEIGHT - GROUND_HEIGHT) - 350;
-             
-           
-            const randomAngle = 180 - (minAngle + Math.random() * (maxAngle - minAngle));
-            
-            // Ball ko naye X aur naye Angle ke sath release karein
-            this.renderer.wicket.reset();
-            this.ball.throwBall(startX, startY, randomSpeed, randomAngle); 
+            const maxSpeed = 3500;
+            this.currentDeliverySpeed = minSpeed + Math.random() * (maxSpeed - minSpeed);
+
+            const minAngle = 1;
+            const maxAngle = 14;
+            const randomAngleOffset = minAngle + Math.random() * (maxAngle - minAngle);
+            this.currentDeliveryAngle = 180 - randomAngleOffset;
+
+            // Lower angle -> Release near Keyframe 38 (index 37.0)
+            // Higher angle -> Release near Keyframe 39 (index 38.0)
+            const angleRatio = (randomAngleOffset - minAngle) / (maxAngle - minAngle);
+            const releaseKeyframe = 37.0 + angleRatio * 1.0;
+            this.targetReleasePhase = releaseKeyframe / 41.0;
+
+            this.ball.isHeldInHand = true;
+            this.ball.isActive = true;
+            this.ball.pos.x = bowler.leftWrist.x;
+            this.ball.pos.y = bowler.leftWrist.y;
+            this.ball.prevPos.x = bowler.leftWrist.x;
+            this.ball.prevPos.y = bowler.leftWrist.y;
         };
-        // 1. Mouse Click (Left Click): BATTING me throw ball, NEW_BOWLER me start runup
+
+        // 1. Mouse Click (Left Click): BATTING me start bowler delivery, NEW_BOWLER me start runup
         window.addEventListener("mousedown", (event) => {
             if (event.button !== 0) return; // Only Left Click
             if (!this.isOnlineMode && this.renderer.gameMode === 'BATTING') {
-                throwNewBall();
+                startBowlerDelivery();
             } else if (this.renderer.gameMode === 'NEW_BOWLER') {
                 this.renderer.bowler.startRunning();
             }
         });
 
-        // 2. Keyboard Space Key: BATTING me throw ball, NEW_BOWLER me trigger pre-jump transition to Frame 420
+        // 2. Keyboard Space Key: BATTING me start bowler delivery, NEW_BOWLER me trigger pre-jump transition
         window.addEventListener("keydown", (event) => {
             if (event.code === "Space") {
                 if (!this.isOnlineMode && this.renderer.gameMode === 'BATTING') {
-                    throwNewBall();
+                    startBowlerDelivery();
                 } else if (this.renderer.gameMode === 'NEW_BOWLER') {
                     this.renderer.bowler.triggerPreJump();
                 }
@@ -357,6 +369,38 @@ private getProjectileStateWithBounce(
                 return;
             }
             this.bat.update(this.input.mouseX, this.input.mouseY, dt, this.input);
+
+            // 🏃 Bowler & Ball Attachment / Release logic in BATTING Mode
+            const bowler = this.renderer.bowler;
+            bowler.update(dt);
+
+            if (this.ball.isHeldInHand && (bowler.isRunning || bowler.isPreJumpTransitioning || bowler.isExecutingJump)) {
+                this.ball.pos.x = bowler.leftWrist.x;
+                this.ball.pos.y = bowler.leftWrist.y;
+                this.ball.prevPos.x = bowler.leftWrist.x;
+                this.ball.prevPos.y = bowler.leftWrist.y;
+                this.ball.isActive = true;
+
+                // Auto pre-jump trigger near crease (x <= 750)
+                if (bowler.isRunning && bowler.currentHipPosition.x <= 1.2*CANVAS_WIDTH && !bowler.isPreJumpTransitioning && !bowler.isExecutingJump) {
+                    bowler.triggerPreJump();
+                }
+
+                // Release ball dynamically synchronized between Keyframe 38 and 39 based on delivery angle!
+                if (bowler.isExecutingJump && bowler.jumpPhase >= this.targetReleasePhase && !bowler.hasReleasedBall) {
+                    bowler.hasReleasedBall = true;
+                    this.ball.isHeldInHand = false;
+
+                    this.renderer.wicket.reset();
+                    this.ball.throwBall(
+                        bowler.leftWrist.x,
+                        bowler.leftWrist.y,
+                        this.currentDeliverySpeed,
+                        this.currentDeliveryAngle
+                    );
+                }
+            }
+
             this.ball.update(dt);
             this.renderer.wicket.update(dt);
             

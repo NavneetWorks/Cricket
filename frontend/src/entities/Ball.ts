@@ -13,6 +13,7 @@ export default class Ball {
 
     public isActive = false; // Check karne ke liye ki ball hawa mein hai ya nahi
     public isStuck = false; // 1-frame dwell state jab bat se chipki ho
+    public isHeldInHand = false; // Flag jab ball bowler ke haath me pakdi ho
     public rotation = 0; // Ball ke spin ke liye
 
     constructor() {}
@@ -25,6 +26,7 @@ export default class Ball {
         this.prevPos.y = startY;
         this.rotation = 0; // Reset spin
         this.isStuck = false;
+        this.isHeldInHand = false;
         
         // Math lagakar angle ko velocity (X aur Y) mein convert karna
         const angleRad = (angleDegrees * Math.PI) / 180;
@@ -98,7 +100,7 @@ export default class Ball {
 
     // Har frame mein ball ki physics (Gravity aur Bounce) calculate karna
     public update(dt: number): void {
-        if (!this.isActive || this.isStuck) return;
+        if (!this.isActive || this.isStuck || this.isHeldInHand) return;
 
         this.prevPos.x = this.pos.x;
         this.prevPos.y = this.pos.y;
