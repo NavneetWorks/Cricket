@@ -119,7 +119,7 @@ export class Bowler {
     // ─────────────────────────────────────────────────────────────────────────
     public static readonly STATIC_FRAMES: KeyframePose[] = [
         {
-            // FRAME 1: Left Heel Strike
+            // FRAME 1: 
             spineAngleDeg: -130,           
             shoulderJointDist: 40,
             shoulderJointAngleDeg: 100,     
@@ -135,8 +135,42 @@ export class Bowler {
             rightKneeAngleDeg: -30,         
             hipYOffset: -10
         },
+         {
+            // FRAME 2: 
+            spineAngleDeg: -127,           
+            shoulderJointDist: 45,
+            shoulderJointAngleDeg: 102,     
+            leftUpperArmAngleDeg: 94,     
+            leftElbowAngleDeg: 75,        
+            rightUpperArmAngleDeg: 28,    
+            rightElbowAngleDeg: 73,        
+            pelvisJointDist: 10,           
+            pelvisJointAngleDeg: 100,       
+            leftThighAngleDeg: 155,        
+            rightThighAngleDeg: 83,        
+            leftKneeAngleDeg: -40,          
+            rightKneeAngleDeg: -45,         
+            hipYOffset: -10
+        },
+          {
+            // FRAME 3: 
+            spineAngleDeg: -127,           
+            shoulderJointDist: 45,
+            shoulderJointAngleDeg: 102,     
+            leftUpperArmAngleDeg: 94,     
+            leftElbowAngleDeg: 60,        
+            rightUpperArmAngleDeg: 28,    
+            rightElbowAngleDeg: 73,        
+            pelvisJointDist: 10,           
+            pelvisJointAngleDeg: 100,       
+            leftThighAngleDeg: 155,        
+            rightThighAngleDeg: 83,        
+            leftKneeAngleDeg: -35,          
+            rightKneeAngleDeg: -45,         
+            hipYOffset: -10
+        },
         {
-            // FRAME 2
+            // FRAME 4
             spineAngleDeg: -124,           
             shoulderJointDist: 50,
             shoulderJointAngleDeg: 105,     
@@ -152,8 +186,42 @@ export class Bowler {
             rightKneeAngleDeg: -60,         
             hipYOffset: -10
         },
+         {
+            // FRAME 5
+            spineAngleDeg: -122,           
+            shoulderJointDist: 50,
+            shoulderJointAngleDeg: 105,     
+            leftUpperArmAngleDeg: 80,     
+            leftElbowAngleDeg: 38,        
+            rightUpperArmAngleDeg: 41,    
+            rightElbowAngleDeg: 70,        
+            pelvisJointDist: 0,           
+            pelvisJointAngleDeg: 100,       
+            leftThighAngleDeg: 140,        
+            rightThighAngleDeg: 89,        
+            leftKneeAngleDeg: -28,          
+            rightKneeAngleDeg: -73,         
+            hipYOffset: -12
+        },
+         {
+            // FRAME 6
+            spineAngleDeg: -122,           
+            shoulderJointDist: 50,
+            shoulderJointAngleDeg: 105,     
+            leftUpperArmAngleDeg: 80,     
+            leftElbowAngleDeg: 38,        
+            rightUpperArmAngleDeg: 41,    
+            rightElbowAngleDeg: 70,        
+            pelvisJointDist: 0,           
+            pelvisJointAngleDeg: 100,       
+            leftThighAngleDeg: 140,        
+            rightThighAngleDeg: 89,        
+            leftKneeAngleDeg: -28,          
+            rightKneeAngleDeg: -85,         
+            hipYOffset: -14
+        },
         {
-            // FRAME 3
+            // FRAME 7
             spineAngleDeg: -120,           
             shoulderJointDist: 50,
             shoulderJointAngleDeg: 105,     
@@ -170,7 +238,24 @@ export class Bowler {
             hipYOffset: -15
         },
         {
-            // FRAME 4
+            // FRAME 8
+            spineAngleDeg: -125,           
+            shoulderJointDist: 50,
+            shoulderJointAngleDeg: 105,     
+            leftUpperArmAngleDeg: 70,     
+            leftElbowAngleDeg: 27,        
+            rightUpperArmAngleDeg: 55,    
+            rightElbowAngleDeg: 70,        
+            pelvisJointDist: -18,           
+            pelvisJointAngleDeg: 100,       
+            leftThighAngleDeg: 135,        
+            rightThighAngleDeg: 101,        
+            leftKneeAngleDeg: -27,          
+            rightKneeAngleDeg: -102,         
+            hipYOffset: -14
+        },
+        {
+            // FRAME 9
              spineAngleDeg: -130,           
             shoulderJointDist: 50,
             shoulderJointAngleDeg: 105,     
@@ -187,7 +272,58 @@ export class Bowler {
             hipYOffset: -12
         },
         {
-            // FRAME 5
+            // FRAME 10
+            spineAngleDeg: -133,           
+            shoulderJointDist: 45,
+            shoulderJointAngleDeg: 115,     
+            leftUpperArmAngleDeg: 60,     
+            leftElbowAngleDeg: 40, ///////       
+            rightUpperArmAngleDeg: 65,    
+            rightElbowAngleDeg: 72,        
+            pelvisJointDist: -27,           
+            pelvisJointAngleDeg: 110,     //  
+            leftThighAngleDeg: 130,        //
+            rightThighAngleDeg: 111,        
+            leftKneeAngleDeg: -30,          
+            rightKneeAngleDeg: -115,         
+            hipYOffset: -13
+        },
+        {
+            // FRAME 11
+            spineAngleDeg: -133,           
+            shoulderJointDist: 45,
+            shoulderJointAngleDeg: 115,     
+            leftUpperArmAngleDeg: 60,     
+            leftElbowAngleDeg: 55, ///////       
+            rightUpperArmAngleDeg: 65,    
+            rightElbowAngleDeg: 72,        
+            pelvisJointDist: -27,           
+            pelvisJointAngleDeg: 120,     //  
+            leftThighAngleDeg: 120,        //
+            rightThighAngleDeg: 114,        
+            leftKneeAngleDeg: -30,          
+            rightKneeAngleDeg: -120,         
+            hipYOffset: -15
+        },
+         {
+            // FRAME 12
+            spineAngleDeg: -133,           
+            shoulderJointDist: 45,
+            shoulderJointAngleDeg: 115,     
+            leftUpperArmAngleDeg: 60,     
+            leftElbowAngleDeg: 70, ///////       
+            rightUpperArmAngleDeg: 65,    
+            rightElbowAngleDeg: 72,        
+            pelvisJointDist: -27,           
+            pelvisJointAngleDeg: 120,     //  
+            leftThighAngleDeg: 120,        //
+            rightThighAngleDeg: 114,        
+            leftKneeAngleDeg: -30,          
+            rightKneeAngleDeg: -120,         
+            hipYOffset: -15
+        },
+        {
+            // FRAME 13
              spineAngleDeg: -135,           
             shoulderJointDist: 40,
             shoulderJointAngleDeg: 125,     
@@ -204,7 +340,41 @@ export class Bowler {
             hipYOffset: -16
         },
         {
-            // FRAME 6
+            // FRAME 14
+             spineAngleDeg: -130,           
+            shoulderJointDist: 35,
+            shoulderJointAngleDeg: 127,     
+            leftUpperArmAngleDeg: 45,     
+            leftElbowAngleDeg: 95,        //
+            rightUpperArmAngleDeg: 70,    
+            rightElbowAngleDeg: 65,      //  
+            pelvisJointDist: -30,           
+            pelvisJointAngleDeg: 130,       
+            leftThighAngleDeg: 100,   //     
+            rightThighAngleDeg: 122,  //      
+            leftKneeAngleDeg: -30,          
+            rightKneeAngleDeg: -125,         
+            hipYOffset: -16
+        },
+        {
+            // FRAME 15
+             spineAngleDeg: -130,           
+            shoulderJointDist: 35,
+            shoulderJointAngleDeg: 127,     
+            leftUpperArmAngleDeg: 45,     
+            leftElbowAngleDeg: 108,        //
+            rightUpperArmAngleDeg: 70,    
+            rightElbowAngleDeg: 57,      //  
+            pelvisJointDist: -30,           
+            pelvisJointAngleDeg: 130,       
+            leftThighAngleDeg: 92,   //     
+            rightThighAngleDeg: 126,  //      
+            leftKneeAngleDeg: -30,          
+            rightKneeAngleDeg: -125,         
+            hipYOffset: -16
+        },
+        {
+            // FRAME 16
             spineAngleDeg: -125,           
             shoulderJointDist: 30,
             shoulderJointAngleDeg: 130,     
@@ -221,7 +391,41 @@ export class Bowler {
             hipYOffset: -16
         },
         {
-            // FRAME 7
+            // FRAME 17
+            spineAngleDeg: -125,           
+            shoulderJointDist: 20,//
+            shoulderJointAngleDeg: 130,     
+            leftUpperArmAngleDeg: 40,     
+            leftElbowAngleDeg: 120,        
+            rightUpperArmAngleDeg: 55,  //  
+            rightElbowAngleDeg: 70,  //      
+            pelvisJointDist: -30,           
+            pelvisJointAngleDeg: 130,       
+            leftThighAngleDeg: 72, //       
+            rightThighAngleDeg: 133,        
+            leftKneeAngleDeg: -28,   //       
+            rightKneeAngleDeg: -115,         
+            hipYOffset: -10
+        },
+        {
+            // FRAME 18
+            spineAngleDeg: -125,           
+            shoulderJointDist: 10,//
+            shoulderJointAngleDeg: 130,     
+            leftUpperArmAngleDeg: 40,     
+            leftElbowAngleDeg: 120,        
+            rightUpperArmAngleDeg: 40,  //  
+            rightElbowAngleDeg: 90,  //      
+            pelvisJointDist: -30,           
+            pelvisJointAngleDeg: 130,       
+            leftThighAngleDeg: 66, //       
+            rightThighAngleDeg: 133,        
+            leftKneeAngleDeg: -24,   //       
+            rightKneeAngleDeg: -107,         
+            hipYOffset: -5
+        },
+        {
+            // FRAME 19
             spineAngleDeg: -125,           
             shoulderJointDist: 1,
             shoulderJointAngleDeg: 130,     
@@ -238,7 +442,58 @@ export class Bowler {
             hipYOffset: 0
         },
         {
-            // FRAME 8
+            // FRAME 20
+            spineAngleDeg: -121,           
+            shoulderJointDist: 7,
+            shoulderJointAngleDeg: 110,     
+            leftUpperArmAngleDeg: 60,     
+            leftElbowAngleDeg: 120,        
+            rightUpperArmAngleDeg: 40,    
+            rightElbowAngleDeg: 102,        
+            pelvisJointDist: -30,           
+            pelvisJointAngleDeg: 125,       
+            leftThighAngleDeg: 60,        
+            rightThighAngleDeg: 135,        
+            leftKneeAngleDeg: -20,          
+            rightKneeAngleDeg: -80,         
+            hipYOffset: -3
+        },
+        {
+            // FRAME 21
+            spineAngleDeg: -118,           
+            shoulderJointDist: 10,
+            shoulderJointAngleDeg: 90,     
+            leftUpperArmAngleDeg: 80,     
+            leftElbowAngleDeg: 120,        
+            rightUpperArmAngleDeg: 60,    
+            rightElbowAngleDeg: 97,        
+            pelvisJointDist: -30,           
+            pelvisJointAngleDeg: 120,       
+            leftThighAngleDeg: 60,        
+            rightThighAngleDeg: 131,        
+            leftKneeAngleDeg: -20,          
+            rightKneeAngleDeg: -65,         
+            hipYOffset: -6
+        },
+        {
+            // FRAME 22
+            spineAngleDeg: -116,           
+            shoulderJointDist: 13,
+            shoulderJointAngleDeg: 75,     
+            leftUpperArmAngleDeg: 100,     
+            leftElbowAngleDeg: 120,        
+            rightUpperArmAngleDeg: 75,    
+            rightElbowAngleDeg: 94,        
+            pelvisJointDist: -30,           
+            pelvisJointAngleDeg: 115,       
+            leftThighAngleDeg: 60,        
+            rightThighAngleDeg: 127,        
+            leftKneeAngleDeg: -20,          
+            rightKneeAngleDeg: -57,         
+            hipYOffset: -8
+        },
+        {
+            // FRAME 23
             spineAngleDeg: -115,           
             shoulderJointDist: 15,
             shoulderJointAngleDeg: 60,     
@@ -246,7 +501,7 @@ export class Bowler {
             leftElbowAngleDeg: 120,        
             rightUpperArmAngleDeg: 90,    
             rightElbowAngleDeg: 90,        
-            pelvisJointDist: -30,           
+            pelvisJointDist: -30,            
             pelvisJointAngleDeg: 110,       
             leftThighAngleDeg: 60,        
             rightThighAngleDeg: 125,        
@@ -254,8 +509,25 @@ export class Bowler {
             rightKneeAngleDeg: -50,         
             hipYOffset: -10
         },
+         {
+            // FRAME 24
+            spineAngleDeg: -117,            
+            shoulderJointDist: 17, 
+            shoulderJointAngleDeg: 75,     
+            leftUpperArmAngleDeg: 102,     
+            leftElbowAngleDeg: 110,        
+            rightUpperArmAngleDeg: 80,    
+            rightElbowAngleDeg: 90,        
+            pelvisJointDist: -30,            
+            pelvisJointAngleDeg: 110,       
+            leftThighAngleDeg: 65,        
+            rightThighAngleDeg: 122,        
+            leftKneeAngleDeg: -33,          
+            rightKneeAngleDeg: -35,         
+            hipYOffset: -15
+        },
         {
-            // FRAME 9
+            // FRAME 25
              spineAngleDeg: -120,           
             shoulderJointDist: 20,
             shoulderJointAngleDeg: 90,     
@@ -272,7 +544,41 @@ export class Bowler {
             hipYOffset: -20
         },
         {
-            // FRAME 10
+            // FRAME 26
+             spineAngleDeg: -120,           
+            shoulderJointDist: 12,
+            shoulderJointAngleDeg: 90,     
+            leftUpperArmAngleDeg: 85,     
+            leftElbowAngleDeg: 90,        
+            rightUpperArmAngleDeg: 75,    
+            rightElbowAngleDeg: 80,        
+            pelvisJointDist: -30,           
+            pelvisJointAngleDeg: 110,       
+            leftThighAngleDeg: 75,        
+            rightThighAngleDeg: 120,        
+            leftKneeAngleDeg: -65,          
+            rightKneeAngleDeg: -22,         
+            hipYOffset: -20
+        },
+        {
+            // FRAME 27
+             spineAngleDeg: -120,           
+            shoulderJointDist: 7,
+            shoulderJointAngleDeg: 90,     
+            leftUpperArmAngleDeg: 85,     
+            leftElbowAngleDeg: 85,        
+            rightUpperArmAngleDeg: 77,    
+            rightElbowAngleDeg: 75,        
+            pelvisJointDist: -30,           
+            pelvisJointAngleDeg: 110,       
+            leftThighAngleDeg: 78,        
+            rightThighAngleDeg: 120,        
+            leftKneeAngleDeg: -82,          
+            rightKneeAngleDeg: -21,         
+            hipYOffset: -20
+        },
+        {
+            // FRAME 28
             spineAngleDeg: -120,           
             shoulderJointDist: 5,
             shoulderJointAngleDeg: 90,     
@@ -289,7 +595,24 @@ export class Bowler {
             hipYOffset: -20
         },
         {
-            // FRAME 11
+            // FRAME 29
+            spineAngleDeg: -120,           
+            shoulderJointDist: 12,
+            shoulderJointAngleDeg: 90,     
+            leftUpperArmAngleDeg: 92,     
+            leftElbowAngleDeg: 80,        
+            rightUpperArmAngleDeg: 77,    
+            rightElbowAngleDeg: 60,        
+            pelvisJointDist: -30,           
+            pelvisJointAngleDeg: 110,       
+            leftThighAngleDeg: 90,        
+            rightThighAngleDeg: 117,        
+            leftKneeAngleDeg: -110,           
+            rightKneeAngleDeg: -25,         
+            hipYOffset: -20
+        },
+        {
+            // FRAME 30
              spineAngleDeg: -120,           
             shoulderJointDist: 20,
             shoulderJointAngleDeg: 90,     
@@ -306,7 +629,24 @@ export class Bowler {
             hipYOffset: -20
         },
         {
-            // FRAME 12
+            // FRAME 31
+             spineAngleDeg: -120,           
+            shoulderJointDist: 25,
+            shoulderJointAngleDeg: 90,     
+            leftUpperArmAngleDeg: 102,     
+            leftElbowAngleDeg: 85,        
+            rightUpperArmAngleDeg: 68,    
+            rightElbowAngleDeg: 55,        
+            pelvisJointDist: -25,           
+            pelvisJointAngleDeg: 110,       
+            leftThighAngleDeg: 105,        
+            rightThighAngleDeg: 108,        
+            leftKneeAngleDeg: -125,          
+            rightKneeAngleDeg: -30,         
+            hipYOffset: -20
+        },
+        {
+            // FRAME 32
             spineAngleDeg: -120,           
             shoulderJointDist: 30,
             shoulderJointAngleDeg: 90,     
@@ -323,7 +663,24 @@ export class Bowler {
             hipYOffset: -20
         },
         {
-            // FRAME 13
+            // FRAME 33
+            spineAngleDeg: -120,           
+            shoulderJointDist: 35,
+            shoulderJointAngleDeg: 90,     
+            leftUpperArmAngleDeg: 107,     
+            leftElbowAngleDeg: 98,        
+            rightUpperArmAngleDeg: 52,    
+            rightElbowAngleDeg: 65,        
+            pelvisJointDist: -5,           
+            pelvisJointAngleDeg: 110,       
+            leftThighAngleDeg: 125,        
+            rightThighAngleDeg: 100,        
+            leftKneeAngleDeg: -130,          
+            rightKneeAngleDeg: -30,         
+            hipYOffset: -20
+        },
+        {
+            // FRAME 34
              spineAngleDeg: -120,           
             shoulderJointDist: 40,
             shoulderJointAngleDeg: 90,     
@@ -340,7 +697,24 @@ export class Bowler {
             hipYOffset: -20
         },
         {
-            // FRAME 14
+            // FRAME 35
+             spineAngleDeg: -117,           
+            shoulderJointDist: 40,
+            shoulderJointAngleDeg: 90,     
+            leftUpperArmAngleDeg: 110,     
+            leftElbowAngleDeg: 105,        
+            rightUpperArmAngleDeg: 42,    
+            rightElbowAngleDeg: 70,        
+            pelvisJointDist: 5,           
+            pelvisJointAngleDeg: 110,       
+            leftThighAngleDeg: 150,        
+            rightThighAngleDeg: 85,        
+            leftKneeAngleDeg: -115,          
+            rightKneeAngleDeg: -30,         
+            hipYOffset: -20
+        },
+        {
+            // FRAME 36
              spineAngleDeg: -115,           
             shoulderJointDist: 40,
             shoulderJointAngleDeg: 90,     
@@ -354,8 +728,42 @@ export class Bowler {
             rightThighAngleDeg: 70,        
             leftKneeAngleDeg: -100,          
             rightKneeAngleDeg: -30,         
-            hipYOffset: 0
-        }
+            hipYOffset: -16
+        },
+        {
+            // FRAME 37: 
+            spineAngleDeg: -122,           
+            shoulderJointDist: 40,
+            shoulderJointAngleDeg: 95,     
+            leftUpperArmAngleDeg: 105,     
+            leftElbowAngleDeg: 102,        
+            rightUpperArmAngleDeg: 31,    
+            rightElbowAngleDeg: 78.5,        
+            pelvisJointDist: 7.5,           
+            pelvisJointAngleDeg: 105,       
+            leftThighAngleDeg: 150,        
+            rightThighAngleDeg: 75,        
+            leftKneeAngleDeg: -85,         // 
+            rightKneeAngleDeg: -30,         
+            hipYOffset: -14
+        },
+        {
+            // FRAME 38: 
+            spineAngleDeg: -122,           
+            shoulderJointDist: 40,
+            shoulderJointAngleDeg: 95,     
+            leftUpperArmAngleDeg: 105,     
+            leftElbowAngleDeg: 102,        
+            rightUpperArmAngleDeg: 31,    
+            rightElbowAngleDeg: 78.5,        
+            pelvisJointDist: 7.5,           
+            pelvisJointAngleDeg: 105,       
+            leftThighAngleDeg: 150,        
+            rightThighAngleDeg: 75,        
+            leftKneeAngleDeg: -65,         // 
+            rightKneeAngleDeg: -30,         
+            hipYOffset: -12
+        },
     ];
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -380,23 +788,78 @@ export class Bowler {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    public static interpolatePose(p1: KeyframePose, p2: KeyframePose, t: number): KeyframePose {
-        const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    public static catmullRom(p0: number, p1: number, p2: number, p3: number, t: number): number {
+        const t2 = t * t;
+        const t3 = t2 * t;
+        return 0.5 * (
+            (2 * p1) +
+            (-p0 + p2) * t +
+            (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+            (-p0 + 3 * p1 - 3 * p2 + p3) * t3
+        );
+    }
+
+    public static catmullRomDeg(p0: number, p1: number, p2: number, p3: number, t: number): number {
+        const norm = (val: number, ref: number) => {
+            let diff = (val - ref) % 360;
+            if (diff > 180) diff -= 360;
+            if (diff < -180) diff += 360;
+            return ref + diff;
+        };
+
+        const v1 = p1;
+        const v0 = norm(p0, v1);
+        const v2 = norm(p2, v1);
+        const v3 = norm(p3, v2);
+
+        return Bowler.catmullRom(v0, v1, v2, v3, t);
+    }
+
+    public static interpolateCatmullRom(p0: KeyframePose, p1: KeyframePose, p2: KeyframePose, p3: KeyframePose, t: number): KeyframePose {
         return {
-            spineAngleDeg: lerp(p1.spineAngleDeg, p2.spineAngleDeg, t),
-            shoulderJointDist: lerp(p1.shoulderJointDist, p2.shoulderJointDist, t),
-            shoulderJointAngleDeg: lerp(p1.shoulderJointAngleDeg, p2.shoulderJointAngleDeg, t),
-            leftUpperArmAngleDeg: lerp(p1.leftUpperArmAngleDeg, p2.leftUpperArmAngleDeg, t),
-            leftElbowAngleDeg: lerp(p1.leftElbowAngleDeg, p2.leftElbowAngleDeg, t),
-            rightUpperArmAngleDeg: lerp(p1.rightUpperArmAngleDeg, p2.rightUpperArmAngleDeg, t),
-            rightElbowAngleDeg: lerp(p1.rightElbowAngleDeg, p2.rightElbowAngleDeg, t),
-            pelvisJointDist: lerp(p1.pelvisJointDist, p2.pelvisJointDist, t),
-            pelvisJointAngleDeg: lerp(p1.pelvisJointAngleDeg, p2.pelvisJointAngleDeg, t),
-            leftThighAngleDeg: lerp(p1.leftThighAngleDeg, p2.leftThighAngleDeg, t),
-            rightThighAngleDeg: lerp(p1.rightThighAngleDeg, p2.rightThighAngleDeg, t),
-            leftKneeAngleDeg: lerp(p1.leftKneeAngleDeg, p2.leftKneeAngleDeg, t),
-            rightKneeAngleDeg: lerp(p1.rightKneeAngleDeg, p2.rightKneeAngleDeg, t),
-            hipYOffset: lerp(p1.hipYOffset, p2.hipYOffset, t)
+            spineAngleDeg: Bowler.catmullRomDeg(p0.spineAngleDeg, p1.spineAngleDeg, p2.spineAngleDeg, p3.spineAngleDeg, t),
+            shoulderJointDist: Bowler.catmullRom(p0.shoulderJointDist, p1.shoulderJointDist, p2.shoulderJointDist, p3.shoulderJointDist, t),
+            shoulderJointAngleDeg: Bowler.catmullRomDeg(p0.shoulderJointAngleDeg, p1.shoulderJointAngleDeg, p2.shoulderJointAngleDeg, p3.shoulderJointAngleDeg, t),
+            leftUpperArmAngleDeg: Bowler.catmullRomDeg(p0.leftUpperArmAngleDeg, p1.leftUpperArmAngleDeg, p2.leftUpperArmAngleDeg, p3.leftUpperArmAngleDeg, t),
+            leftElbowAngleDeg: Bowler.catmullRomDeg(p0.leftElbowAngleDeg, p1.leftElbowAngleDeg, p2.leftElbowAngleDeg, p3.leftElbowAngleDeg, t),
+            rightUpperArmAngleDeg: Bowler.catmullRomDeg(p0.rightUpperArmAngleDeg, p1.rightUpperArmAngleDeg, p2.rightUpperArmAngleDeg, p3.rightUpperArmAngleDeg, t),
+            rightElbowAngleDeg: Bowler.catmullRomDeg(p0.rightElbowAngleDeg, p1.rightElbowAngleDeg, p2.rightElbowAngleDeg, p3.rightElbowAngleDeg, t),
+            pelvisJointDist: Bowler.catmullRom(p0.pelvisJointDist, p1.pelvisJointDist, p2.pelvisJointDist, p3.pelvisJointDist, t),
+            pelvisJointAngleDeg: Bowler.catmullRomDeg(p0.pelvisJointAngleDeg, p1.pelvisJointAngleDeg, p2.pelvisJointAngleDeg, p3.pelvisJointAngleDeg, t),
+            leftThighAngleDeg: Bowler.catmullRomDeg(p0.leftThighAngleDeg, p1.leftThighAngleDeg, p2.leftThighAngleDeg, p3.leftThighAngleDeg, t),
+            rightThighAngleDeg: Bowler.catmullRomDeg(p0.rightThighAngleDeg, p1.rightThighAngleDeg, p2.rightThighAngleDeg, p3.rightThighAngleDeg, t),
+            leftKneeAngleDeg: Bowler.catmullRomDeg(p0.leftKneeAngleDeg, p1.leftKneeAngleDeg, p2.leftKneeAngleDeg, p3.leftKneeAngleDeg, t),
+            rightKneeAngleDeg: Bowler.catmullRomDeg(p0.rightKneeAngleDeg, p1.rightKneeAngleDeg, p2.rightKneeAngleDeg, p3.rightKneeAngleDeg, t),
+            hipYOffset: Bowler.catmullRom(p0.hipYOffset, p1.hipYOffset, p2.hipYOffset, p3.hipYOffset, t)
+        };
+    }
+
+    public static interpolatePose(p1: KeyframePose, p2: KeyframePose, t: number): KeyframePose {
+        const lerpVal = (a: number, b: number, factor: number) => a + (b - a) * factor;
+
+        // Angle lerp using shortest path (-180 to 180 wrapping)
+        const lerpDeg = (a: number, b: number, factor: number) => {
+            let diff = (b - a) % 360;
+            if (diff > 180) diff -= 360;
+            if (diff < -180) diff += 360;
+            return a + diff * factor;
+        };
+
+        return {
+            spineAngleDeg: lerpDeg(p1.spineAngleDeg, p2.spineAngleDeg, t),
+            shoulderJointDist: lerpVal(p1.shoulderJointDist, p2.shoulderJointDist, t),
+            shoulderJointAngleDeg: lerpDeg(p1.shoulderJointAngleDeg, p2.shoulderJointAngleDeg, t),
+            leftUpperArmAngleDeg: lerpDeg(p1.leftUpperArmAngleDeg, p2.leftUpperArmAngleDeg, t),
+            leftElbowAngleDeg: lerpDeg(p1.leftElbowAngleDeg, p2.leftElbowAngleDeg, t),
+            rightUpperArmAngleDeg: lerpDeg(p1.rightUpperArmAngleDeg, p2.rightUpperArmAngleDeg, t),
+            rightElbowAngleDeg: lerpDeg(p1.rightElbowAngleDeg, p2.rightElbowAngleDeg, t),
+            pelvisJointDist: lerpVal(p1.pelvisJointDist, p2.pelvisJointDist, t),
+            pelvisJointAngleDeg: lerpDeg(p1.pelvisJointAngleDeg, p2.pelvisJointAngleDeg, t),
+            leftThighAngleDeg: lerpDeg(p1.leftThighAngleDeg, p2.leftThighAngleDeg, t),
+            rightThighAngleDeg: lerpDeg(p1.rightThighAngleDeg, p2.rightThighAngleDeg, t),
+            leftKneeAngleDeg: lerpDeg(p1.leftKneeAngleDeg, p2.leftKneeAngleDeg, t),
+            rightKneeAngleDeg: lerpDeg(p1.rightKneeAngleDeg, p2.rightKneeAngleDeg, t),
+            hipYOffset: lerpVal(p1.hipYOffset, p2.hipYOffset, t)
         };
     }
 
@@ -492,11 +955,11 @@ export class Bowler {
 
     // ─────────────────────────────────────────────────────────────────────────
     // Adjustable variable for how much physical distance one full cycle of 14 frames covers.
-    public runCycleDistance: number = 240; 
+    public runCycleDistance: number = 420; 
 
     public updateRunPose(dt: number): void {
         // 1. Update frequency based on intensity
-        this.strideFrequency = 0.5 + 1.5 * this.runIntensity;
+        this.strideFrequency = 0.5 + .7 * this.runIntensity;
 
         // 2. Advance stride phase (0 to 1)
         this.stridePhase = (this.stridePhase + this.strideFrequency * dt) % 1.0;
@@ -511,26 +974,29 @@ export class Bowler {
             this.stridePhase = 0;
         }
 
-        // 4. Keyframe Interpolation
+        // 4. Catmull-Rom Keyframe Interpolation across 4 points
         const totalFrames = Bowler.STATIC_FRAMES.length;
         const frameFloat = this.stridePhase * totalFrames;
         
-        const idx0 = Math.floor(frameFloat) % totalFrames;
-        const idx1 = (idx0 + 1) % totalFrames;
+        const idx1 = Math.floor(frameFloat) % totalFrames;
+        const idx0 = (idx1 - 1 + totalFrames) % totalFrames;
+        const idx2 = (idx1 + 1) % totalFrames;
+        const idx3 = (idx1 + 2) % totalFrames;
         const t = frameFloat - Math.floor(frameFloat);
 
-        const pose1 = Bowler.STATIC_FRAMES[idx0];
-        const pose2 = Bowler.STATIC_FRAMES[idx1];
+        const pose0 = Bowler.STATIC_FRAMES[idx0];
+        const pose1 = Bowler.STATIC_FRAMES[idx1];
+        const pose2 = Bowler.STATIC_FRAMES[idx2];
+        const pose3 = Bowler.STATIC_FRAMES[idx3];
 
-        const interpolatedPose = Bowler.interpolatePose(pose1, pose2, t);
+        const interpolatedPose = Bowler.interpolateCatmullRom(pose0, pose1, pose2, pose3, t);
 
-        // Dampen the pose towards a neutral standing state if runIntensity is low
-        const damp = this.runIntensity;
-        const standingPose = Bowler.STATIC_FRAMES[0]; // Fallback neutral pose
-        const finalPose = Bowler.interpolatePose(standingPose, interpolatedPose, damp);
-        
-        // 5. Apply the interpolated pose to the real skeleton
-        this.applyKeyframePose(finalPose, this.currentHipPosition.x);
+        // 5. Vertical Gravity Bounce Arc (Apex floating feel when running)
+        const gravityBounce = Math.sin(this.stridePhase * Math.PI * 2) * 6.0;
+        interpolatedPose.hipYOffset += gravityBounce;
+
+        // 6. Apply the interpolated pose to the real skeleton directly
+        this.applyKeyframePose(interpolatedPose, this.currentHipPosition.x);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -605,14 +1071,14 @@ export class Bowler {
         ctx.restore();
     }
 
-    public drawStaticPose(ctx: CanvasRenderingContext2D, frameIndex: number, worldX: number): void {
+    public drawStaticPose(ctx: CanvasRenderingContext2D, frameIndex: number, worldX: number, customGroundY?: number): void {
         const pose = Bowler.STATIC_FRAMES[frameIndex];
         if (!pose) return;
 
         const deg2rad = Math.PI / 180;
 
         // Base Y
-        const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
+        const groundY = customGroundY !== undefined ? customGroundY : (CANVAS_HEIGHT - GROUND_HEIGHT);
         const hipY = groundY - this.FULL_LEG_LENGTH * 0.85 + pose.hipYOffset;
         const hipCenter = { x: worldX, y: hipY };
 

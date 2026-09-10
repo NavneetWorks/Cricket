@@ -53,36 +53,38 @@ export default class Renderer{
         if (this.gameMode === 'DEBUG_13_FRAMES') {
             this.drawSky();
             this.drawGround();
-            // Draw Frame 1 to 14 from right to left
-            const x1 = CANVAS_WIDTH - 20; // Shifted slightly more to rightmost
-            const spacing = 85; // Reduced spacing to fit all 14 frames
-            const x2 = x1 - spacing; 
-            const x3 = x2 - spacing;
-            const x4 = x3 - spacing;
-            const x5 = x4 - spacing;
-            const x6 = x5 - spacing;
-            const x7 = x6 - spacing;
-            const x8 = x7 - spacing;
-            const x9 = x8 - spacing;
-            const x10 = x9 - spacing;
-            const x11 = x10 - spacing;
-            const x12 = x11 - spacing;
-            const x13 = x12 - spacing;
-            const x14 = x13 - spacing;
-            this.bowler.drawStaticPose(this.ctx, 0, x1);
-            this.bowler.drawStaticPose(this.ctx, 1, x2);
-            this.bowler.drawStaticPose(this.ctx, 2, x3);
-            this.bowler.drawStaticPose(this.ctx, 3, x4);
-            this.bowler.drawStaticPose(this.ctx, 4, x5);
-            this.bowler.drawStaticPose(this.ctx, 5, x6);
-            this.bowler.drawStaticPose(this.ctx, 6, x7);
-            this.bowler.drawStaticPose(this.ctx, 7, x8);
-            this.bowler.drawStaticPose(this.ctx, 8, x9);
-            this.bowler.drawStaticPose(this.ctx, 9, x10);
-            this.bowler.drawStaticPose(this.ctx, 10, x11);
-            this.bowler.drawStaticPose(this.ctx, 11, x12);
-            this.bowler.drawStaticPose(this.ctx, 12, x13);
-            this.bowler.drawStaticPose(this.ctx, 13, x14);
+            // Upper Row Ground Level for Frames 1 to 14
+            const upperGroundY = 410;
+
+            // Draw baseline for Upper Row
+            this.ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+            this.ctx.lineWidth = 2;
+            this.ctx.setLineDash([8, 4]);
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, upperGroundY);
+            this.ctx.lineTo(CANVAS_WIDTH, upperGroundY);
+            this.ctx.stroke();
+            this.ctx.setLineDash([]);
+
+            // Dynamic 2-row rendering loop for ALL frames in Bowler.STATIC_FRAMES (supports 38+ frames)
+            const totalFrames = Bowler.STATIC_FRAMES.length;
+            const halfFrames = totalFrames > 28 ? Math.ceil(totalFrames / 2) : 14;
+            const startX = CANVAS_WIDTH - 40;
+            const spacing = Math.min(125, (CANVAS_WIDTH - 80) / halfFrames);
+            const bottomGroundY = CANVAS_HEIGHT - GROUND_HEIGHT;
+
+            for (let i = 0; i < totalFrames; i++) {
+                if (i < halfFrames) {
+                    // Upper Row
+                    const xPos = startX - i * spacing;
+                    this.bowler.drawStaticPose(this.ctx, i, xPos, upperGroundY);
+                } else {
+                    // Bottom Row (Row 2)
+                    const row2Idx = i - halfFrames;
+                    const xPos = startX - row2Idx * spacing;
+                    this.bowler.drawStaticPose(this.ctx, i, xPos, bottomGroundY);
+                }
+            }
             return;
         }
 
