@@ -129,23 +129,32 @@ export default class Renderer{
         this.drawGround();
         this.wicket.draw(this.ctx);
 
-        this.drawBat();
+        // 🏏 Bat & Batsman Skeleton ONLY drawn in BATTING mode:
+        if (this.gameMode === 'BATTING') {
+            this.drawBat();
+        }
+
         // ⚾ BOWLING Mode me purana Bowling Arc Overlay draw hoga:
         if (this.gameMode === 'BOWLING') {
             this.bowlingArea.draw(this.ctx);
         }
 
         // 🏏 Bowler End Wicket (Right Wicket at X = CANVAS_WIDTH - 250 = 1550px) drawn BEFORE bowler
-        this.wicket.drawAt(this.ctx, CANVAS_WIDTH - 50);
+        this.wicket.drawAt(this.ctx, CANVAS_WIDTH - 250);
 
-        // 🏃 NEW BOWLER & BATTING Mode me Bowler Skeleton draw hoga:
-        if (this.gameMode === 'NEW_BOWLER' || this.gameMode === 'BATTING') {
+        // 🏃 Bowler Skeleton draw in NEW_BOWLER, BOWLING, and BATTING modes:
+        if (this.gameMode === 'NEW_BOWLER' || this.gameMode === 'BOWLING' || this.gameMode === 'BATTING') {
             this.bowler.drawDebugSkeleton(this.ctx);
         }
 
         this.ball.draw(this.ctx, alpha);
         this.drawDebug();
-        this.drawOverlay();
+
+        // 📌 Bat control overlay ONLY in BATTING mode:
+        if (this.gameMode === 'BATTING') {
+            this.drawOverlay();
+        }
+
         this.drawMiniScreen(alpha);
     }
     private drawOverlay() {

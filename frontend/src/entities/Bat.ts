@@ -18,7 +18,8 @@ import {
     INNER_ARC_SCALE,
     HORIZONTAL_TILT_SPEED_SCALE,
     k_values,
-    PLAYER_LENGTH_FACTOR
+    PLAYER_LENGTH_FACTOR,
+    BATSMAN_STANCE_X
 } from "../game/constants";
 
 type Vec2 = { x: number; y: number };
@@ -106,10 +107,10 @@ export default class Bat {
 
 
         
-    private readonly MAX_HIP_POSITION : Vec2 = { x: 350, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH };
-    private readonly MIN_HIP_POSITION : Vec2 = { x: 250, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+30 };
+    private readonly MAX_HIP_POSITION : Vec2 = { x: BATSMAN_STANCE_X + 100, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH };
+    private readonly MIN_HIP_POSITION : Vec2 = { x: BATSMAN_STANCE_X, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH+30 };
 
-    public readonly ORIGINAL_HIP_POSITION : Vec2 = { x: 250, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH };
+    public readonly ORIGINAL_HIP_POSITION : Vec2 = { x: BATSMAN_STANCE_X, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH };
 
     private CURRENT_HIP_POSITION : Vec2 = { ...this.ORIGINAL_HIP_POSITION };
     private targetHipPos : Vec2 = { ...this.ORIGINAL_HIP_POSITION };
