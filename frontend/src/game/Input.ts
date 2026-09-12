@@ -9,7 +9,8 @@ export interface MouseSample {
 export default class Input {
     public mouseX: number = 300;
     public mouseY: number = 300;
-    public isMouseActive: boolean = false;
+    public isMouseActive: boolean = true;
+    public isMouseDown: boolean = false;
     public pressedKeys: Set<string> = new Set();
     private readonly MAX_HISTORY = 1000;
 
@@ -17,7 +18,7 @@ export default class Input {
 
     constructor(canvas: HTMLCanvasElement) {
         const updatePointer = (clientX: number, clientY: number) => {
-            if (!this.isMouseActive) return;
+            this.isMouseActive = true;
 
             const rect = canvas.getBoundingClientRect();
             if (rect.width === 0 || rect.height === 0) return;
@@ -34,6 +35,25 @@ export default class Input {
                 time: performance.now(),
             });
         };
+
+        window.addEventListener("pointerdown", (e: PointerEvent) => {
+            if (e.button === 0) {
+                this.isMouseDown = true;
+                this.isMouseActive = true;
+            }
+        });
+        window.addEventListener("pointerup", (e: PointerEvent) => {
+            if (e.button === 0) this.isMouseDown = false;
+        });
+        window.addEventListener("mousedown", (e: MouseEvent) => {
+            if (e.button === 0) {
+                this.isMouseDown = true;
+                this.isMouseActive = true;
+            }
+        });
+        window.addEventListener("mouseup", (e: MouseEvent) => {
+            if (e.button === 0) this.isMouseDown = false;
+        });
 
         // Window-level global listeners for smooth uninterrupted mouse movement
         window.addEventListener("pointermove", (event: PointerEvent) => {

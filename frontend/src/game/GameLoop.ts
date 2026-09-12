@@ -1,5 +1,6 @@
 import Bat from "../entities/Bat";
 import Ball from "../entities/Ball";
+import { Bowler } from "../entities/Bowler";
 import BowlingArea from "../entities/BowlingArea";
 import Renderer from "./Rederer";
 import Input from "./Input";
@@ -42,6 +43,19 @@ export default class GameLoop{
     private currentDeliverySpeed: number = 3000;
     private currentDeliveryAngle: number = 180;
     private targetReleasePhase: number = 37.5 / 41.0;
+
+    private currentArmAngleRad: number = -Math.PI * 0.7;
+    private armAngularVelRad: number = 0;
+    private currentArmDist: number = 140;
+    private armDistVel: number = 0;
+    private wasMouseDownInJump: boolean = false;
+    private prevWorldMouseX: number = 0;
+    private prevWorldMouseY: number = 0;
+    private targetHandWorldX: number = 0;
+    private targetHandWorldY: number = 0;
+    private armVelX: number = 0;
+    private armVelY: number = 0;
+    private isHandTargetInitialized: boolean = false;
 
     private batPoseQueue: BatSnapshot[] = [];        // time-sorted snapshots (naye end me)
     private batInterpTick: number = 0;               // playhead (float tick-space me)
@@ -170,16 +184,17 @@ export default class GameLoop{
             this.ball.prevPos.y = bowler.leftWrist.y;
         };
 
-        // 1. Mouse Click (Left Click): BATTING & NEW_BOWLER me start bowler delivery
+        // 1. Mouse Click (Left Click): BATTING & NEW_BOWLER mode me start runup / trigger jump
         window.addEventListener("mousedown", (event) => {
             if (event.button !== 0) return; // Only Left Click
             const bowler = this.renderer.bowler;
             if (!this.isOnlineMode && this.renderer.gameMode === 'BATTING') {
                 startBowlerDelivery();
             } else if (this.renderer.gameMode === 'NEW_BOWLER') {
-                if (!bowler.isRunning && !bowler.isExecutingJump) {
+                if (!bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {
+                    const startX = bowler.currentHipPosition.x < 2000 ? 2600 : bowler.currentHipPosition.x;
                     bowler.resetToIdle();
-                    bowler.currentHipPosition.x = 3*CANVAS_WIDTH; // Far right starting position for camera tracking run-up
+                    bowler.currentHipPosition.x = startX;
                     bowler.startRunning();
                     this.ball.isHeldInHand = true;
                     this.ball.isActive = true;
@@ -196,9 +211,10 @@ export default class GameLoop{
                 if (!this.isOnlineMode && this.renderer.gameMode === 'BATTING') {
                     startBowlerDelivery();
                 } else if (this.renderer.gameMode === 'NEW_BOWLER') {
-                    if (!bowler.isRunning && !bowler.isExecutingJump) {
+                    if (!bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {
+                        const startX = bowler.currentHipPosition.x < 2000 ? 2600 : bowler.currentHipPosition.x;
                         bowler.resetToIdle();
-                        bowler.currentHipPosition.x = 2600;
+                        bowler.currentHipPosition.x = startX;
                         bowler.startRunning();
                         this.ball.isHeldInHand = true;
                         this.ball.isActive = true;
@@ -214,6 +230,9 @@ export default class GameLoop{
             if (event.code === "KeyR" || event.key.toLowerCase() === 'r') {
                 if (this.renderer.gameMode === 'NEW_BOWLER') {
                     this.renderer.bowler.resetToIdle();
+                    this.renderer.bowler.resetProceduralUpperBodyState();
+                    this.currentArmAngleRad = Math.PI;
+                    this.isHandTargetInitialized = false;
                 } else {
                     this.renderer.bowlingArea.reset(this.ball);
                     this.renderer.wicket.reset();
@@ -478,52 +497,61 @@ private getProjectileStateWithBounce(
         } else if (this.renderer.gameMode === 'NEW_BOWLER') {
             const bowler = this.renderer.bowler;
 
-            // 🏃 A/D or Arrow keys move bowler character Left / Right
-            const moveSpeed = 450; // px/sec movement speed
-            let moved = false;
-            if (this.input.isKeyPressed("a") || this.input.isKeyPressed("KeyA") || this.input.isKeyPressed("ArrowLeft")) {
-                bowler.currentHipPosition.x -= moveSpeed * dt;
-                moved = true;
-            }
-            if (this.input.isKeyPressed("d") || this.input.isKeyPressed("KeyD") || this.input.isKeyPressed("ArrowRight")) {
-                bowler.currentHipPosition.x += moveSpeed * dt;
-                moved = true;
-            }
-
-            if (moved && !bowler.isRunning && !bowler.isExecutingJump) {
-                bowler.setInitialRunPose();
+            // 🏃 A/D or Arrow keys move bowler character Left / Right when idle
+            if (!bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {
+                const moveSpeed = 450; // px/sec movement speed
+                let moved = false;
+                if (this.input.isKeyPressed("a") || this.input.isKeyPressed("KeyA") || this.input.isKeyPressed("ArrowLeft")) {
+                    bowler.currentHipPosition.x -= moveSpeed * dt;
+                    moved = true;
+                }
+                if (this.input.isKeyPressed("d") || this.input.isKeyPressed("KeyD") || this.input.isKeyPressed("ArrowRight")) {
+                    bowler.currentHipPosition.x += moveSpeed * dt;
+                    moved = true;
+                }
+                if (moved) {
+                    bowler.setInitialRunPose();
+                }
             }
 
             bowler.update(dt);
 
-            if (this.ball.isHeldInHand) {
-                this.ball.pos.x = bowler.leftWrist.x;
-                this.ball.pos.y = bowler.leftWrist.y;
-                this.ball.prevPos.x = bowler.leftWrist.x;
-                this.ball.prevPos.y = bowler.leftWrist.y;
-            }
+            // 🕹️ BOWLING ARM JOYSTICK & WHOLE-BODY POSE AUTO-SYNC
+            const joystick = this.renderer.joystick;
+            
+            // Static offset angle for now (0 rad); structured for future dynamic updates
+            const armAngleOffsetRad = 0;
 
-            if (this.ball.isHeldInHand && (bowler.isRunning || bowler.isPreJumpTransitioning || bowler.isExecutingJump)) {
-                this.ball.isActive = true;
+            // Bowling arm angle is driven EXCLUSIVELY by dragging the joystick knob!
+            this.currentArmAngleRad = joystick.angleRad + armAngleOffsetRad;
 
-                // Auto pre-jump trigger near crease (x <= 750)
-                if (bowler.isRunning && bowler.currentHipPosition.x <= 750 && !bowler.isPreJumpTransitioning && !bowler.isExecutingJump) {
-                    bowler.triggerPreJump();
-                }
+            // 🎯 Upper-Body Procedural Biomechanical Auto-Sync:
+            // Continuous math equations for spine lean, lead-arm elevation, and follow-through
+            const interpolatedPose = bowler.getProceduralUpperBodyPose(this.currentArmAngleRad);
 
-                // Release ball dynamically synchronized between Keyframe 38 and 39
-                if (bowler.isExecutingJump && bowler.jumpPhase >= this.targetReleasePhase && !bowler.hasReleasedBall) {
-                    bowler.hasReleasedBall = true;
-                    this.ball.isHeldInHand = false;
+            // 1. Auto-sync UPPER BODY ONLY (spine lean, shoulder angle/distance, non-bowling arm).
+            // Leaves legs, knees, pelvis, and ground elevation untouched for natural leg motion!
+            bowler.applyUpperBodyPoseOnly(interpolatedPose);
 
-                    this.renderer.wicket.reset();
-                    this.ball.throwBall(
-                        bowler.leftWrist.x,
-                        bowler.leftWrist.y,
-                        this.currentDeliverySpeed,
-                        this.currentDeliveryAngle
-                    );
-                }
+            // 2. Position bowling arm using IK driven by joystick angle & distance reach
+            const totalArmLen = bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
+            const minReach = Math.abs(bowler.FRONT_UPPER_ARM - bowler.FRONT_LOWER_ARM) + 5;
+            const reachRatio = joystick.distanceRatio > 0.05 ? joystick.distanceRatio : 1.0;
+            const armReach = minReach + (totalArmLen - minReach - 1.0) * reachRatio;
+
+            bowler.overrideLeftArmWithIK(this.currentArmAngleRad, armReach);
+
+            // Sync ball position with left wrist (ALWAYS held in hand in NEW_BOWLER mode, NO release!)
+            this.ball.isHeldInHand = true;
+            this.ball.isActive = true;
+            this.ball.pos.x = bowler.leftWrist.x;
+            this.ball.pos.y = bowler.leftWrist.y;
+            this.ball.prevPos.x = bowler.leftWrist.x;
+            this.ball.prevPos.y = bowler.leftWrist.y;
+
+            // Auto pre-jump trigger near crease (x <= 750) if still running
+            if (bowler.isRunning && bowler.currentHipPosition.x <= 750 && !bowler.isPreJumpTransitioning && !bowler.isExecutingJump) {
+                bowler.triggerPreJump();
             }
             this.ball.update(dt);
             this.renderer.wicket.update(dt);
@@ -565,8 +593,13 @@ private getProjectileStateWithBounce(
         this.renderer.render(this.renderAlpha);
     }
 
-    public setGameMode(mode: 'BATTING' | 'BOWLING') {
+    public setGameMode(mode: 'BATTING' | 'BOWLING' | 'NEW_BOWLER' | 'DEBUG_13_FRAMES') {
         this.renderer.gameMode = mode;
+        if (mode === 'NEW_BOWLER') {
+            this.renderer.bowler.resetToIdle();
+            this.ball.isHeldInHand = true;
+            this.ball.isActive = true;
+        }
         console.log("Game Mode set to:", mode);
     }
 

@@ -4,6 +4,7 @@ import { Bowler } from "../entities/Bowler";
 import Wicket from "../entities/Wicket";
 import BowlingArea from "../entities/BowlingArea";
 import Input from "./Input";
+import Joystick from "./Joystick";
 import { SoundManager } from "../audio/SoundManager";
 import {
     CANVAS_WIDTH,
@@ -21,6 +22,7 @@ export default class Renderer{
     public bowler: Bowler;
     public wicket: Wicket;
     public bowlingArea: BowlingArea;
+    public joystick: Joystick;
     
     public gameMode: 'BATTING' | 'BOWLING' | 'NEW_BOWLER' | 'DEBUG_13_FRAMES' = 'BATTING';
     public debugSelectedFrames: number[] = []; // Empty = all, or 1-based indices e.g. [3, 6, 7]
@@ -39,6 +41,7 @@ export default class Renderer{
         this.bowler = new Bowler(1500);
         this.wicket = new Wicket(this.bat);
         this.bowlingArea = new BowlingArea();
+        this.joystick = new Joystick();
         
         this.groundImage = new Image();
         this.groundImage.src = '/assets/cricket_ground_layers_cropped.png';
@@ -107,9 +110,10 @@ export default class Renderer{
 
         this.drawDebug();
 
-        // 📌 Bat control overlay ONLY in BATTING mode:
-        if (this.gameMode === 'BATTING') {
-            this.drawOverlay();
+        // 🕹️ Draw Bottom-Right Bowling Arm Joystick in NEW_BOWLER mode:
+        if (this.gameMode === 'NEW_BOWLER') {
+            this.joystick.updatePosition(CANVAS_WIDTH, CANVAS_HEIGHT);
+            this.joystick.draw(this.ctx);
         }
 
         this.drawMiniScreen(alpha);

@@ -212,7 +212,7 @@ export const BAT_THICKNESS_PROFILE: number[] = [
 // };
 
 export const SERVER_CONFIG = {
-    SIGNALING_URL: "wss://z4h6j16q-9001.inc1.devtunnels.ms",
+    SIGNALING_URL: "https://z4h6j16q-9001.inc1.devtunnels.ms/",
     TARGET_TICK_RATE: 60,
     NETWORK_INTERVAL_MS: 16.66
 };

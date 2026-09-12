@@ -36,6 +36,52 @@ export interface KeyframePose {
     hipYOffset: number;         // Offset from ground
 }
 
+export interface RangeNode {
+    lowerFrameIndex: number;
+    lowerAngleDeg: number;
+    upperFrameIndex: number;
+    upperAngleDeg: number;
+    next: RangeNode | null;
+}
+
+export class RangeLinkedList {
+    public head: RangeNode | null = null;
+    public tail: RangeNode | null = null;
+    public currentPointer: RangeNode | null = null;
+
+    public append(lowerIdx: number, lowerAng: number, upperIdx: number, upperAng: number): void {
+        const node: RangeNode = {
+            lowerFrameIndex: lowerIdx,
+            lowerAngleDeg: lowerAng,
+            upperFrameIndex: upperIdx,
+            upperAngleDeg: upperAng,
+            next: null
+        };
+        if (!this.head) {
+            this.head = node;
+            this.tail = node;
+            this.currentPointer = node;
+        } else if (this.tail) {
+            this.tail.next = node;
+            this.tail = node;
+        }
+    }
+
+    public resetPointer(): void {
+        this.currentPointer = this.head;
+    }
+
+    public getCurrentNode(): RangeNode | null {
+        return this.currentPointer;
+    }
+
+    public advancePointerSafely(): void {
+        if (this.currentPointer && this.currentPointer.next !== null) {
+            this.currentPointer = this.currentPointer.next;
+        }
+    }
+}
+
 export class Bowler {
 
     // ── Segment lengths ────────────────────────────────────────────────────
@@ -153,9 +199,25 @@ export class Bowler {
         this.hasReleasedBall = false;
         this.targetIntensity = 0.0;
         this.runIntensity = 0.0;
-        this.stridePhase = 0;
-        this.currentHipPosition.x = CANVAS_WIDTH;
+        this.resetProceduralUpperBodyState();
+        if (this.currentHipPosition.x < 2000) {
+            this.currentHipPosition.x = 2600; // Far right starting position for runup
+        }
         this.setInitialRunPose();
+    }
+
+    public isCycleCompleted: boolean = false;
+
+    public resetProceduralUpperBodyState(): void {
+        this.currentProceduralNBArmAngleDeg = 48.0;
+        this.currentProceduralNBElbowAngleDeg = 75.0;
+        this.currentProceduralSpineAngleDeg = -130.0;
+        this.currentProceduralShoulderAngleDeg = 100.0;
+        this.currentProceduralShoulderDist = 15.0;
+        this.unwrappedArmAngleDeg = 180.0;
+        this.lastArmAngleRad = null;
+        this.isCycleCompleted = false;
+        Bowler.resetAllRangeLUTPointers();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -8441,6 +8503,267 @@ export class Bowler {
         return Bowler._cachedExpandedJumpFrames;
     }
 
+    private static _angleLUT: { frame1Index: number; frame2Index: number; t: number; isExact: boolean }[] | null = null;
+
+    public static getAngleLUT(): { frame1Index: number; frame2Index: number; t: number; isExact: boolean }[] {
+        if (!Bowler._angleLUT) {
+            Bowler._angleLUT = Bowler.buildAngleLUT();
+        }
+        return Bowler._angleLUT;
+    }
+
+    private static buildAngleLUT(): { frame1Index: number; frame2Index: number; t: number; isExact: boolean }[] {
+        const jumpFrames = Bowler.getExpandedJumpFrames();
+        const lut: { frame1Index: number; frame2Index: number; t: number; isExact: boolean }[] = new Array(360);
+
+        const frameAngles = jumpFrames.map(f => {
+            let totalDeg = (f.spineAngleDeg + f.shoulderJointAngleDeg + f.leftUpperArmAngleDeg) % 360;
+            if (totalDeg < 0) totalDeg += 360;
+            return totalDeg;
+        });
+
+        for (let deg = 0; deg < 360; deg++) {
+            let bestI = 0;
+            let secondBestI = 1;
+            let minDiff = Infinity;
+            let secondMinDiff = Infinity;
+
+            for (let i = 0; i < jumpFrames.length; i++) {
+                let diff = Math.abs(frameAngles[i] - deg);
+                if (diff > 180) diff = 360 - diff;
+
+                if (diff < minDiff) {
+                    secondMinDiff = minDiff;
+                    secondBestI = bestI;
+                    minDiff = diff;
+                    bestI = i;
+                } else if (diff < secondMinDiff) {
+                    secondMinDiff = diff;
+                    secondBestI = i;
+                }
+            }
+
+            if (minDiff < 0.001 || bestI === secondBestI) {
+                lut[deg] = {
+                    frame1Index: bestI,
+                    frame2Index: bestI,
+                    t: 0,
+                    isExact: true
+                };
+            } else {
+                const totalRange = minDiff + secondMinDiff;
+                const t = totalRange > 0.0001 ? minDiff / totalRange : 0;
+                lut[deg] = {
+                    frame1Index: bestI,
+                    frame2Index: secondBestI,
+                    t: t,
+                    isExact: false
+                };
+            }
+        }
+
+        return lut;
+    }
+
+    private static _keyframeRatios: {
+        spineRatio: number;
+        nonBowlingArmRatio: number;
+        nonBowlingElbowRatio: number;
+        shoulderAngleRatio: number;
+        shoulderDistRatio: number;
+    } | null = null;
+
+    public static getKeyframeMotionRatios() {
+        if (!Bowler._keyframeRatios) {
+            const frames = Bowler.PRE_DELIVERY_JUMP;
+            let sumSpine = 0;
+            let sumNBArm = 0;
+            let sumNBElbow = 0;
+            let sumShoulderAngle = 0;
+            let sumShoulderDist = 0;
+            let validPairs = 0;
+
+            for (let i = 0; i < frames.length - 1; i++) {
+                const f1 = frames[i];
+                const f2 = frames[i + 1];
+
+                const armAng1 = f1.spineAngleDeg + f1.shoulderJointAngleDeg + f1.leftUpperArmAngleDeg;
+                const armAng2 = f2.spineAngleDeg + f2.shoulderJointAngleDeg + f2.leftUpperArmAngleDeg;
+                const deltaArm = Math.abs(armAng2 - armAng1);
+
+                if (deltaArm > 0.001) {
+                    sumSpine += Math.abs(f2.spineAngleDeg - f1.spineAngleDeg) / deltaArm;
+                    sumNBArm += Math.abs(f2.rightUpperArmAngleDeg - f1.rightUpperArmAngleDeg) / deltaArm;
+                    sumNBElbow += Math.abs(f2.rightElbowAngleDeg - f1.rightElbowAngleDeg) / deltaArm;
+                    sumShoulderAngle += Math.abs(f2.shoulderJointAngleDeg - f1.shoulderJointAngleDeg) / deltaArm;
+                    sumShoulderDist += Math.abs(f2.shoulderJointDist - f1.shoulderJointDist) / deltaArm;
+                    validPairs++;
+                }
+            }
+
+            const count = validPairs > 0 ? validPairs : 1;
+            Bowler._keyframeRatios = {
+                spineRatio: sumSpine / count,
+                nonBowlingArmRatio: sumNBArm / count,
+                nonBowlingElbowRatio: sumNBElbow / count,
+                shoulderAngleRatio: sumShoulderAngle / count,
+                shoulderDistRatio: sumShoulderDist / count
+            };
+        }
+        return Bowler._keyframeRatios;
+    }
+
+    private static _rangeLUT: RangeLinkedList[] | null = null;
+
+    public static getRangeLUT(): RangeLinkedList[] {
+        if (!Bowler._rangeLUT) {
+            Bowler._rangeLUT = Bowler.buildRangeLUT();
+        }
+        return Bowler._rangeLUT;
+    }
+
+    private static buildRangeLUT(): RangeLinkedList[] {
+        const lut: RangeLinkedList[] = new Array(360);
+        for (let i = 0; i < 360; i++) {
+            lut[i] = new RangeLinkedList();
+        }
+
+        const frames = Bowler.PRE_DELIVERY_JUMP;
+        for (let i = 0; i < frames.length - 1; i++) {
+            const f1 = frames[i];
+            const f2 = frames[i + 1];
+
+            const ang1 = Math.round(f1.leftUpperArmAngleDeg);
+            const ang2 = Math.round(f2.leftUpperArmAngleDeg);
+
+            const step = ang1 <= ang2 ? 1 : -1;
+            let currentAng = ang1;
+            while (true) {
+                const targetIndex = (currentAng % 360 + 360) % 360;
+                lut[targetIndex].append(i, ang1, i + 1, ang2);
+                if (currentAng === ang2) break;
+                currentAng += step;
+            }
+        }
+
+        return lut;
+    }
+
+    public static resetAllRangeLUTPointers(): void {
+        const lut = Bowler.getRangeLUT();
+        lut.forEach(list => list.resetPointer());
+    }
+
+    public currentProceduralNBArmAngleDeg: number = 48.0;
+    public currentProceduralNBElbowAngleDeg: number = 75.0;
+    public currentProceduralSpineAngleDeg: number = -130.0;
+    public currentProceduralShoulderAngleDeg: number = 100.0;
+    public currentProceduralShoulderDist: number = 15.0;
+    public unwrappedArmAngleDeg: number = 180.0;
+    private lastArmAngleRad: number | null = null;
+
+    public getProceduralUpperBodyPose(armAngleRad: number): KeyframePose {
+        const frames = Bowler.PRE_DELIVERY_JUMP;
+        const lastFrame = frames[frames.length - 1];
+
+        // 🎯 CLAMP FINISH POSE AT FRAME 41 WHEN CYCLE COMPLETED (NO TELEPORT SNAP BACK TO FRAME 0!)
+        if (this.isCycleCompleted) {
+            const lerpFactor = 0.25;
+            this.currentProceduralSpineAngleDeg += (lastFrame.spineAngleDeg - this.currentProceduralSpineAngleDeg) * lerpFactor;
+            this.currentProceduralShoulderDist += (lastFrame.shoulderJointDist - this.currentProceduralShoulderDist) * lerpFactor;
+            this.currentProceduralShoulderAngleDeg += (lastFrame.shoulderJointAngleDeg - this.currentProceduralShoulderAngleDeg) * lerpFactor;
+            this.currentProceduralNBArmAngleDeg += (lastFrame.rightUpperArmAngleDeg - this.currentProceduralNBArmAngleDeg) * lerpFactor;
+            this.currentProceduralNBElbowAngleDeg += (lastFrame.rightElbowAngleDeg - this.currentProceduralNBElbowAngleDeg) * lerpFactor;
+
+            const leftUpperArmAngleDeg = (armAngleRad * 180 / Math.PI) - this.currentProceduralSpineAngleDeg - this.currentProceduralShoulderAngleDeg;
+
+            return {
+                ...lastFrame,
+                spineAngleDeg: this.currentProceduralSpineAngleDeg,
+                shoulderJointDist: this.currentProceduralShoulderDist,
+                shoulderJointAngleDeg: this.currentProceduralShoulderAngleDeg,
+                leftUpperArmAngleDeg: leftUpperArmAngleDeg,
+                leftElbowAngleDeg: 0.0,
+                rightUpperArmAngleDeg: this.currentProceduralNBArmAngleDeg,
+                rightElbowAngleDeg: this.currentProceduralNBElbowAngleDeg
+            };
+        }
+
+        const basePose = frames[0];
+        let targetDeg = Math.round((armAngleRad * 180 / Math.PI)) % 360;
+        if (targetDeg < 0) targetDeg += 360;
+
+        const lut = Bowler.getRangeLUT();
+        const list = lut[targetDeg];
+        const node = list.getCurrentNode();
+
+        if (node) {
+            const lIdx = Math.max(0, Math.min(frames.length - 1, node.lowerFrameIndex));
+            const uIdx = Math.max(0, Math.min(frames.length - 1, node.upperFrameIndex));
+
+            const lowerPose = frames[lIdx];
+            const upperPose = frames[uIdx];
+
+            // 1. Direct Distance Ratio (t) Calculation between lowerPose and upperPose
+            const range = node.upperAngleDeg - node.lowerAngleDeg;
+            let t = 0;
+            if (Math.abs(range) > 0.001) {
+                t = Math.max(0, Math.min(1, (targetDeg - node.lowerAngleDeg) / range));
+            }
+
+            const lerpVal = (a: number, b: number, factor: number) => a + (b - a) * factor;
+            const lerpDeg = (a: number, b: number, factor: number) => {
+                let diff = (b - a) % 360;
+                if (diff > 180) diff -= 360;
+                if (diff < -180) diff += 360;
+                return a + diff * factor;
+            };
+
+            const targetSpine = lerpDeg(lowerPose.spineAngleDeg, upperPose.spineAngleDeg, t);
+            const targetDist = lerpVal(lowerPose.shoulderJointDist, upperPose.shoulderJointDist, t);
+            const targetShAngle = lerpDeg(lowerPose.shoulderJointAngleDeg, upperPose.shoulderJointAngleDeg, t);
+            const targetNBArm = lerpDeg(lowerPose.rightUpperArmAngleDeg, upperPose.rightUpperArmAngleDeg, t);
+            const targetNBElbow = lerpDeg(lowerPose.rightElbowAngleDeg, upperPose.rightElbowAngleDeg, t);
+
+            // 2. 60 FPS Teleport-Proof Exponential LERP Gliding
+            const lerpFactor = 0.25;
+            this.currentProceduralSpineAngleDeg += (targetSpine - this.currentProceduralSpineAngleDeg) * lerpFactor;
+            this.currentProceduralShoulderDist += (targetDist - this.currentProceduralShoulderDist) * lerpFactor;
+            this.currentProceduralShoulderAngleDeg += (targetShAngle - this.currentProceduralShoulderAngleDeg) * lerpFactor;
+            this.currentProceduralNBArmAngleDeg += (targetNBArm - this.currentProceduralNBArmAngleDeg) * lerpFactor;
+            this.currentProceduralNBElbowAngleDeg += (targetNBElbow - this.currentProceduralNBElbowAngleDeg) * lerpFactor;
+
+            // Detect if we have reached the final keyframe (Frame 41)
+            if (uIdx >= frames.length - 1 && list.currentPointer && list.currentPointer.next === null) {
+                this.isCycleCompleted = true;
+            }
+
+            // 3. Pure Automatic Pointer Advancement (stuck at tail node, NEVER null!)
+            list.advancePointerSafely();
+
+            // Compute bowling arm angle to align left upper arm with joystick
+            const leftUpperArmAngleDeg = (armAngleRad * 180 / Math.PI) - this.currentProceduralSpineAngleDeg - this.currentProceduralShoulderAngleDeg;
+
+            return {
+                ...lowerPose,
+                spineAngleDeg: this.currentProceduralSpineAngleDeg,
+                shoulderJointDist: this.currentProceduralShoulderDist,
+                shoulderJointAngleDeg: this.currentProceduralShoulderAngleDeg,
+                leftUpperArmAngleDeg: leftUpperArmAngleDeg,
+                leftElbowAngleDeg: 0.0,
+                rightUpperArmAngleDeg: this.currentProceduralNBArmAngleDeg,
+                rightElbowAngleDeg: this.currentProceduralNBElbowAngleDeg
+            };
+        }
+
+        return basePose;
+    }
+
+    public static getProceduralUpperBodyPose(armAngleRad: number): KeyframePose {
+        const dummyBowler = new Bowler(0);
+        return dummyBowler.getProceduralUpperBodyPose(armAngleRad);
+    }
+
     public static interpolateCatmullRom(p0: KeyframePose, p1: KeyframePose, p2: KeyframePose, p3: KeyframePose, t: number): KeyframePose {
         return {
             spineAngleDeg: Bowler.catmullRomDeg(p0.spineAngleDeg, p1.spineAngleDeg, p2.spineAngleDeg, p3.spineAngleDeg, t),
@@ -8576,6 +8899,72 @@ export class Bowler {
         this.rightWrist = {
             x: this.rightElbow.x + Math.cos(rForearmAng) * this.BACK_LOWER_ARM,
             y: this.rightElbow.y + Math.sin(rForearmAng) * this.BACK_LOWER_ARM
+        };
+    }
+
+    public applyUpperBodyPoseOnly(pose: KeyframePose): void {
+        const deg2rad = Math.PI / 180;
+        
+        // 1. Spine (Spine angle and upper body orientation, anchored at currentHipPosition)
+        const spineAng = pose.spineAngleDeg * deg2rad;
+        this.shoulderMid = {
+            x: this.currentHipPosition.x + Math.cos(spineAng) * this.NECK_TO_HIP_LENGTH,
+            y: this.currentHipPosition.y + Math.sin(spineAng) * this.NECK_TO_HIP_LENGTH
+        };
+        this.headCenter = {
+            x: this.shoulderMid.x + Math.cos(spineAng) * 20,
+            y: this.shoulderMid.y + Math.sin(spineAng) * 20
+        };
+
+        // 2. Shoulders (Distance and Line Angle)
+        const shoulderLineAng = spineAng + pose.shoulderJointAngleDeg * deg2rad;
+        this.frontShoulder = {
+            x: this.shoulderMid.x - Math.cos(shoulderLineAng) * (pose.shoulderJointDist / 2),
+            y: this.shoulderMid.y - Math.sin(shoulderLineAng) * (pose.shoulderJointDist / 2)
+        };
+        this.backShoulder = {
+            x: this.shoulderMid.x + Math.cos(shoulderLineAng) * (pose.shoulderJointDist / 2),
+            y: this.shoulderMid.y + Math.sin(shoulderLineAng) * (pose.shoulderJointDist / 2)
+        };
+
+        // 3. Non-Bowling Arm (Right Arm)
+        const rUpperArmAng = shoulderLineAng + pose.rightUpperArmAngleDeg * deg2rad;
+        this.rightElbow = {
+            x: this.backShoulder.x + Math.cos(rUpperArmAng) * this.BACK_UPPER_ARM,
+            y: this.backShoulder.y + Math.sin(rUpperArmAng) * this.BACK_UPPER_ARM
+        };
+        const rForearmAng = rUpperArmAng + pose.rightElbowAngleDeg * deg2rad;
+        this.rightWrist = {
+            x: this.rightElbow.x + Math.cos(rForearmAng) * this.BACK_LOWER_ARM,
+            y: this.rightElbow.y + Math.sin(rForearmAng) * this.BACK_LOWER_ARM
+        };
+    }
+
+    public overrideLeftArmAngle(targetAngleRad: number): void {
+        const totalArmLength = this.FRONT_UPPER_ARM + this.FRONT_LOWER_ARM;
+        this.overrideLeftArmWithIK(targetAngleRad, totalArmLength);
+    }
+
+    public overrideLeftArmWithIK(targetAngleRad: number, dist: number): void {
+        const l1 = this.FRONT_UPPER_ARM;
+        const l2 = this.FRONT_LOWER_ARM;
+        const maxReach = l1 + l2;
+        const minReach = Math.abs(l1 - l2) + 2;
+
+        const clampedDist = Math.max(minReach, Math.min(maxReach - 0.5, dist));
+
+        let cosElbow = (l1 * l1 + clampedDist * clampedDist - l2 * l2) / (2 * l1 * clampedDist);
+        cosElbow = Math.max(-1, Math.min(1, cosElbow));
+        const elbowOffsetAngle = Math.acos(cosElbow);
+
+        const elbowAngle = targetAngleRad - elbowOffsetAngle;
+        this.leftElbow = {
+            x: this.frontShoulder.x + Math.cos(elbowAngle) * l1,
+            y: this.frontShoulder.y + Math.sin(elbowAngle) * l1
+        };
+        this.leftWrist = {
+            x: this.frontShoulder.x + Math.cos(targetAngleRad) * clampedDist,
+            y: this.frontShoulder.y + Math.sin(targetAngleRad) * clampedDist
         };
     }
 
