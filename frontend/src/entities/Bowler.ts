@@ -219,6 +219,11 @@ export class Bowler {
         this.isGatheringArmActive = false;
         this.gatheringAngleTraveledDeg = 0.0;
         this.ballTrailPoints = [];
+        this.isBallReleased = false;
+        this.lastReleaseVx = null;
+        this.lastReleaseVy = null;
+        this.lastReleaseSpeed = null;
+        this.lastReleaseAngleDeg = null;
         this.setInitialRunPose();
     }
 
@@ -229,6 +234,11 @@ export class Bowler {
     public isGatheringArmActive: boolean = false;
     public gatheringAngleTraveledDeg: number = 0.0;
     public ballTrailPoints: Vec2[] = [];
+    public isBallReleased: boolean = false;
+    public lastReleaseVx: number | null = null;
+    public lastReleaseVy: number | null = null;
+    public lastReleaseSpeed: number | null = null;
+    public lastReleaseAngleDeg: number | null = null;
     public runupGatheringEndSpeedFactor: number = 0.5; // 0.5 = 50% end momentum at jump takeoff
     public totalJumpStrideDistance: number = 400.0;
     public totalJumpDurationSec: number = 1.2;
@@ -290,6 +300,11 @@ export class Bowler {
         this.isGatheringArmActive = false;
         this.gatheringAngleTraveledDeg = 0.0;
         this.ballTrailPoints = [];
+        this.isBallReleased = false;
+        this.lastReleaseVx = null;
+        this.lastReleaseVy = null;
+        this.lastReleaseSpeed = null;
+        this.lastReleaseAngleDeg = null;
         Bowler.resetAllRangeLUTPointers();
     }
 

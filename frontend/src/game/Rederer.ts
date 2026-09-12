@@ -214,6 +214,38 @@ export default class Renderer{
 
             this.ctx.fillText(statusText, badgeX + badgeW / 2, badgeY + badgeH / 2);
             this.ctx.restore();
+
+            // 🚀 Release Speed Debug HUD Pill (Positioned right below at Y = 110)
+            if (bowler.lastReleaseSpeed !== null) {
+                const relBadgeW = 540;
+                const relBadgeH = 38;
+                const relBadgeX = CANVAS_WIDTH - relBadgeW - 20;
+                const relBadgeY = 110;
+
+                this.ctx.save();
+                this.ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
+                this.ctx.beginPath();
+                this.ctx.roundRect(relBadgeX, relBadgeY, relBadgeW, relBadgeH, 8);
+                this.ctx.fill();
+
+                this.ctx.strokeStyle = "#38bdf8"; // Vibrant Cyan border
+                this.ctx.lineWidth = 1.5;
+                this.ctx.stroke();
+
+                this.ctx.font = "bold 13px Inter, Arial, sans-serif";
+                this.ctx.fillStyle = "#38bdf8"; // Vibrant Cyan text
+                this.ctx.textAlign = "center";
+                this.ctx.textBaseline = "middle";
+
+                const vx = bowler.lastReleaseVx?.toFixed(0) ?? "0";
+                const vy = bowler.lastReleaseVy?.toFixed(0) ?? "0";
+                const speed = bowler.lastReleaseSpeed?.toFixed(0) ?? "0";
+                const angle = bowler.lastReleaseAngleDeg?.toFixed(1) ?? "0";
+
+                const relText = `🚀 RELEASE SPEED: ${speed} px/s  |  Vx: ${vx} px/s  |  Vy: ${vy} px/s  |  Angle: ${angle}°`;
+                this.ctx.fillText(relText, relBadgeX + relBadgeW / 2, relBadgeY + relBadgeH / 2);
+                this.ctx.restore();
+            }
         }
 
         this.drawMiniScreen(alpha);

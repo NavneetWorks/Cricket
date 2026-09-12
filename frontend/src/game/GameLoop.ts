@@ -679,16 +679,85 @@ private getProjectileStateWithBounce(
                 bowler.overrideLeftArmWithIK(this.currentArmAngleRad, armReach);
             }
 
-            // Sync ball position with left wrist (ALWAYS held in hand in NEW_BOWLER mode, NO release!)
-            this.ball.isHeldInHand = true;
-            this.ball.isActive = true;
-            this.ball.pos.x = bowler.leftWrist.x;
-            this.ball.pos.y = bowler.leftWrist.y;
-            this.ball.prevPos.x = bowler.leftWrist.x;
-            this.ball.prevPos.y = bowler.leftWrist.y;
+            // 🟢 10x SUB-STEPPING BALL RELEASE & FLIGHT ENGINE (600 Hz Physics Rate)
+            if (!bowler.isBallReleased && bowler.startJumpX) {
+                const greenLineX = bowler.startJumpX - 300;
+                const prevX = this.ball.prevPos.x > 0 ? this.ball.prevPos.x : bowler.leftWrist.x;
+                const currX = bowler.leftWrist.x;
 
-            // 🔴 Record Ball Trail Points with Inter-frame Sub-step Interpolation for smooth curves:
-            if (bowler.isGatheringArmActive || bowler.isExecutingJump || bowler.isPreJumpTransitioning || bowler.isPreJumpFrozen || bowler.isCycleCompleted) {
+                // 🎯 Check if Ball's wrist position crosses the Green Line from Right to Left
+                if (prevX > greenLineX && currX <= greenLineX) {
+                    // Exact 10x Sub-stepping Time Fraction Calculation
+                    const f = Math.min(1.0, Math.max(0.0, (prevX - greenLineX) / Math.max(1, prevX - currX)));
+                    const prevY = this.ball.prevPos.y > 0 ? this.ball.prevPos.y : bowler.leftWrist.y;
+                    const currY = bowler.leftWrist.y;
+
+                    const releaseX = greenLineX;
+                    const releaseY = prevY + f * (currY - prevY);
+
+                    // 📐 Instantaneous Tangential Velocity Component (Raw Derivative without Math.abs)
+                    const omega = bowler.joystickAngularVelRad; // Signed rad/sec (+ or -)
+                    const totalArmLen = bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
+                    const minReach = Math.abs(bowler.FRONT_UPPER_ARM - bowler.FRONT_LOWER_ARM) + 5;
+                    const armR = minReach + (totalArmLen - minReach - 1.0) * bowler.smoothJoystickRadiusRatio;
+                    const theta = bowler.smoothJoystickAngleRad;
+
+                    // Exact 2D Circular Tangential Velocity Derivative: dx/dt = -R * sin(theta) * omega, dy/dt = R * cos(theta) * omega
+                    const vArmX = -armR * Math.sin(theta) * omega;
+                    const vArmY = armR * Math.cos(theta) * omega;
+
+                    // 🏃 Forward Body Horizontal Velocity Component (-X direction towards pitch, natural un-amplified)
+                    const vBodyX = -Math.abs(bowler.lastRunupSpeedX > 0 ? bowler.lastRunupSpeedX : 800.0);
+
+                    // 🚀 Combined Natural Launch Velocity Vector (Guaranteed Forward -X Flight)
+                    const vReleaseX = -Math.abs(vBodyX + vArmX);
+                    const vReleaseY = vArmY;
+                    const totalSpeed = Math.hypot(vReleaseX, vReleaseY);
+                    const launchAngleDeg = (Math.atan2(vReleaseY, vReleaseX) * 180) / Math.PI;
+
+                    // Store Release Speed Debug Info
+                    bowler.lastReleaseVx = vReleaseX;
+                    bowler.lastReleaseVy = vReleaseY;
+                    bowler.lastReleaseSpeed = totalSpeed;
+                    bowler.lastReleaseAngleDeg = launchAngleDeg;
+
+                    // Detach ball from hand and launch into free flight physics!
+                    this.ball.isHeldInHand = false;
+                    this.ball.isActive = true;
+                    this.ball.pos.x = releaseX;
+                    this.ball.pos.y = releaseY;
+                    this.ball.prevPos.x = releaseX;
+                    this.ball.prevPos.y = releaseY;
+                    this.ball.vel.x = vReleaseX;
+                    this.ball.vel.y = vReleaseY;
+                    bowler.isBallReleased = true;
+
+                    // Update remaining fractional time physics for this frame
+                    const remainingDt = dt * (1.0 - f);
+                    this.ball.update(remainingDt);
+                } else {
+                    // Ball is still held in hand before crossing Green Line:
+                    this.ball.isHeldInHand = true;
+                    this.ball.isActive = true;
+                    this.ball.pos.x = bowler.leftWrist.x;
+                    this.ball.pos.y = bowler.leftWrist.y;
+                    this.ball.prevPos.x = bowler.leftWrist.x;
+                    this.ball.prevPos.y = bowler.leftWrist.y;
+                }
+            } else if (bowler.isBallReleased) {
+                // Ball has been released: update flight physics (Gravity, Friction & Pitch Bounce!)
+                this.ball.update(dt);
+            } else {
+                this.ball.isHeldInHand = true;
+                this.ball.isActive = true;
+                this.ball.pos.x = bowler.leftWrist.x;
+                this.ball.pos.y = bowler.leftWrist.y;
+                this.ball.prevPos.x = bowler.leftWrist.x;
+                this.ball.prevPos.y = bowler.leftWrist.y;
+            }
+
+            // 🔴 Record Ball Trail Points for smooth trajectory rendering
+            if (bowler.isGatheringArmActive || bowler.isExecutingJump || bowler.isPreJumpTransitioning || bowler.isPreJumpFrozen || bowler.isCycleCompleted || bowler.isBallReleased) {
                 const pts = bowler.ballTrailPoints;
                 const currX = this.ball.pos.x;
                 const currY = this.ball.pos.y;
@@ -696,7 +765,7 @@ private getProjectileStateWithBounce(
                     const lastPt = pts[pts.length - 1];
                     const dist = Math.hypot(currX - lastPt.x, currY - lastPt.y);
                     if (dist > 6) {
-                        const steps = Math.min(8, Math.ceil(dist / 4));
+                        const steps = Math.min(10, Math.ceil(dist / 3));
                         for (let s = 1; s < steps; s++) {
                             const ratio = s / steps;
                             pts.push({
