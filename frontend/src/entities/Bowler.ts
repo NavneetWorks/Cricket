@@ -220,6 +220,8 @@ export class Bowler {
     public totalJumpStrideDistance: number = 400.0;
     public totalJumpDurationSec: number = 1.2;
     public elapsedJumpTime: number = 0.0;
+    public initialStaticOffsetDeg: number = 0.0;
+    public accumulatedJoystickAngleDeg: number = 0.0;
     public dynamicOffsetDeg: number = 0.0;
     public offsetVelocityDeg: number = 0.0;
     public lastArmAngleRad: number | null = null;
@@ -236,6 +238,8 @@ export class Bowler {
         this.lastArmAngleRad = null;
         this.isCycleCompleted = false;
         this.elapsedJumpTime = 0.0;
+        this.initialStaticOffsetDeg = 0.0;
+        this.accumulatedJoystickAngleDeg = 0.0;
         this.currentProceduralJumpXOffset = 0.0;
         this.dynamicOffsetDeg = 0.0;
         this.offsetVelocityDeg = 0.0;

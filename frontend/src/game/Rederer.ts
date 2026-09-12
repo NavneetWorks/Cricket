@@ -119,10 +119,45 @@ export default class Renderer{
 
         this.drawDebug();
 
-        // 🕹️ Draw Bottom-Right Bowling Arm Joystick in NEW_BOWLER mode:
+        // 🕹️ Draw Bottom-Right Bowling Arm Joystick & Top Screen Debug HUD in NEW_BOWLER mode:
         if (this.gameMode === 'NEW_BOWLER') {
             this.joystick.updatePosition(CANVAS_WIDTH, CANVAS_HEIGHT);
             this.joystick.draw(this.ctx);
+
+            // 🟢 Right Side Debug HUD Pill for Pre-Delivery Jump Initiation (Below Top Buttons)
+            const bowler = this.bowler;
+            const badgeW = 540;
+            const badgeH = 38;
+            const badgeX = CANVAS_WIDTH - badgeW - 20;
+            const badgeY = 65;
+
+            this.ctx.save();
+            this.ctx.fillStyle = "rgba(15, 23, 42, 0.90)";
+            this.ctx.beginPath();
+            this.ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 8);
+            this.ctx.fill();
+
+            this.ctx.strokeStyle = "#10b981"; // Emerald green border
+            this.ctx.lineWidth = 1.5;
+            this.ctx.stroke();
+
+            this.ctx.font = "bold 13px Inter, Arial, sans-serif";
+            this.ctx.fillStyle = "#ffffff";
+            this.ctx.textAlign = "center";
+            this.ctx.textBaseline = "middle";
+
+            const offsetDeg = bowler.initialStaticOffsetDeg.toFixed(1);
+            const frame1Angle = Bowler.PRE_DELIVERY_JUMP[0].rightUpperArmAngleDeg.toFixed(1);
+            
+            let statusText = `🏃 Press SPACE to Run | Left Click to Jump`;
+            if (bowler.isExecutingJump || bowler.isPreJumpTransitioning || bowler.isPreJumpFrozen) {
+                statusText = `🚀 JUMP INITIATED | Initial Static Offset: ${offsetDeg}° (Frame 1: ${frame1Angle}°)`;
+            } else if (bowler.isCycleCompleted) {
+                statusText = `🏁 DELIVERY COMPLETE | Static Offset: ${offsetDeg}°`;
+            }
+
+            this.ctx.fillText(statusText, badgeX + badgeW / 2, badgeY + badgeH / 2);
+            this.ctx.restore();
         }
 
         this.drawMiniScreen(alpha);

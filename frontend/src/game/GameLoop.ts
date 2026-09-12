@@ -196,6 +196,15 @@ export default class GameLoop{
                     bowler.preJumpStartX = bowler.currentHipPosition.x;
                     bowler.isExecutingJump = true;
                     bowler.triggerPreJump();
+
+                    // 🎯 Calculate static initial offset so pose ALWAYS starts at Frame 1 (40.6°)
+                    const frame1ArmAngleDeg = Bowler.PRE_DELIVERY_JUMP[0].rightUpperArmAngleDeg; // 40.6°
+                    const joystickRad = this.renderer.joystick ? this.renderer.joystick.angleRad : Math.PI;
+                    const currentJoystickDeg = (joystickRad * 180) / Math.PI;
+
+                    bowler.initialStaticOffsetDeg = frame1ArmAngleDeg - currentJoystickDeg;
+                    bowler.accumulatedJoystickAngleDeg = 0.0;
+                    bowler.lastJoystickAngleRad = joystickRad;
                 }
             }
         });
