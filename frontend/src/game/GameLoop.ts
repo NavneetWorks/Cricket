@@ -184,27 +184,21 @@ export default class GameLoop{
             this.ball.prevPos.y = bowler.leftWrist.y;
         };
 
-        // 1. Mouse Click (Left Click): BATTING & NEW_BOWLER mode me start runup / trigger jump
+        // 1. Mouse Click (Left Click): Only triggers pre-jump IF bowler is ALREADY running via Space key!
         window.addEventListener("mousedown", (event) => {
             if (event.button !== 0) return; // Only Left Click
             const bowler = this.renderer.bowler;
             if (!this.isOnlineMode && this.renderer.gameMode === 'BATTING') {
                 startBowlerDelivery();
             } else if (this.renderer.gameMode === 'NEW_BOWLER') {
-                if (!bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {
-                    const startX = bowler.currentHipPosition.x < 2000 ? 2600 : bowler.currentHipPosition.x;
-                    bowler.resetToIdle();
-                    bowler.currentHipPosition.x = startX;
-                    bowler.startRunning();
-                    this.ball.isHeldInHand = true;
-                    this.ball.isActive = true;
-                } else if (bowler.isRunning) {
+                // Left click before Space does NOTHING! Only triggers jump during active runup.
+                if (bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {
                     bowler.triggerPreJump();
                 }
             }
         });
 
-        // 2. Keyboard Space Key: BATTING & NEW_BOWLER me start delivery or trigger pre-jump
+        // 2. Keyboard Space Key: Starts automatic 400+ frame runup in NEW_BOWLER mode
         window.addEventListener("keydown", (event) => {
             if (event.code === "Space") {
                 const bowler = this.renderer.bowler;
@@ -218,26 +212,48 @@ export default class GameLoop{
                         bowler.startRunning();
                         this.ball.isHeldInHand = true;
                         this.ball.isActive = true;
-                    } else if (bowler.isRunning) {
-                        bowler.triggerPreJump();
                     }
                 }
             }
         });
 
-        // 3. Keyboard par 'R' button dabane par Bowling ball & Wickets reset karna
+        // 3. Keyboard par 'R' button dabane par Bowling ball, Bowler, Joystick & Wickets reset karna
         window.addEventListener("keydown", (event) => {
             if (event.code === "KeyR" || event.key.toLowerCase() === 'r') {
                 if (this.renderer.gameMode === 'NEW_BOWLER') {
-                    this.renderer.bowler.resetToIdle();
-                    this.renderer.bowler.resetProceduralUpperBodyState();
+                    const bowler = this.renderer.bowler;
+                    bowler.resetToIdle();
+                    bowler.resetProceduralUpperBodyState();
+                    bowler.currentHipPosition.x = 2600;
+                    bowler.preJumpStartX = 2600;
+                    bowler.isExecutingJump = false;
+                    bowler.isPreJumpTransitioning = false;
+                    bowler.isPreJumpFrozen = false;
+                    bowler.isRunning = false;
+                    bowler.isCycleCompleted = false;
+
                     this.currentArmAngleRad = Math.PI;
                     this.isHandTargetInitialized = false;
+
+                    if (this.renderer.joystick) {
+                        this.renderer.joystick.reset();
+                    }
+
+                    const initialPose = bowler.getProceduralUpperBodyPose(Math.PI);
+                    bowler.applyKeyframePose(initialPose, 2600);
+
+                    this.ball.isHeldInHand = true;
+                    this.ball.isActive = true;
+                    this.ball.pos.x = bowler.leftWrist.x;
+                    this.ball.pos.y = bowler.leftWrist.y;
+                    this.ball.prevPos.x = bowler.leftWrist.x;
+                    this.ball.prevPos.y = bowler.leftWrist.y;
+
+                    this.renderer.wicket.reset();
                 } else {
                     this.renderer.bowlingArea.reset(this.ball);
                     this.renderer.wicket.reset();
                     this.hasSentReleasePacket = false;
-                    // 🟢 STEP 3: naye ball cycle ke liye prediction flags fresh
                     this.localPredictedHit = false;
                     this.suppressNextPacketSound = false;
                     this.hasAuthoritativeResult = false;
@@ -514,29 +530,34 @@ private getProjectileStateWithBounce(
                 }
             }
 
-            bowler.update(dt);
+            // 🟢 AUTOMATIC RUN-UP PHASE (Space Key): Native 400+ frame leg & body runup animation
+            if (bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning && !bowler.isCycleCompleted) {
+                bowler.update(dt);
+            } 
+            // 🟢 MANUAL JUMP & DELIVERY PHASE (Left Click during runup OR Idle)
+            else {
+                const joystick = this.renderer.joystick;
+                this.currentArmAngleRad = joystick.angleRad;
 
-            // 🕹️ BOWLING ARM JOYSTICK & WHOLE-BODY POSE AUTO-SYNC
-            const joystick = this.renderer.joystick;
-            
-            // Bowling arm angle is driven by joystick angle for upper body sync
-            this.currentArmAngleRad = joystick.angleRad;
+                const interpolatedPose = bowler.getProceduralUpperBodyPose(this.currentArmAngleRad);
 
-            // 🎯 Upper-Body Procedural Biomechanical Auto-Sync:
-            const interpolatedPose = bowler.getProceduralUpperBodyPose(this.currentArmAngleRad);
+                if (bowler.isExecutingJump || bowler.isPreJumpTransitioning || bowler.isCycleCompleted) {
+                    if (bowler.preJumpStartX === 0 || bowler.preJumpStartX === undefined) {
+                        bowler.preJumpStartX = bowler.currentHipPosition.x;
+                    }
+                    const manualStepX = bowler.preJumpStartX - bowler.currentProceduralJumpXOffset;
+                    bowler.applyKeyframePose(interpolatedPose, manualStepX);
+                } else {
+                    bowler.applyKeyframePose(interpolatedPose, bowler.currentHipPosition.x);
+                }
 
-            // 1. Auto-sync UPPER BODY ONLY (spine lean, shoulder angle/distance, non-bowling arm).
-            bowler.applyUpperBodyPoseOnly(interpolatedPose);
+                const totalArmLen = bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
+                const minReach = Math.abs(bowler.FRONT_UPPER_ARM - bowler.FRONT_LOWER_ARM) + 5;
+                const reachRatio = joystick.distanceRatio > 0.05 ? joystick.distanceRatio : 1.0;
+                const armReach = minReach + (totalArmLen - minReach - 1.0) * reachRatio;
 
-            // 2. Position BOWLING ARM ONLY with dynamic momentum offset included!
-            const effectiveArmAngleRad = joystick.angleRad + (bowler.dynamicOffsetDeg * Math.PI / 180);
-
-            const totalArmLen = bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
-            const minReach = Math.abs(bowler.FRONT_UPPER_ARM - bowler.FRONT_LOWER_ARM) + 5;
-            const reachRatio = joystick.distanceRatio > 0.05 ? joystick.distanceRatio : 1.0;
-            const armReach = minReach + (totalArmLen - minReach - 1.0) * reachRatio;
-
-            bowler.overrideLeftArmWithIK(effectiveArmAngleRad, armReach);
+                bowler.overrideLeftArmWithIK(this.currentArmAngleRad, armReach);
+            }
 
             // Sync ball position with left wrist (ALWAYS held in hand in NEW_BOWLER mode, NO release!)
             this.ball.isHeldInHand = true;

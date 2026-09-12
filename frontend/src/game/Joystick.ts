@@ -165,4 +165,13 @@ export default class Joystick {
 
         ctx.restore();
     }
+
+    public reset(): void {
+        this.isPointerDown = false;
+        this.isActive = false;
+        this.angleRad = Math.PI;
+        this.distanceRatio = 0;
+        this.knobX = this.centerX;
+        this.knobY = this.centerY;
+    }
 }

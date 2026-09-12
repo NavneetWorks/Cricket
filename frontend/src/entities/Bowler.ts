@@ -139,7 +139,7 @@ export class Bowler {
     public jumpAnimationDuration: number = 1.2; // Time in seconds to complete the full 420-frame jump (arm/leg speed)
     public jumpForwardSpeed: number = 350;       // Forward displacement speed during jump in px/sec (step forward speed)
 
-    private preJumpStartX: number = 0;
+    public preJumpStartX: number = 0;
     private preJumpTargetDistance: number = 40; // Max ceiling 40px
     private preJumpStartPose: KeyframePose | null = null;
     private preJumpJointVelocities: Record<string, number> = {};
@@ -209,6 +209,7 @@ export class Bowler {
     public isCycleCompleted: boolean = false;
     public dynamicOffsetDeg: number = 0.0;
     public offsetVelocityDeg: number = 0.0;
+    public lastArmAngleRad: number | null = null;
     public lastJoystickAngleRad: number | null = null;
     public lastJoystickVelDeg: number = 0.0;
 
@@ -8667,8 +8668,38 @@ export class Bowler {
     public currentProceduralSpineAngleDeg: number = -130.0;
     public currentProceduralShoulderAngleDeg: number = 100.0;
     public currentProceduralShoulderDist: number = 15.0;
+    public currentProceduralPelvisAngleDeg: number = 10.0;
+    public currentProceduralPelvisDist: number = 18.0;
+    public currentProceduralLeftThighDeg: number = -15.0;
+    public currentProceduralRightThighDeg: number = 30.0;
+    public currentProceduralLeftKneeDeg: number = 45.0;
+    public currentProceduralRightKneeDeg: number = 30.0;
+    public currentProceduralHipYOffset: number = 0.0;
+    public currentProceduralJumpXOffset: number = 0.0;
     public unwrappedArmAngleDeg: number = 180.0;
-    private lastArmAngleRad: number | null = null;
+    public static getJumpKeyframeStrideRatio(uIdx: number): number {
+        // Total 41 Keyframes non-linear stride displacement curve S(uIdx)
+        if (uIdx <= 0) return 0.0;
+        if (uIdx >= 41) return 1.0;
+
+        if (uIdx <= 9) {
+            // Stage 1 (Frames 0 -> 9): 1st Foot Plant & Spring Pull Stride Ease-Out
+            const alpha = uIdx / 9.0;
+            return 0.28 * (1 - Math.pow(1 - alpha, 2));
+        } else if (uIdx <= 13) {
+            // Stage 2 (Frames 9 -> 13): Light Linear Momentum Carryover
+            const alpha = (uIdx - 9.0) / 4.0;
+            return 0.28 + 0.12 * alpha;
+        } else if (uIdx <= 30) {
+            // Stage 3 (Frames 13 -> 30): 2nd Foot Spring Stride & Drive Ease-Out
+            const alpha = (uIdx - 13.0) / 17.0;
+            return 0.40 + 0.42 * (1 - Math.pow(1 - alpha, 2));
+        } else {
+            // Stage 4 (Frames 30 -> 41): Final Light Linear Momentum Glide to Delivery Finish
+            const alpha = (uIdx - 30.0) / 11.0;
+            return 0.82 + 0.18 * alpha;
+        }
+    }
 
     public getProceduralUpperBodyPose(armAngleRad: number): KeyframePose {
         const frames = Bowler.PRE_DELIVERY_JUMP;
@@ -8733,6 +8764,20 @@ export class Bowler {
             const targetNBArm = lerpDeg(lowerPose.rightUpperArmAngleDeg, upperPose.rightUpperArmAngleDeg, t);
             const targetNBElbow = lerpDeg(lowerPose.rightElbowAngleDeg, upperPose.rightElbowAngleDeg, t);
 
+            // Interpolate lower-body / legs fields for full-body hand sync
+            const targetPelvisDist = lerpVal(lowerPose.pelvisJointDist, upperPose.pelvisJointDist, t);
+            const targetPelvisAngle = lerpDeg(lowerPose.pelvisJointAngleDeg, upperPose.pelvisJointAngleDeg, t);
+            const targetLeftThigh = lerpDeg(lowerPose.leftThighAngleDeg, upperPose.leftThighAngleDeg, t);
+            const targetRightThigh = lerpDeg(lowerPose.rightThighAngleDeg, upperPose.rightThighAngleDeg, t);
+            const targetLeftKnee = lerpDeg(lowerPose.leftKneeAngleDeg, upperPose.leftKneeAngleDeg, t);
+            const targetRightKnee = lerpDeg(lowerPose.rightKneeAngleDeg, upperPose.rightKneeAngleDeg, t);
+            const targetHipY = lerpVal(lowerPose.hipYOffset, upperPose.hipYOffset, t);
+
+            // Calculate Keyframe-Driven Non-Linear Stride Displacement Ratio S(uIdx)
+            const strideRatio1 = Bowler.getJumpKeyframeStrideRatio(lIdx);
+            const strideRatio2 = Bowler.getJumpKeyframeStrideRatio(uIdx);
+            const targetStrideRatio = lerpVal(strideRatio1, strideRatio2, t);
+
             // 60 FPS Bat-Style Spring-Damper Inertia Filtering Gliding
             const lerpFactor = 0.18;
             this.currentProceduralSpineAngleDeg += (targetSpine - this.currentProceduralSpineAngleDeg) * lerpFactor;
@@ -8741,53 +8786,18 @@ export class Bowler {
             this.currentProceduralNBArmAngleDeg += (targetNBArm - this.currentProceduralNBArmAngleDeg) * lerpFactor;
             this.currentProceduralNBElbowAngleDeg += (targetNBElbow - this.currentProceduralNBElbowAngleDeg) * lerpFactor;
 
-            // 🎯 2. CALCULATE 4-STAGE DYNAMIC OFFSET FOR BOWLING ARM ONLY (HALVED MULTIPLIER)!
-            let joystickVelDeg = 0;
-            if (this.lastJoystickAngleRad !== null) {
-                let deltaJRad = armAngleRad - this.lastJoystickAngleRad;
-                while (deltaJRad > Math.PI) deltaJRad -= Math.PI * 2;
-                while (deltaJRad < -Math.PI) deltaJRad += Math.PI * 2;
-                joystickVelDeg = deltaJRad * (180 / Math.PI);
-            }
+            this.currentProceduralPelvisDist += (targetPelvisDist - this.currentProceduralPelvisDist) * lerpFactor;
+            this.currentProceduralPelvisAngleDeg += (targetPelvisAngle - this.currentProceduralPelvisAngleDeg) * lerpFactor;
+            this.currentProceduralLeftThighDeg += (targetLeftThigh - this.currentProceduralLeftThighDeg) * lerpFactor;
+            this.currentProceduralRightThighDeg += (targetRightThigh - this.currentProceduralRightThighDeg) * lerpFactor;
+            this.currentProceduralLeftKneeDeg += (targetLeftKnee - this.currentProceduralLeftKneeDeg) * lerpFactor;
+            this.currentProceduralRightKneeDeg += (targetRightKnee - this.currentProceduralRightKneeDeg) * lerpFactor;
+            this.currentProceduralHipYOffset += (targetHipY - this.currentProceduralHipYOffset) * lerpFactor;
 
-            const isJoystickStopped = Math.abs(joystickVelDeg) < 0.01;
-            const isJoystickReversed = (joystickVelDeg * this.lastJoystickVelDeg) < -0.01;
+            this.currentProceduralJumpXOffset += (targetStrideRatio * 200.0 - this.currentProceduralJumpXOffset) * lerpFactor;
 
-            if (isJoystickStopped) {
-                // Smooth momentum decay (+5 -> +3 -> +1 -> 0)
-                this.offsetVelocityDeg *= 0.82;
-                this.dynamicOffsetDeg += this.offsetVelocityDeg;
-            } else if (isJoystickReversed) {
-                // Active Counter-Braking (+5 -> +2 -> -1 -> -4)
-                this.offsetVelocityDeg = -1.2 * joystickVelDeg;
-                this.dynamicOffsetDeg += this.offsetVelocityDeg;
-            } else {
-                // Clockwise Reference Angle Stage Multipliers (0° = Positive X-axis, 90° = Down, 180° = Back, 270° = Top)
-                const armAngleCw = ((armAngleRad * 180 / Math.PI) % 360 + 360) % 360;
-                const isMovingUpwardWindup = (joystickVelDeg > 0);
-
-                let stageMultiplier = 1.0;
-                if (armAngleCw >= 90 && armAngleCw <= 180) {
-                    if (isMovingUpwardWindup) {
-                        stageMultiplier = -1.5; // Stage 1: 90° -> 180° Upward Windup Rise (Inertial Lag)
-                    } else {
-                        stageMultiplier = 3.0;  // Stage 2: 180° -> 90° Downward Swing (Gravity Acceleration)
-                    }
-                } else if (armAngleCw >= 0 && armAngleCw < 90) {
-                    stageMultiplier = 1.8;      // Stage 3: 90° -> 0° Upward Lift (Carryover)
-                } else {
-                    stageMultiplier = 4.0;      // Stage 4: 0° -> 270° Overhead Release (Explosive Whip Boost)
-                }
-
-                // Halved Momentum Acceleration Scale Factor (3.0 instead of 6.0)
-                const targetOffset = joystickVelDeg * stageMultiplier * 3.0;
-                this.offsetVelocityDeg += (targetOffset - this.dynamicOffsetDeg) * 0.25;
-                this.offsetVelocityDeg *= 0.85; // Viscous resistance
-                this.dynamicOffsetDeg += this.offsetVelocityDeg;
-            }
-
-            this.lastJoystickAngleRad = armAngleRad;
-            this.lastJoystickVelDeg = joystickVelDeg;
+            // Offset paused per user request (Dynamic Offset = 0)
+            this.dynamicOffsetDeg = 0.0;
 
             // Detect if we have reached the final keyframe (Frame 41)
             if (uIdx >= frames.length - 1 && list.currentPointer && list.currentPointer.next === null) {
@@ -8807,7 +8817,14 @@ export class Bowler {
                 leftUpperArmAngleDeg: leftUpperArmAngleDeg,
                 leftElbowAngleDeg: 0.0,
                 rightUpperArmAngleDeg: this.currentProceduralNBArmAngleDeg,
-                rightElbowAngleDeg: this.currentProceduralNBElbowAngleDeg
+                rightElbowAngleDeg: this.currentProceduralNBElbowAngleDeg,
+                pelvisJointDist: this.currentProceduralPelvisDist,
+                pelvisJointAngleDeg: this.currentProceduralPelvisAngleDeg,
+                leftThighAngleDeg: this.currentProceduralLeftThighDeg,
+                rightThighAngleDeg: this.currentProceduralRightThighDeg,
+                leftKneeAngleDeg: this.currentProceduralLeftKneeDeg,
+                rightKneeAngleDeg: this.currentProceduralRightKneeDeg,
+                hipYOffset: this.currentProceduralHipYOffset
             };
         }
 
