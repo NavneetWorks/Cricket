@@ -687,9 +687,26 @@ private getProjectileStateWithBounce(
             this.ball.prevPos.x = bowler.leftWrist.x;
             this.ball.prevPos.y = bowler.leftWrist.y;
 
-            // 🔴 Record Ball Trail Points once Left Click is pressed:
+            // 🔴 Record Ball Trail Points with Inter-frame Sub-step Interpolation for smooth curves:
             if (bowler.isGatheringArmActive || bowler.isExecutingJump || bowler.isPreJumpTransitioning || bowler.isPreJumpFrozen || bowler.isCycleCompleted) {
-                bowler.ballTrailPoints.push({ x: this.ball.pos.x, y: this.ball.pos.y });
+                const pts = bowler.ballTrailPoints;
+                const currX = this.ball.pos.x;
+                const currY = this.ball.pos.y;
+                if (pts.length > 0) {
+                    const lastPt = pts[pts.length - 1];
+                    const dist = Math.hypot(currX - lastPt.x, currY - lastPt.y);
+                    if (dist > 6) {
+                        const steps = Math.min(8, Math.ceil(dist / 4));
+                        for (let s = 1; s < steps; s++) {
+                            const ratio = s / steps;
+                            pts.push({
+                                x: lastPt.x + (currX - lastPt.x) * ratio,
+                                y: lastPt.y + (currY - lastPt.y) * ratio
+                            });
+                        }
+                    }
+                }
+                pts.push({ x: currX, y: currY });
             }
 
             // Dynamic Pre-Jump Trigger Check when bowler reaches startJumpX

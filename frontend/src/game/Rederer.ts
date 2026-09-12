@@ -139,6 +139,31 @@ export default class Renderer{
             this.ctx.textAlign = "center";
             this.ctx.fillText("JUMP POINT", markX, groundY - 54);
             this.ctx.restore();
+
+            // 🟢 Green Vertical Line (300px Left of startJumpX, Height 500px from Ground)
+            const greenLineX = markX - 300;
+            this.ctx.save();
+            this.ctx.strokeStyle = "#22c55e"; // Vibrant Green
+            this.ctx.lineWidth = 3;
+            this.ctx.setLineDash([8, 4]);
+            this.ctx.beginPath();
+            this.ctx.moveTo(greenLineX, groundY);
+            this.ctx.lineTo(greenLineX, groundY - 500);
+            this.ctx.stroke();
+            this.ctx.setLineDash([]);
+
+            // Green top badge
+            this.ctx.fillStyle = "#22c55e";
+            this.ctx.beginPath();
+            this.ctx.arc(greenLineX, groundY - 500, 6, 0, Math.PI * 2);
+            this.ctx.fill();
+
+            // Green text label
+            this.ctx.font = "bold 11px Inter, Arial, sans-serif";
+            this.ctx.fillStyle = "#22c55e";
+            this.ctx.textAlign = "center";
+            this.ctx.fillText("300px MARK", greenLineX, groundY - 510);
+            this.ctx.restore();
         }
 
         this.drawBallTrail();
@@ -609,8 +634,19 @@ export default class Renderer{
 
         this.ctx.beginPath();
         this.ctx.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length; i++) {
-            this.ctx.lineTo(points[i].x, points[i].y);
+
+        if (points.length === 2) {
+            this.ctx.lineTo(points[1].x, points[1].y);
+        } else {
+            // Quadratic Bezier Curve Smoothing across consecutive points
+            for (let i = 1; i < points.length - 1; i++) {
+                const xc = (points[i].x + points[i + 1].x) / 2;
+                const yc = (points[i].y + points[i + 1].y) / 2;
+                this.ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+            }
+            const last = points[points.length - 1];
+            const prev = points[points.length - 2];
+            this.ctx.quadraticCurveTo(prev.x, prev.y, last.x, last.y);
         }
         this.ctx.stroke();
 
