@@ -9455,8 +9455,21 @@ export class Bowler {
             rightThighAngleDeg: lerpDeg(p1.rightThighAngleDeg, p2.rightThighAngleDeg, t),
             leftKneeAngleDeg: lerpDeg(p1.leftKneeAngleDeg, p2.leftKneeAngleDeg, t),
             rightKneeAngleDeg: lerpDeg(p1.rightKneeAngleDeg, p2.rightKneeAngleDeg, t),
-            hipYOffset: lerpVal(p1.hipYOffset, p2.hipYOffset, t)
+            hipYOffset: lerpVal(p1.hipYOffset, p2.hipYOffset, t),
+            displacementX: lerpVal(p1.displacementX ?? 0, p2.displacementX ?? 0, t)
         };
+    }
+
+    public interpolatePoseAtDecimalFrame(decimalFrame: number): KeyframePose {
+        const frames = Bowler.PRE_DELIVERY_JUMP;
+        const maxIdx = frames.length - 1;
+        const clampedFrame = Math.max(0, Math.min(maxIdx, decimalFrame));
+
+        const lIdx = Math.floor(clampedFrame);
+        const uIdx = Math.min(maxIdx, lIdx + 1);
+        const t = clampedFrame - lIdx;
+
+        return Bowler.interpolatePose(frames[lIdx], frames[uIdx], t);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -547,36 +547,50 @@ private getProjectileStateWithBounce(
             if (bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning && !bowler.isPreJumpFrozen && !bowler.isCycleCompleted) {
                 bowler.update(dt);
             } 
-            // 🟢 MANUAL JUMP & DELIVERY PHASE (Left Click during runup OR Idle)
+            // 🟢 MANUAL JUMP & DELIVERY PHASE (Option 2: Dynamic Progress Ratio & Sub-frame Interpolation)
             else {
                 const joystick = this.renderer.joystick;
                 this.currentArmAngleRad = joystick.angleRad;
 
-                const interpolatedPose = bowler.getProceduralUpperBodyPose(this.currentArmAngleRad);
+                // Track accumulated angle movement from start
+                if (bowler.lastJoystickAngleRad !== null) {
+                    let deltaRad = joystick.angleRad - bowler.lastJoystickAngleRad;
+                    if (deltaRad > Math.PI) deltaRad -= Math.PI * 2;
+                    if (deltaRad < -Math.PI) deltaRad += Math.PI * 2;
+
+                    let deltaDeg = (deltaRad * 180) / Math.PI;
+                    bowler.accumulatedJoystickAngleDeg += Math.abs(deltaDeg);
+                }
+                bowler.lastJoystickAngleRad = joystick.angleRad;
+
+                // 📐 Option 2 Formula: progressRatio = accumulatedAngle / 370.6
+                const totalJumpFrames = Bowler.PRE_DELIVERY_JUMP.length;
+                const totalArmPathDeg = 370.6;
+                const progressRatio = Math.min(1.0, Math.max(0.0, bowler.accumulatedJoystickAngleDeg / totalArmPathDeg));
+
+                const decimalFrameIndex = progressRatio * (totalJumpFrames - 1);
+
+                // 60 FPS Sub-frame interpolation for body joints & displacementX
+                const interpolatedPose = bowler.interpolatePoseAtDecimalFrame(decimalFrameIndex);
 
                 if (bowler.isExecutingJump || bowler.isPreJumpTransitioning || bowler.isPreJumpFrozen) {
                     if (bowler.preJumpStartX === 0 || bowler.preJumpStartX === undefined) {
                         bowler.preJumpStartX = bowler.currentHipPosition.x;
                     }
 
-                    // 🏃 Decelerating Physics Curve: Initial runup speed (450 px/s) decelerates down to 0 px/s
-                    bowler.elapsedJumpTime += dt;
-                    const duration = bowler.totalJumpDurationSec > 0 ? bowler.totalJumpDurationSec : 1.2;
-                    const alpha = Math.min(1.0, bowler.elapsedJumpTime / duration);
-
-                    const initialSpeed = 450.0;
-                    const endSpeed = 0.0; // Smooth deceleration down to 0 px/s at the end
-                    const currentSpeed = endSpeed + (initialSpeed - endSpeed) * Math.pow(1.0 - alpha, 2);
-
-                    bowler.currentProceduralJumpXOffset += currentSpeed * dt;
-
-                    const manualStepX = bowler.preJumpStartX - bowler.currentProceduralJumpXOffset;
+                    // Direct X-Displacement Sync from interpolated displacementX (negative value)
+                    const manualStepX = bowler.preJumpStartX + (interpolatedPose.displacementX ?? 0);
                     bowler.currentHipPosition.x = manualStepX;
                     bowler.applyKeyframePose(interpolatedPose, manualStepX);
+
+                    if (progressRatio >= 0.99) {
+                        bowler.isCycleCompleted = true;
+                    }
                 } else if (bowler.isCycleCompleted) {
-                    const manualStepX = bowler.preJumpStartX - bowler.totalJumpStrideDistance;
+                    const lastPose = Bowler.PRE_DELIVERY_JUMP[totalJumpFrames - 1];
+                    const manualStepX = bowler.preJumpStartX + (lastPose.displacementX ?? 0);
                     bowler.currentHipPosition.x = manualStepX;
-                    bowler.applyKeyframePose(interpolatedPose, manualStepX);
+                    bowler.applyKeyframePose(lastPose, manualStepX);
                 } else {
                     bowler.applyKeyframePose(interpolatedPose, bowler.currentHipPosition.x);
                 }
