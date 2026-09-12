@@ -194,6 +194,9 @@ export default class GameLoop{
                 // Left click before Space does NOTHING! Only triggers jump during active runup.
                 if (bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {
                     bowler.preJumpStartX = bowler.currentHipPosition.x;
+                    bowler.initialRunupSpeedX = bowler.lastRunupSpeedX > 0 ? bowler.lastRunupSpeedX : 800.0;
+                    bowler.lastInterpolatedDisplacementX = Bowler.PRE_DELIVERY_JUMP[0].displacementX ?? -20.0;
+                    bowler.accumulatedDisplacementX = Math.abs(bowler.lastInterpolatedDisplacementX);
                     bowler.isExecutingJump = true;
                     bowler.triggerPreJump();
 
@@ -578,19 +581,33 @@ private getProjectileStateWithBounce(
                         bowler.preJumpStartX = bowler.currentHipPosition.x;
                     }
 
-                    // Direct X-Displacement Sync from interpolated displacementX (negative value)
-                    const manualStepX = bowler.preJumpStartX + (interpolatedPose.displacementX ?? 0);
-                    bowler.currentHipPosition.x = manualStepX;
-                    bowler.applyKeyframePose(interpolatedPose, manualStepX);
+                    // 🏃 X-Axis Displacement Momentum Transfer: Compare per dt runup momentum vs manual control displacement
+                    const currDisplacementX = interpolatedPose.displacementX ?? -20.0;
+                    const manualStepX = Math.max(0, -(currDisplacementX - bowler.lastInterpolatedDisplacementX));
+                    bowler.lastInterpolatedDisplacementX = currDisplacementX;
+
+                    // Linearly decay scaled runup momentum X displacement over totalJumpFrames / 2.5 frames (~28.4 frames)
+                    const fadeLimitFrames = totalJumpFrames / 5;
+                    const decayRatio = Math.max(0, 1.0 - (decimalFrameIndex / fadeLimitFrames));
+                    const transferFactor = bowler.momentumTransferFactor ?? 0.5;
+                    const runupStepX = (bowler.initialRunupSpeedX * transferFactor) * dt * decayRatio;
+
+                    // Pick the larger displacement per frame (dt)
+                    const effectiveStepX = Math.max(runupStepX, manualStepX);
+                    bowler.accumulatedDisplacementX += effectiveStepX;
+
+                    const effectiveHipX = bowler.preJumpStartX - bowler.accumulatedDisplacementX;
+                    bowler.currentHipPosition.x = effectiveHipX;
+                    bowler.applyKeyframePose(interpolatedPose, effectiveHipX);
 
                     if (progressRatio >= 0.99) {
                         bowler.isCycleCompleted = true;
                     }
                 } else if (bowler.isCycleCompleted) {
                     const lastPose = Bowler.PRE_DELIVERY_JUMP[totalJumpFrames - 1];
-                    const manualStepX = bowler.preJumpStartX + (lastPose.displacementX ?? 0);
-                    bowler.currentHipPosition.x = manualStepX;
-                    bowler.applyKeyframePose(lastPose, manualStepX);
+                    const effectiveHipX = bowler.preJumpStartX - bowler.accumulatedDisplacementX;
+                    bowler.currentHipPosition.x = effectiveHipX;
+                    bowler.applyKeyframePose(lastPose, effectiveHipX);
                 } else {
                     bowler.applyKeyframePose(interpolatedPose, bowler.currentHipPosition.x);
                 }

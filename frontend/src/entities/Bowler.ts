@@ -227,6 +227,11 @@ export class Bowler {
     public lastArmAngleRad: number | null = null;
     public lastJoystickAngleRad: number | null = null;
     public lastJoystickVelDeg: number = 0.0;
+    public lastRunupSpeedX: number = 800.0;
+    public initialRunupSpeedX: number = 800.0;
+    public accumulatedDisplacementX: number = 0.0;
+    public lastInterpolatedDisplacementX: number = -20.0;
+    public momentumTransferFactor: number = 0.2; // 50% momentum transfer factor from runup
 
     public resetProceduralUpperBodyState(): void {
         this.currentProceduralNBArmAngleDeg = 48.0;
@@ -245,6 +250,10 @@ export class Bowler {
         this.offsetVelocityDeg = 0.0;
         this.lastJoystickAngleRad = null;
         this.lastJoystickVelDeg = 0.0;
+        this.lastRunupSpeedX = 800.0;
+        this.initialRunupSpeedX = 800.0;
+        this.accumulatedDisplacementX = 0.0;
+        this.lastInterpolatedDisplacementX = -20.0;
         Bowler.resetAllRangeLUTPointers();
     }
 
@@ -9689,6 +9698,7 @@ export class Bowler {
         const rawSpeed = this.runCycleDistance * this.strideFrequency * pushImpulse;
         const MAX_RUN_SPEED = 1200; // Constant top speed limit in px/sec
         let horizontalSpeed = Math.min(rawSpeed, MAX_RUN_SPEED);
+        this.lastRunupSpeedX = horizontalSpeed;
 
         // C. Pre-Jump Transition State (Dynamic Adaptive Blend within max 40px)
         if (this.isPreJumpTransitioning) {
