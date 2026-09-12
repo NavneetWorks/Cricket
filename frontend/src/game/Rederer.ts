@@ -141,6 +141,7 @@ export default class Renderer{
             this.ctx.restore();
         }
 
+        this.drawBallTrail();
         this.ball.draw(this.ctx, alpha);
 
         this.ctx.restore(); // Restore context for fixed HUD / UI overlays
@@ -596,4 +597,30 @@ export default class Renderer{
         this.ctx.restore();
     }
 
+    private drawBallTrail() {
+        const points = this.bowler.ballTrailPoints;
+        if (points.length < 2) return;
+
+        this.ctx.save();
+        this.ctx.strokeStyle = "#ef4444"; // Vibrant Red
+        this.ctx.lineWidth = 3.5;
+        this.ctx.lineCap = "round";
+        this.ctx.lineJoin = "round";
+
+        this.ctx.beginPath();
+        this.ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+            this.ctx.lineTo(points[i].x, points[i].y);
+        }
+        this.ctx.stroke();
+
+        // Draw small red dot at the latest ball point
+        const last = points[points.length - 1];
+        this.ctx.fillStyle = "#ef4444";
+        this.ctx.beginPath();
+        this.ctx.arc(last.x, last.y, 4, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        this.ctx.restore();
     }
+}

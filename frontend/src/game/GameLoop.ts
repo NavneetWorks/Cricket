@@ -203,6 +203,7 @@ export default class GameLoop{
                     bowler.isGatheringArmActive = true;
                     bowler.gatheringAngleTraveledDeg = 0.0;
                     bowler.accumulatedJoystickAngleDeg = 0.0;
+                    bowler.ballTrailPoints = [];
                 }
             }
         });
@@ -555,30 +556,31 @@ private getProjectileStateWithBounce(
                         bowler.joystickAngularVelRad = 0.0;
                     }
 
-                    // 🏋️ Heavy Physical Mass & Viscous Resistance Drag (Stiffness 150, Damping 80)
-                    // Low stiffness & high damping makes the arm feel extremely heavy to move against player mouse input
+                    // 🏋️ Angle & Radius Physical Resistance Drag during Gathering Phase
                     let angleDiffRad = rawJoystickRad - bowler.smoothJoystickAngleRad;
                     while (angleDiffRad > Math.PI) angleDiffRad -= Math.PI * 2;
                     while (angleDiffRad < -Math.PI) angleDiffRad += Math.PI * 2;
 
-                    const GATHERING_STIFFNESS = 150.0;
-                    const GATHERING_DAMPING = 80.0;
-
-                    const springForce = angleDiffRad * GATHERING_STIFFNESS;
-                    const dampingForce = -bowler.joystickAngularVelRad * GATHERING_DAMPING;
-                    const accelRad = springForce + dampingForce;
-
-                    bowler.joystickAngularVelRad += accelRad * dt;
+                    const springForceAngle = angleDiffRad * bowler.GATHERING_ANGLE_STIFFNESS;
+                    const dampingForceAngle = -bowler.joystickAngularVelRad * bowler.GATHERING_ANGLE_DAMPING;
+                    bowler.joystickAngularVelRad += (springForceAngle + dampingForceAngle) * dt;
                     bowler.smoothJoystickAngleRad += bowler.joystickAngularVelRad * dt;
+
+                    // Radius Spring-Damper Simulation (Resistance when changing arm reach)
+                    const targetRadiusRatio = joystick.distanceRatio > 0.05 ? joystick.distanceRatio : 1.0;
+                    const radiusDiff = targetRadiusRatio - bowler.smoothJoystickRadiusRatio;
+                    const springForceRadius = radiusDiff * bowler.GATHERING_RADIUS_STIFFNESS;
+                    const dampingForceRadius = -bowler.joystickRadiusVelRatio * bowler.GATHERING_RADIUS_DAMPING;
+                    bowler.joystickRadiusVelRatio += (springForceRadius + dampingForceRadius) * dt;
+                    bowler.smoothJoystickRadiusRatio += bowler.joystickRadiusVelRatio * dt;
 
                     this.currentArmAngleRad = bowler.smoothJoystickAngleRad;
 
                     const totalArmLen = bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
                     const minReach = Math.abs(bowler.FRONT_UPPER_ARM - bowler.FRONT_LOWER_ARM) + 5;
-                    const reachRatio = joystick.distanceRatio > 0.05 ? joystick.distanceRatio : 1.0;
-                    const armReach = minReach + (totalArmLen - minReach - 1.0) * reachRatio;
+                    const armReach = minReach + (totalArmLen - minReach - 1.0) * bowler.smoothJoystickRadiusRatio;
 
-                    // Override Left Arm IK with heavy-drag angle (jump angle accumulation strictly remains 0 until startJumpX!)
+                    // Override Left Arm IK with heavy-drag angle & radius
                     bowler.overrideLeftArmWithIK(this.currentArmAngleRad, armReach);
                     bowler.lastJoystickAngleRad = bowler.smoothJoystickAngleRad;
                 }
@@ -593,17 +595,23 @@ private getProjectileStateWithBounce(
                     bowler.joystickAngularVelRad = 0.0;
                 }
 
-                // 🏃 Spring-Damper Physics Simulation (Same mass & inertia physics as Bat.ts)
+                // 🏃 Angle Spring-Damper Physics Simulation
                 let angleDiffRad = rawJoystickRad - bowler.smoothJoystickAngleRad;
                 while (angleDiffRad > Math.PI) angleDiffRad -= Math.PI * 2;
                 while (angleDiffRad < -Math.PI) angleDiffRad += Math.PI * 2;
 
-                const springForce = angleDiffRad * bowler.JOYSTICK_SPRING_STIFFNESS;
-                const dampingForce = -bowler.joystickAngularVelRad * bowler.JOYSTICK_DAMPING;
-                const accelRad = springForce + dampingForce;
-
-                bowler.joystickAngularVelRad += accelRad * dt;
+                const springForceAngle = angleDiffRad * bowler.JOYSTICK_ANGLE_STIFFNESS;
+                const dampingForceAngle = -bowler.joystickAngularVelRad * bowler.JOYSTICK_ANGLE_DAMPING;
+                bowler.joystickAngularVelRad += (springForceAngle + dampingForceAngle) * dt;
                 bowler.smoothJoystickAngleRad += bowler.joystickAngularVelRad * dt;
+
+                // Radius Spring-Damper Physics Simulation (Resistance when changing arm reach)
+                const targetRadiusRatio = joystick.distanceRatio > 0.05 ? joystick.distanceRatio : 1.0;
+                const radiusDiff = targetRadiusRatio - bowler.smoothJoystickRadiusRatio;
+                const springForceRadius = radiusDiff * bowler.JOYSTICK_RADIUS_STIFFNESS;
+                const dampingForceRadius = -bowler.joystickRadiusVelRatio * bowler.JOYSTICK_RADIUS_DAMPING;
+                bowler.joystickRadiusVelRatio += (springForceRadius + dampingForceRadius) * dt;
+                bowler.smoothJoystickRadiusRatio += bowler.joystickRadiusVelRatio * dt;
 
                 this.currentArmAngleRad = bowler.smoothJoystickAngleRad;
 
@@ -666,8 +674,7 @@ private getProjectileStateWithBounce(
 
                 const totalArmLen = bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
                 const minReach = Math.abs(bowler.FRONT_UPPER_ARM - bowler.FRONT_LOWER_ARM) + 5;
-                const reachRatio = joystick.distanceRatio > 0.05 ? joystick.distanceRatio : 1.0;
-                const armReach = minReach + (totalArmLen - minReach - 1.0) * reachRatio;
+                const armReach = minReach + (totalArmLen - minReach - 1.0) * bowler.smoothJoystickRadiusRatio;
 
                 bowler.overrideLeftArmWithIK(this.currentArmAngleRad, armReach);
             }
@@ -679,6 +686,11 @@ private getProjectileStateWithBounce(
             this.ball.pos.y = bowler.leftWrist.y;
             this.ball.prevPos.x = bowler.leftWrist.x;
             this.ball.prevPos.y = bowler.leftWrist.y;
+
+            // 🔴 Record Ball Trail Points once Left Click is pressed:
+            if (bowler.isGatheringArmActive || bowler.isExecutingJump || bowler.isPreJumpTransitioning || bowler.isPreJumpFrozen || bowler.isCycleCompleted) {
+                bowler.ballTrailPoints.push({ x: this.ball.pos.x, y: this.ball.pos.y });
+            }
 
             // Dynamic Pre-Jump Trigger Check when bowler reaches startJumpX
             if (bowler.isRunning && bowler.currentHipPosition.x <= bowler.startJumpX && !bowler.isPreJumpTransitioning && !bowler.isExecutingJump) {

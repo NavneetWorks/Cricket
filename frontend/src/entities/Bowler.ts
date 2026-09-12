@@ -218,6 +218,7 @@ export class Bowler {
         this.gatheringTargetX = null;
         this.isGatheringArmActive = false;
         this.gatheringAngleTraveledDeg = 0.0;
+        this.ballTrailPoints = [];
         this.setInitialRunPose();
     }
 
@@ -227,6 +228,7 @@ export class Bowler {
     public gatheringTargetX: number | null = null;
     public isGatheringArmActive: boolean = false;
     public gatheringAngleTraveledDeg: number = 0.0;
+    public ballTrailPoints: Vec2[] = [];
     public runupGatheringEndSpeedFactor: number = 0.5; // 0.5 = 50% end momentum at jump takeoff
     public totalJumpStrideDistance: number = 400.0;
     public totalJumpDurationSec: number = 1.2;
@@ -245,8 +247,19 @@ export class Bowler {
     public momentumTransferFactor: number = 0.5; // 50% momentum transfer factor from runup
     public smoothJoystickAngleRad: number = Math.PI;
     public joystickAngularVelRad: number = 0.0;
-    public readonly JOYSTICK_SPRING_STIFFNESS: number = 250.0;
-    public readonly JOYSTICK_DAMPING: number = 30.0;
+    public smoothJoystickRadiusRatio: number = 1.0;
+    public joystickRadiusVelRatio: number = 0.0;
+
+    // 🎛️ Dedicated Tuning Constants (Angle & Radius Resistance for Jump & Gathering phases)
+    public JOYSTICK_ANGLE_STIFFNESS: number = 250.0;
+    public JOYSTICK_ANGLE_DAMPING: number = 20.0;
+    public JOYSTICK_RADIUS_STIFFNESS: number = 100.0;
+    public JOYSTICK_RADIUS_DAMPING: number = 100.0;
+
+    public GATHERING_ANGLE_STIFFNESS: number = 150.0;
+    public GATHERING_ANGLE_DAMPING: number = 80.0;
+    public GATHERING_RADIUS_STIFFNESS: number = 100.0;
+    public GATHERING_RADIUS_DAMPING: number = 70.0;
 
     public resetProceduralUpperBodyState(): void {
         this.currentProceduralNBArmAngleDeg = 48.0;
@@ -271,9 +284,12 @@ export class Bowler {
         this.lastInterpolatedDisplacementX = -20.0;
         this.smoothJoystickAngleRad = Math.PI;
         this.joystickAngularVelRad = 0.0;
+        this.smoothJoystickRadiusRatio = 1.0;
+        this.joystickRadiusVelRatio = 0.0;
         this.startJumpX = 750.0;
         this.isGatheringArmActive = false;
         this.gatheringAngleTraveledDeg = 0.0;
+        this.ballTrailPoints = [];
         Bowler.resetAllRangeLUTPointers();
     }
 
