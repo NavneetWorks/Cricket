@@ -175,13 +175,15 @@ export default class Renderer{
             this.ctx.textBaseline = "middle";
 
             const offsetDeg = bowler.initialStaticOffsetDeg.toFixed(1);
-            const frame1Angle = Bowler.PRE_DELIVERY_JUMP[0].rightUpperArmAngleDeg.toFixed(1);
+            const jumpAngleDeg = bowler.accumulatedJoystickAngleDeg.toFixed(1);
             
             let statusText = `🏃 Press SPACE to Run | Left Click to Jump`;
-            if (bowler.isExecutingJump || bowler.isPreJumpTransitioning || bowler.isPreJumpFrozen) {
-                statusText = `🚀 JUMP INITIATED | Initial Static Offset: ${offsetDeg}° (Frame 1: ${frame1Angle}°)`;
+            if (bowler.isGatheringArmActive) {
+                statusText = `🎯 GATHERING PHASE | Jump Swing Angle: 0.0° (Waiting for Red Mark)`;
+            } else if (bowler.isExecutingJump || bowler.isPreJumpTransitioning || bowler.isPreJumpFrozen) {
+                statusText = `🚀 JUMP INITIATED | Swing Angle: ${jumpAngleDeg}° / 370.6° | Offset: ${offsetDeg}°`;
             } else if (bowler.isCycleCompleted) {
-                statusText = `🏁 DELIVERY COMPLETE | Static Offset: ${offsetDeg}°`;
+                statusText = `🏁 DELIVERY COMPLETE | Final Swing Angle: ${jumpAngleDeg}°`;
             }
 
             this.ctx.fillText(statusText, badgeX + badgeW / 2, badgeY + badgeH / 2);

@@ -1,4 +1,4 @@
-import { CANVAS_WIDTH, CANVAS_HEIGHT, GROUND_HEIGHT, PLAYER_LENGTH_FACTOR } from "../game/constants";
+import { CANVAS_WIDTH, CANVAS_HEIGHT, GROUND_HEIGHT, PLAYER_LENGTH_FACTOR, BOWLER_START_X } from "../game/constants";
 
 export interface Vec2 {
     x: number;
@@ -211,14 +211,23 @@ export class Bowler {
         this.runIntensity = 0.0;
         this.resetProceduralUpperBodyState();
         if (this.currentHipPosition.x < 2000) {
-            this.currentHipPosition.x = 2600; // Far right starting position for runup
+            this.currentHipPosition.x = BOWLER_START_X; // Far right starting position for runup
         }
         this.startJumpX = 750.0;
+        this.gatheringStartX = null;
+        this.gatheringTargetX = null;
+        this.isGatheringArmActive = false;
+        this.gatheringAngleTraveledDeg = 0.0;
         this.setInitialRunPose();
     }
 
     public isCycleCompleted: boolean = false;
     public startJumpX: number = 750.0;
+    public gatheringStartX: number | null = null;
+    public gatheringTargetX: number | null = null;
+    public isGatheringArmActive: boolean = false;
+    public gatheringAngleTraveledDeg: number = 0.0;
+    public runupGatheringEndSpeedFactor: number = 0.5; // 0.5 = 50% end momentum at jump takeoff
     public totalJumpStrideDistance: number = 400.0;
     public totalJumpDurationSec: number = 1.2;
     public elapsedJumpTime: number = 0.0;
@@ -263,6 +272,8 @@ export class Bowler {
         this.smoothJoystickAngleRad = Math.PI;
         this.joystickAngularVelRad = 0.0;
         this.startJumpX = 750.0;
+        this.isGatheringArmActive = false;
+        this.gatheringAngleTraveledDeg = 0.0;
         Bowler.resetAllRangeLUTPointers();
     }
 
@@ -9707,6 +9718,22 @@ export class Bowler {
         const rawSpeed = this.runCycleDistance * this.strideFrequency * pushImpulse;
         const MAX_RUN_SPEED = 1200; // Constant top speed limit in px/sec
         let horizontalSpeed = Math.min(rawSpeed, MAX_RUN_SPEED);
+
+        // 🏃 Non-Linear Athletic Gathering Deceleration Curve (100% -> runupGatheringEndSpeedFactor curve towards startJumpX)
+        if (this.gatheringStartX !== null && this.gatheringTargetX !== null && this.gatheringStartX > this.gatheringTargetX) {
+            const totalDist = this.gatheringStartX - this.gatheringTargetX;
+            if (totalDist > 0) {
+                const distRemaining = Math.max(0, this.currentHipPosition.x - this.gatheringTargetX);
+                const alpha = Math.min(1.0, Math.max(0.0, 1.0 - (distRemaining / totalDist)));
+
+                // Ease-Out Quadratic Deceleration Curve
+                const easedAlpha = 1.0 - Math.pow(1.0 - alpha, 2);
+                const speedDrop = 1.0 - this.runupGatheringEndSpeedFactor;
+                const speedFactor = 1.0 - speedDrop * easedAlpha;
+
+                horizontalSpeed *= speedFactor;
+            }
+        }
         this.lastRunupSpeedX = horizontalSpeed;
 
         // C. Pre-Jump Transition State (Dynamic Adaptive Blend within max 40px)

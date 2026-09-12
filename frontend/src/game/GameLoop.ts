@@ -6,7 +6,7 @@ import Renderer from "./Rederer";
 import Input from "./Input";
 import NetworkManager from "../network/NetworkManager";
 import { SoundManager } from "../audio/SoundManager";
-import {GRAVITY,RESTITUTION_GROUND, CANVAS_HEIGHT, CANVAS_WIDTH, GROUND_HEIGHT ,k_values, SERVER_CONFIG, BAT_SNAPSHOT_QUEUE_SIZE, BAT_INTERP_BUFFER_TICKS, BAT_MAX_EXTRAPOLATION_TICKS } from "./constants";
+import {GRAVITY,RESTITUTION_GROUND, CANVAS_HEIGHT, CANVAS_WIDTH, GROUND_HEIGHT ,k_values, SERVER_CONFIG, BAT_SNAPSHOT_QUEUE_SIZE, BAT_INTERP_BUFFER_TICKS, BAT_MAX_EXTRAPOLATION_TICKS, BOWLER_START_X } from "./constants";
 
 // Ek remote bat snapshot: batter ke client par kya pose tha, kis tick par
 interface BatSnapshot {
@@ -191,12 +191,18 @@ export default class GameLoop{
             if (!this.isOnlineMode && this.renderer.gameMode === 'BATTING') {
                 startBowlerDelivery();
             } else if (this.renderer.gameMode === 'NEW_BOWLER') {
-                // Left click sets startJumpX 100px to the left of current bowler position!
+                // Left click sets startJumpX preJumpDistance to the left of current bowler position!
                 if (bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {
-                    const preJumpDistance = 800;
-                    const targetX = bowler.currentHipPosition.x - preJumpDistance;
+                    const clickX = bowler.currentHipPosition.x;
+                    const preJumpDistance = 1000;
+                    const targetX = clickX - preJumpDistance;
                     const minBoundaryX = 750; // Crease boundary limit
                     bowler.startJumpX = Math.max(minBoundaryX, targetX);
+                    bowler.gatheringStartX = clickX;
+                    bowler.gatheringTargetX = bowler.startJumpX;
+                    bowler.isGatheringArmActive = true;
+                    bowler.gatheringAngleTraveledDeg = 0.0;
+                    bowler.accumulatedJoystickAngleDeg = 0.0;
                 }
             }
         });
@@ -209,7 +215,7 @@ export default class GameLoop{
                     startBowlerDelivery();
                 } else if (this.renderer.gameMode === 'NEW_BOWLER') {
                     if (!bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {
-                        const startX = bowler.currentHipPosition.x < 2000 ? 2600 : bowler.currentHipPosition.x;
+                        const startX = bowler.currentHipPosition.x < (BOWLER_START_X - 600) ? BOWLER_START_X : bowler.currentHipPosition.x;
                         bowler.resetToIdle();
                         bowler.currentHipPosition.x = startX;
                         bowler.startRunning();
@@ -227,8 +233,8 @@ export default class GameLoop{
                     const bowler = this.renderer.bowler;
                     bowler.resetToIdle();
                     bowler.resetProceduralUpperBodyState();
-                    bowler.currentHipPosition.x = 2600;
-                    bowler.preJumpStartX = 2600;
+                    bowler.currentHipPosition.x = BOWLER_START_X;
+                    bowler.preJumpStartX = BOWLER_START_X;
                     bowler.isExecutingJump = false;
                     bowler.isPreJumpTransitioning = false;
                     bowler.isPreJumpFrozen = false;
@@ -243,7 +249,7 @@ export default class GameLoop{
                     }
 
                     const initialPose = bowler.getProceduralUpperBodyPose(Math.PI);
-                    bowler.applyKeyframePose(initialPose, 2600);
+                    bowler.applyKeyframePose(initialPose, BOWLER_START_X);
 
                     this.ball.isHeldInHand = true;
                     this.ball.isActive = true;
@@ -518,7 +524,7 @@ private getProjectileStateWithBounce(
 
             // 🏃 A/D or Arrow keys move bowler character Left / Right when idle
             if (!bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {
-                const moveSpeed = 180; // Smooth 180 px/sec movement speed
+                const moveSpeed = 500; // Smooth 180 px/sec movement speed
                 let moved = false;
                 if (this.input.isKeyPressed("a") || this.input.isKeyPressed("KeyA") || this.input.isKeyPressed("ArrowLeft")) {
                     bowler.currentHipPosition.x -= moveSpeed * dt;
@@ -538,6 +544,44 @@ private getProjectileStateWithBounce(
             // 🟢 AUTOMATIC RUN-UP PHASE (Space Key): Native 400+ frame leg & body runup animation
             if (bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning && !bowler.isPreJumpFrozen && !bowler.isCycleCompleted) {
                 bowler.update(dt);
+
+                // 🎯 High Drag Resistance Bowling Arm Control during Gathering Phase (Left Click to startJumpX)
+                if (bowler.isGatheringArmActive) {
+                    const joystick = this.renderer.joystick;
+                    const rawJoystickRad = joystick.angleRad;
+
+                    if (bowler.lastJoystickAngleRad === null) {
+                        bowler.smoothJoystickAngleRad = rawJoystickRad;
+                        bowler.joystickAngularVelRad = 0.0;
+                    }
+
+                    // 🏋️ Heavy Physical Mass & Viscous Resistance Drag (Stiffness 150, Damping 80)
+                    // Low stiffness & high damping makes the arm feel extremely heavy to move against player mouse input
+                    let angleDiffRad = rawJoystickRad - bowler.smoothJoystickAngleRad;
+                    while (angleDiffRad > Math.PI) angleDiffRad -= Math.PI * 2;
+                    while (angleDiffRad < -Math.PI) angleDiffRad += Math.PI * 2;
+
+                    const GATHERING_STIFFNESS = 150.0;
+                    const GATHERING_DAMPING = 80.0;
+
+                    const springForce = angleDiffRad * GATHERING_STIFFNESS;
+                    const dampingForce = -bowler.joystickAngularVelRad * GATHERING_DAMPING;
+                    const accelRad = springForce + dampingForce;
+
+                    bowler.joystickAngularVelRad += accelRad * dt;
+                    bowler.smoothJoystickAngleRad += bowler.joystickAngularVelRad * dt;
+
+                    this.currentArmAngleRad = bowler.smoothJoystickAngleRad;
+
+                    const totalArmLen = bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
+                    const minReach = Math.abs(bowler.FRONT_UPPER_ARM - bowler.FRONT_LOWER_ARM) + 5;
+                    const reachRatio = joystick.distanceRatio > 0.05 ? joystick.distanceRatio : 1.0;
+                    const armReach = minReach + (totalArmLen - minReach - 1.0) * reachRatio;
+
+                    // Override Left Arm IK with heavy-drag angle (jump angle accumulation strictly remains 0 until startJumpX!)
+                    bowler.overrideLeftArmWithIK(this.currentArmAngleRad, armReach);
+                    bowler.lastJoystickAngleRad = bowler.smoothJoystickAngleRad;
+                }
             } 
             // 🟢 MANUAL JUMP & DELIVERY PHASE (Option 2: Dynamic Progress Ratio & Sub-frame Interpolation)
             else {
@@ -595,7 +639,7 @@ private getProjectileStateWithBounce(
                     bowler.lastInterpolatedDisplacementX = currDisplacementX;
 
                     // Linearly decay scaled runup momentum X displacement over totalJumpFrames / 2.5 frames (~28.4 frames)
-                    const fadeLimitFrames = totalJumpFrames / 5;
+                    const fadeLimitFrames = totalJumpFrames / 2.5;
                     const decayRatio = Math.max(0, 1.0 - (decimalFrameIndex / fadeLimitFrames));
                     const transferFactor = bowler.momentumTransferFactor ?? 0.5;
                     const runupStepX = (bowler.initialRunupSpeedX * transferFactor) * dt * decayRatio;
@@ -638,6 +682,7 @@ private getProjectileStateWithBounce(
 
             // Dynamic Pre-Jump Trigger Check when bowler reaches startJumpX
             if (bowler.isRunning && bowler.currentHipPosition.x <= bowler.startJumpX && !bowler.isPreJumpTransitioning && !bowler.isExecutingJump) {
+                bowler.isGatheringArmActive = false;
                 bowler.preJumpStartX = bowler.currentHipPosition.x;
                 bowler.initialRunupSpeedX = bowler.lastRunupSpeedX > 0 ? bowler.lastRunupSpeedX : 800.0;
                 bowler.lastInterpolatedDisplacementX = Bowler.PRE_DELIVERY_JUMP[0].displacementX ?? -20.0;
@@ -725,7 +770,10 @@ private getProjectileStateWithBounce(
     public setGameMode(mode: 'BATTING' | 'BOWLING' | 'NEW_BOWLER' | 'DEBUG_13_FRAMES' | 'ANIMATION_PLAY') {
         this.renderer.gameMode = mode;
         if (mode === 'NEW_BOWLER') {
-            this.renderer.bowler.resetToIdle();
+            const bowler = this.renderer.bowler;
+            bowler.resetToIdle();
+            bowler.currentHipPosition.x = BOWLER_START_X;
+            bowler.preJumpStartX = BOWLER_START_X;
             this.ball.isHeldInHand = true;
             this.ball.isActive = true;
         } else if (mode === 'ANIMATION_PLAY') {

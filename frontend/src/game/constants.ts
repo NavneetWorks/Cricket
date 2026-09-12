@@ -70,6 +70,7 @@ export const CANVAS_HEIGHT = 825;
 export const GROUND_HEIGHT = 100;
 
 export const BATSMAN_STANCE_X = 200; // Master tuning variable for Batsman stance X position
+export const BOWLER_START_X = 4600; // Master tuning variable for Bowler starting X position
 
 export const BAT_CENTER_OF_MASS_RATIO = 0.75;
 
