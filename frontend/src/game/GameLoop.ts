@@ -519,27 +519,24 @@ private getProjectileStateWithBounce(
             // 🕹️ BOWLING ARM JOYSTICK & WHOLE-BODY POSE AUTO-SYNC
             const joystick = this.renderer.joystick;
             
-            // Static offset angle for now (0 rad); structured for future dynamic updates
-            const armAngleOffsetRad = 0;
-
-            // Bowling arm angle is driven EXCLUSIVELY by dragging the joystick knob!
-            this.currentArmAngleRad = joystick.angleRad + armAngleOffsetRad;
+            // Bowling arm angle is driven by joystick angle for upper body sync
+            this.currentArmAngleRad = joystick.angleRad;
 
             // 🎯 Upper-Body Procedural Biomechanical Auto-Sync:
-            // Continuous math equations for spine lean, lead-arm elevation, and follow-through
             const interpolatedPose = bowler.getProceduralUpperBodyPose(this.currentArmAngleRad);
 
             // 1. Auto-sync UPPER BODY ONLY (spine lean, shoulder angle/distance, non-bowling arm).
-            // Leaves legs, knees, pelvis, and ground elevation untouched for natural leg motion!
             bowler.applyUpperBodyPoseOnly(interpolatedPose);
 
-            // 2. Position bowling arm using IK driven by joystick angle & distance reach
+            // 2. Position BOWLING ARM ONLY with dynamic momentum offset included!
+            const effectiveArmAngleRad = joystick.angleRad + (bowler.dynamicOffsetDeg * Math.PI / 180);
+
             const totalArmLen = bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
             const minReach = Math.abs(bowler.FRONT_UPPER_ARM - bowler.FRONT_LOWER_ARM) + 5;
             const reachRatio = joystick.distanceRatio > 0.05 ? joystick.distanceRatio : 1.0;
             const armReach = minReach + (totalArmLen - minReach - 1.0) * reachRatio;
 
-            bowler.overrideLeftArmWithIK(this.currentArmAngleRad, armReach);
+            bowler.overrideLeftArmWithIK(effectiveArmAngleRad, armReach);
 
             // Sync ball position with left wrist (ALWAYS held in hand in NEW_BOWLER mode, NO release!)
             this.ball.isHeldInHand = true;

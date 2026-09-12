@@ -207,6 +207,10 @@ export class Bowler {
     }
 
     public isCycleCompleted: boolean = false;
+    public dynamicOffsetDeg: number = 0.0;
+    public offsetVelocityDeg: number = 0.0;
+    public lastJoystickAngleRad: number | null = null;
+    public lastJoystickVelDeg: number = 0.0;
 
     public resetProceduralUpperBodyState(): void {
         this.currentProceduralNBArmAngleDeg = 48.0;
@@ -217,6 +221,10 @@ export class Bowler {
         this.unwrappedArmAngleDeg = 180.0;
         this.lastArmAngleRad = null;
         this.isCycleCompleted = false;
+        this.dynamicOffsetDeg = 0.0;
+        this.offsetVelocityDeg = 0.0;
+        this.lastJoystickAngleRad = null;
+        this.lastJoystickVelDeg = 0.0;
         Bowler.resetAllRangeLUTPointers();
     }
 
@@ -8689,7 +8697,7 @@ export class Bowler {
             };
         }
 
-        const basePose = frames[0];
+        // 1. QUERY RANGE LUT WITH RAW JOYSTICK ANGLE (BODY FOLLOWS PURE KEYFRAME TABLE!)
         let targetDeg = Math.round((armAngleRad * 180 / Math.PI)) % 360;
         if (targetDeg < 0) targetDeg += 360;
 
@@ -8704,7 +8712,7 @@ export class Bowler {
             const lowerPose = frames[lIdx];
             const upperPose = frames[uIdx];
 
-            // 1. Direct Distance Ratio (t) Calculation between lowerPose and upperPose
+            // Direct Distance Ratio (t) Calculation between lowerPose and upperPose
             const range = node.upperAngleDeg - node.lowerAngleDeg;
             let t = 0;
             if (Math.abs(range) > 0.001) {
@@ -8725,23 +8733,70 @@ export class Bowler {
             const targetNBArm = lerpDeg(lowerPose.rightUpperArmAngleDeg, upperPose.rightUpperArmAngleDeg, t);
             const targetNBElbow = lerpDeg(lowerPose.rightElbowAngleDeg, upperPose.rightElbowAngleDeg, t);
 
-            // 2. 60 FPS Teleport-Proof Exponential LERP Gliding
-            const lerpFactor = 0.25;
+            // 60 FPS Bat-Style Spring-Damper Inertia Filtering Gliding
+            const lerpFactor = 0.18;
             this.currentProceduralSpineAngleDeg += (targetSpine - this.currentProceduralSpineAngleDeg) * lerpFactor;
             this.currentProceduralShoulderDist += (targetDist - this.currentProceduralShoulderDist) * lerpFactor;
             this.currentProceduralShoulderAngleDeg += (targetShAngle - this.currentProceduralShoulderAngleDeg) * lerpFactor;
             this.currentProceduralNBArmAngleDeg += (targetNBArm - this.currentProceduralNBArmAngleDeg) * lerpFactor;
             this.currentProceduralNBElbowAngleDeg += (targetNBElbow - this.currentProceduralNBElbowAngleDeg) * lerpFactor;
 
+            // 🎯 2. CALCULATE 4-STAGE DYNAMIC OFFSET FOR BOWLING ARM ONLY (HALVED MULTIPLIER)!
+            let joystickVelDeg = 0;
+            if (this.lastJoystickAngleRad !== null) {
+                let deltaJRad = armAngleRad - this.lastJoystickAngleRad;
+                while (deltaJRad > Math.PI) deltaJRad -= Math.PI * 2;
+                while (deltaJRad < -Math.PI) deltaJRad += Math.PI * 2;
+                joystickVelDeg = deltaJRad * (180 / Math.PI);
+            }
+
+            const isJoystickStopped = Math.abs(joystickVelDeg) < 0.01;
+            const isJoystickReversed = (joystickVelDeg * this.lastJoystickVelDeg) < -0.01;
+
+            if (isJoystickStopped) {
+                // Smooth momentum decay (+5 -> +3 -> +1 -> 0)
+                this.offsetVelocityDeg *= 0.82;
+                this.dynamicOffsetDeg += this.offsetVelocityDeg;
+            } else if (isJoystickReversed) {
+                // Active Counter-Braking (+5 -> +2 -> -1 -> -4)
+                this.offsetVelocityDeg = -1.2 * joystickVelDeg;
+                this.dynamicOffsetDeg += this.offsetVelocityDeg;
+            } else {
+                // Clockwise Reference Angle Stage Multipliers (0° = Positive X-axis, 90° = Down, 180° = Back, 270° = Top)
+                const armAngleCw = ((armAngleRad * 180 / Math.PI) % 360 + 360) % 360;
+                const isMovingUpwardWindup = (joystickVelDeg > 0);
+
+                let stageMultiplier = 1.0;
+                if (armAngleCw >= 90 && armAngleCw <= 180) {
+                    if (isMovingUpwardWindup) {
+                        stageMultiplier = -1.5; // Stage 1: 90° -> 180° Upward Windup Rise (Inertial Lag)
+                    } else {
+                        stageMultiplier = 3.0;  // Stage 2: 180° -> 90° Downward Swing (Gravity Acceleration)
+                    }
+                } else if (armAngleCw >= 0 && armAngleCw < 90) {
+                    stageMultiplier = 1.8;      // Stage 3: 90° -> 0° Upward Lift (Carryover)
+                } else {
+                    stageMultiplier = 4.0;      // Stage 4: 0° -> 270° Overhead Release (Explosive Whip Boost)
+                }
+
+                // Halved Momentum Acceleration Scale Factor (3.0 instead of 6.0)
+                const targetOffset = joystickVelDeg * stageMultiplier * 3.0;
+                this.offsetVelocityDeg += (targetOffset - this.dynamicOffsetDeg) * 0.25;
+                this.offsetVelocityDeg *= 0.85; // Viscous resistance
+                this.dynamicOffsetDeg += this.offsetVelocityDeg;
+            }
+
+            this.lastJoystickAngleRad = armAngleRad;
+            this.lastJoystickVelDeg = joystickVelDeg;
+
             // Detect if we have reached the final keyframe (Frame 41)
             if (uIdx >= frames.length - 1 && list.currentPointer && list.currentPointer.next === null) {
                 this.isCycleCompleted = true;
             }
 
-            // 3. Pure Automatic Pointer Advancement (stuck at tail node, NEVER null!)
+            // Pure Automatic Pointer Advancement (stuck at tail node, NEVER null!)
             list.advancePointerSafely();
 
-            // Compute bowling arm angle to align left upper arm with joystick
             const leftUpperArmAngleDeg = (armAngleRad * 180 / Math.PI) - this.currentProceduralSpineAngleDeg - this.currentProceduralShoulderAngleDeg;
 
             return {
@@ -8756,7 +8811,7 @@ export class Bowler {
             };
         }
 
-        return basePose;
+        return frames[0];
     }
 
     public static getProceduralUpperBodyPose(armAngleRad: number): KeyframePose {
