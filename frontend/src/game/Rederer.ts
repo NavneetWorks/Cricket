@@ -113,6 +113,34 @@ export default class Renderer{
             this.bowler.drawDebugSkeleton(this.ctx);
         }
 
+        // 📍 Draw Red Jump Indicator Line on Ground in NEW_BOWLER mode
+        if (this.gameMode === 'NEW_BOWLER' && this.bowler.startJumpX) {
+            const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
+            const markX = this.bowler.startJumpX;
+
+            this.ctx.save();
+            // Red vertical line on ground
+            this.ctx.strokeStyle = "#ef4444";
+            this.ctx.lineWidth = 3;
+            this.ctx.beginPath();
+            this.ctx.moveTo(markX, groundY - 45);
+            this.ctx.lineTo(markX, groundY + 5);
+            this.ctx.stroke();
+
+            // Red dot badge
+            this.ctx.fillStyle = "#ef4444";
+            this.ctx.beginPath();
+            this.ctx.arc(markX, groundY - 45, 5, 0, Math.PI * 2);
+            this.ctx.fill();
+
+            // Red label
+            this.ctx.font = "bold 11px Inter, Arial, sans-serif";
+            this.ctx.fillStyle = "#ef4444";
+            this.ctx.textAlign = "center";
+            this.ctx.fillText("JUMP POINT", markX, groundY - 54);
+            this.ctx.restore();
+        }
+
         this.ball.draw(this.ctx, alpha);
 
         this.ctx.restore(); // Restore context for fixed HUD / UI overlays

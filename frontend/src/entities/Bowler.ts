@@ -213,10 +213,12 @@ export class Bowler {
         if (this.currentHipPosition.x < 2000) {
             this.currentHipPosition.x = 2600; // Far right starting position for runup
         }
+        this.startJumpX = 750.0;
         this.setInitialRunPose();
     }
 
     public isCycleCompleted: boolean = false;
+    public startJumpX: number = 750.0;
     public totalJumpStrideDistance: number = 400.0;
     public totalJumpDurationSec: number = 1.2;
     public elapsedJumpTime: number = 0.0;
@@ -260,6 +262,7 @@ export class Bowler {
         this.lastInterpolatedDisplacementX = -20.0;
         this.smoothJoystickAngleRad = Math.PI;
         this.joystickAngularVelRad = 0.0;
+        this.startJumpX = 750.0;
         Bowler.resetAllRangeLUTPointers();
     }
 

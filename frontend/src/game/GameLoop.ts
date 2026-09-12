@@ -191,25 +191,12 @@ export default class GameLoop{
             if (!this.isOnlineMode && this.renderer.gameMode === 'BATTING') {
                 startBowlerDelivery();
             } else if (this.renderer.gameMode === 'NEW_BOWLER') {
-                // Left click before Space does NOTHING! Only triggers jump during active runup.
+                // Left click sets startJumpX 100px to the left of current bowler position!
                 if (bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {
-                    bowler.preJumpStartX = bowler.currentHipPosition.x;
-                    bowler.initialRunupSpeedX = bowler.lastRunupSpeedX > 0 ? bowler.lastRunupSpeedX : 800.0;
-                    bowler.lastInterpolatedDisplacementX = Bowler.PRE_DELIVERY_JUMP[0].displacementX ?? -20.0;
-                    bowler.accumulatedDisplacementX = Math.abs(bowler.lastInterpolatedDisplacementX);
-                    bowler.isExecutingJump = true;
-                    bowler.triggerPreJump();
-
-                    // 🎯 Calculate static initial offset so pose ALWAYS starts at Frame 1 (40.6°)
-                    const frame1ArmAngleDeg = Bowler.PRE_DELIVERY_JUMP[0].rightUpperArmAngleDeg; // 40.6°
-                    const joystickRad = this.renderer.joystick ? this.renderer.joystick.angleRad : Math.PI;
-                    const currentJoystickDeg = (joystickRad * 180) / Math.PI;
-
-                    bowler.initialStaticOffsetDeg = frame1ArmAngleDeg - currentJoystickDeg;
-                    bowler.accumulatedJoystickAngleDeg = 0.0;
-                    bowler.smoothJoystickAngleRad = joystickRad;
-                    bowler.joystickAngularVelRad = 0.0;
-                    bowler.lastJoystickAngleRad = joystickRad;
+                    const preJumpDistance = 800;
+                    const targetX = bowler.currentHipPosition.x - preJumpDistance;
+                    const minBoundaryX = 750; // Crease boundary limit
+                    bowler.startJumpX = Math.max(minBoundaryX, targetX);
                 }
             }
         });
@@ -649,9 +636,25 @@ private getProjectileStateWithBounce(
             this.ball.prevPos.x = bowler.leftWrist.x;
             this.ball.prevPos.y = bowler.leftWrist.y;
 
-            // Auto pre-jump trigger near crease (x <= 750) if still running
-            if (bowler.isRunning && bowler.currentHipPosition.x <= 750 && !bowler.isPreJumpTransitioning && !bowler.isExecutingJump) {
+            // Dynamic Pre-Jump Trigger Check when bowler reaches startJumpX
+            if (bowler.isRunning && bowler.currentHipPosition.x <= bowler.startJumpX && !bowler.isPreJumpTransitioning && !bowler.isExecutingJump) {
+                bowler.preJumpStartX = bowler.currentHipPosition.x;
+                bowler.initialRunupSpeedX = bowler.lastRunupSpeedX > 0 ? bowler.lastRunupSpeedX : 800.0;
+                bowler.lastInterpolatedDisplacementX = Bowler.PRE_DELIVERY_JUMP[0].displacementX ?? -20.0;
+                bowler.accumulatedDisplacementX = Math.abs(bowler.lastInterpolatedDisplacementX);
+                bowler.isExecutingJump = true;
                 bowler.triggerPreJump();
+
+                // 🎯 Calculate static initial offset so pose ALWAYS starts at Frame 1 (40.6°)
+                const frame1ArmAngleDeg = Bowler.PRE_DELIVERY_JUMP[0].rightUpperArmAngleDeg; // 40.6°
+                const joystickRad = this.renderer.joystick ? this.renderer.joystick.angleRad : Math.PI;
+                const currentJoystickDeg = (joystickRad * 180) / Math.PI;
+
+                bowler.initialStaticOffsetDeg = frame1ArmAngleDeg - currentJoystickDeg;
+                bowler.accumulatedJoystickAngleDeg = 0.0;
+                bowler.smoothJoystickAngleRad = joystickRad;
+                bowler.joystickAngularVelRad = 0.0;
+                bowler.lastJoystickAngleRad = joystickRad;
             }
             this.ball.update(dt);
             this.renderer.wicket.update(dt);
