@@ -231,7 +231,11 @@ export class Bowler {
     public initialRunupSpeedX: number = 800.0;
     public accumulatedDisplacementX: number = 0.0;
     public lastInterpolatedDisplacementX: number = -20.0;
-    public momentumTransferFactor: number = 0.2; // 50% momentum transfer factor from runup
+    public momentumTransferFactor: number = 0.5; // 50% momentum transfer factor from runup
+    public smoothJoystickAngleRad: number = Math.PI;
+    public joystickAngularVelRad: number = 0.0;
+    public readonly JOYSTICK_SPRING_STIFFNESS: number = 250.0;
+    public readonly JOYSTICK_DAMPING: number = 30.0;
 
     public resetProceduralUpperBodyState(): void {
         this.currentProceduralNBArmAngleDeg = 48.0;
@@ -254,6 +258,8 @@ export class Bowler {
         this.initialRunupSpeedX = 800.0;
         this.accumulatedDisplacementX = 0.0;
         this.lastInterpolatedDisplacementX = -20.0;
+        this.smoothJoystickAngleRad = Math.PI;
+        this.joystickAngularVelRad = 0.0;
         Bowler.resetAllRangeLUTPointers();
     }
 

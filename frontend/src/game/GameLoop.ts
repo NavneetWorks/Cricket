@@ -207,6 +207,8 @@ export default class GameLoop{
 
                     bowler.initialStaticOffsetDeg = frame1ArmAngleDeg - currentJoystickDeg;
                     bowler.accumulatedJoystickAngleDeg = 0.0;
+                    bowler.smoothJoystickAngleRad = joystickRad;
+                    bowler.joystickAngularVelRad = 0.0;
                     bowler.lastJoystickAngleRad = joystickRad;
                 }
             }
@@ -553,18 +555,37 @@ private getProjectileStateWithBounce(
             // 🟢 MANUAL JUMP & DELIVERY PHASE (Option 2: Dynamic Progress Ratio & Sub-frame Interpolation)
             else {
                 const joystick = this.renderer.joystick;
-                this.currentArmAngleRad = joystick.angleRad;
+                const rawJoystickRad = joystick.angleRad;
 
-                // Track accumulated angle movement from start
+                if (bowler.lastJoystickAngleRad === null) {
+                    bowler.smoothJoystickAngleRad = rawJoystickRad;
+                    bowler.joystickAngularVelRad = 0.0;
+                }
+
+                // 🏃 Spring-Damper Physics Simulation (Same mass & inertia physics as Bat.ts)
+                let angleDiffRad = rawJoystickRad - bowler.smoothJoystickAngleRad;
+                while (angleDiffRad > Math.PI) angleDiffRad -= Math.PI * 2;
+                while (angleDiffRad < -Math.PI) angleDiffRad += Math.PI * 2;
+
+                const springForce = angleDiffRad * bowler.JOYSTICK_SPRING_STIFFNESS;
+                const dampingForce = -bowler.joystickAngularVelRad * bowler.JOYSTICK_DAMPING;
+                const accelRad = springForce + dampingForce;
+
+                bowler.joystickAngularVelRad += accelRad * dt;
+                bowler.smoothJoystickAngleRad += bowler.joystickAngularVelRad * dt;
+
+                this.currentArmAngleRad = bowler.smoothJoystickAngleRad;
+
+                // Track accumulated angle movement using the physically smooth simulated angle
                 if (bowler.lastJoystickAngleRad !== null) {
-                    let deltaRad = joystick.angleRad - bowler.lastJoystickAngleRad;
-                    if (deltaRad > Math.PI) deltaRad -= Math.PI * 2;
-                    if (deltaRad < -Math.PI) deltaRad += Math.PI * 2;
+                    let deltaRad = bowler.smoothJoystickAngleRad - bowler.lastJoystickAngleRad;
+                    while (deltaRad > Math.PI) deltaRad -= Math.PI * 2;
+                    while (deltaRad < -Math.PI) deltaRad += Math.PI * 2;
 
                     let deltaDeg = (deltaRad * 180) / Math.PI;
                     bowler.accumulatedJoystickAngleDeg += Math.abs(deltaDeg);
                 }
-                bowler.lastJoystickAngleRad = joystick.angleRad;
+                bowler.lastJoystickAngleRad = bowler.smoothJoystickAngleRad;
 
                 // 📐 Option 2 Formula: progressRatio = accumulatedAngle / 370.6
                 const totalJumpFrames = Bowler.PRE_DELIVERY_JUMP.length;
