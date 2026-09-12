@@ -18,7 +18,7 @@ function GameCanvas({ isOnline = false,onBackToHome }: GameCanvasProps) {
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const gameLoopRef = useRef<GameLoop | null>(null);
-    const [gameMode, setGameMode] = useState<'BATTING' | 'BOWLING' | 'NEW_BOWLER' | 'DEBUG_13_FRAMES'>('BATTING');
+    const [gameMode, setGameMode] = useState<'BATTING' | 'BOWLING' | 'NEW_BOWLER' | 'DEBUG_13_FRAMES' | 'ANIMATION_PLAY'>('BATTING');
 
     useEffect(() => {
 
@@ -168,6 +168,24 @@ function GameCanvas({ isOnline = false,onBackToHome }: GameCanvasProps) {
                         }}
                     >
                         🏃 NEW BOWLER MODE
+                    </button>
+
+                    <button
+                        onClick={() => handleModeSwitch('ANIMATION_PLAY')}
+                        style={{
+                            padding: "8px 16px",
+                            backgroundColor: gameMode === 'ANIMATION_PLAY' ? "#f59e0b" : "rgba(15, 23, 42, 0.85)",
+                            color: gameMode === 'ANIMATION_PLAY' ? "#ffffff" : "#94a3b8",
+                            border: `1.5px solid ${gameMode === 'ANIMATION_PLAY' ? "#fbbf24" : "rgba(255,255,255,0.2)"}`,
+                            borderRadius: "6px",
+                            cursor: "pointer",
+                            fontWeight: "bold",
+                            fontSize: "13px",
+                            boxShadow: gameMode === 'ANIMATION_PLAY' ? "0 0 12px rgba(245, 158, 11, 0.5)" : "none",
+                            transition: "all 0.2s ease"
+                        }}
+                    >
+                        🎬 ANIMATION PLAY
                     </button>
 
                     <button

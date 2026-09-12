@@ -24,7 +24,7 @@ export default class Renderer{
     public bowlingArea: BowlingArea;
     public joystick: Joystick;
     
-    public gameMode: 'BATTING' | 'BOWLING' | 'NEW_BOWLER' | 'DEBUG_13_FRAMES' = 'BATTING';
+    public gameMode: 'BATTING' | 'BOWLING' | 'NEW_BOWLER' | 'DEBUG_13_FRAMES' | 'ANIMATION_PLAY' = 'BATTING';
     public debugSelectedFrames: number[] = []; // Empty = all, or 1-based indices e.g. [3, 6, 7]
     public debugFrameSource: 'RUNUP' | 'JUMP' = 'RUNUP';
 
@@ -58,8 +58,17 @@ export default class Renderer{
         if (this.gameMode === 'NEW_BOWLER' || this.gameMode === 'BOWLING') {
             // Anchor bowler near right edge with ~50px margin for back leg/foot
             const rightOffset = 120; // leaves 50px gap from right canvas border
-            const targetCamX = this.bowler.currentHipPosition.x - (CANVAS_WIDTH - rightOffset);
-            this.cameraX = Math.max(0, targetCamX);
+            
+            // 🔒 During Manual Jump Phase: Lock camera at preJumpStartX so ground stops scrolling & character glides forward across the screen!
+            const bowler = this.bowler;
+            if (bowler.isExecutingJump || bowler.isPreJumpTransitioning || bowler.isPreJumpFrozen || bowler.isCycleCompleted) {
+                const preJumpX = bowler.preJumpStartX > 0 ? bowler.preJumpStartX : bowler.currentHipPosition.x;
+                const preJumpCamX = preJumpX - (CANVAS_WIDTH - rightOffset);
+                this.cameraX = Math.max(0, preJumpCamX);
+            } else {
+                const targetCamX = bowler.currentHipPosition.x - (CANVAS_WIDTH - rightOffset);
+                this.cameraX = Math.max(0, targetCamX);
+            }
         } else {
             this.cameraX = 0;
         }
@@ -99,8 +108,8 @@ export default class Renderer{
         // 🏏 Bowler End Wicket (Right Wicket at X = CANVAS_WIDTH - 250 = 1550px) drawn BEFORE bowler
         this.wicket.drawAt(this.ctx, CANVAS_WIDTH - 50);
 
-        // 🏃 Bowler Skeleton draw in NEW_BOWLER, BOWLING, and BATTING modes:
-        if (this.gameMode === 'NEW_BOWLER' || this.gameMode === 'BOWLING' || this.gameMode === 'BATTING') {
+        // 🏃 Bowler Skeleton draw in NEW_BOWLER, BOWLING, BATTING, and ANIMATION_PLAY modes:
+        if (this.gameMode === 'NEW_BOWLER' || this.gameMode === 'BOWLING' || this.gameMode === 'BATTING' || this.gameMode === 'ANIMATION_PLAY') {
             this.bowler.drawDebugSkeleton(this.ctx);
         }
 
@@ -165,7 +174,7 @@ export default class Renderer{
 
             // Render Frame Number Badge above skeleton
             const labelText = `FRAME ${frameIdx + 1}`;
-            const badgeY = groundY - 260;
+            const badgeY = groundY - 370;
 
             this.ctx.save();
             this.ctx.font = "bold 13px Inter, Arial, sans-serif";

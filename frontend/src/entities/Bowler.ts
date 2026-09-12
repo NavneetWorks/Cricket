@@ -34,6 +34,15 @@ export interface KeyframePose {
 
     // Body height offset
     hipYOffset: number;         // Offset from ground
+
+    // Ground Step Forward Displacement (0px to 200px)
+    forwardDisplacement?: number;
+
+    // Normalized Stride Displacement Ratio (0.0 to 1.0)
+    normalizedDisplacementRatio?: number;
+
+    // Displacement ratio from pre-jump start position (0.0 to 1.0)
+    displacementFromPreJumpX?: number;
 }
 
 export interface RangeNode {
@@ -207,6 +216,9 @@ export class Bowler {
     }
 
     public isCycleCompleted: boolean = false;
+    public totalJumpStrideDistance: number = 400.0;
+    public totalJumpDurationSec: number = 1.2;
+    public elapsedJumpTime: number = 0.0;
     public dynamicOffsetDeg: number = 0.0;
     public offsetVelocityDeg: number = 0.0;
     public lastArmAngleRad: number | null = null;
@@ -222,6 +234,8 @@ export class Bowler {
         this.unwrappedArmAngleDeg = 180.0;
         this.lastArmAngleRad = null;
         this.isCycleCompleted = false;
+        this.elapsedJumpTime = 0.0;
+        this.currentProceduralJumpXOffset = 0.0;
         this.dynamicOffsetDeg = 0.0;
         this.offsetVelocityDeg = 0.0;
         this.lastJoystickAngleRad = null;
@@ -7705,20 +7719,224 @@ export class Bowler {
     public static readonly PRE_DELIVERY_JUMP: KeyframePose[] = [
         {
             // FRAME 1
-            spineAngleDeg: -115.6,
-            shoulderJointDist: 40.0,
-            shoulderJointAngleDeg: 90.0,
-            leftUpperArmAngleDeg: 110.0,
+            spineAngleDeg: -94,
+            shoulderJointDist: -10.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 140.0,
+            leftElbowAngleDeg: 120.0,
+            rightUpperArmAngleDeg: 110.6,
+            rightElbowAngleDeg: 80.99,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 90.0,//
+            leftThighAngleDeg: 155.0,
+            rightThighAngleDeg: 68,
+            leftKneeAngleDeg: -80,
+            rightKneeAngleDeg: -30.0,
+            hipYOffset: 0,
+        },
+            {
+            // FRAME 2
+            spineAngleDeg: -94,
+            shoulderJointDist: -10.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 145.0,
+            leftElbowAngleDeg: 120.0,
+            rightUpperArmAngleDeg: 115.6,
+            rightElbowAngleDeg: 85.99,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 90.0,//
+            leftThighAngleDeg: 142.0,
+            rightThighAngleDeg: 68,
+            leftKneeAngleDeg: -50,
+            rightKneeAngleDeg: -50.0,
+            hipYOffset: 0,
+        },
+           {
+            // FRAME 3
+            spineAngleDeg: -94,
+            shoulderJointDist: -10.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 150.0,
+            leftElbowAngleDeg: 120.0,
+            rightUpperArmAngleDeg: 120.6,
+            rightElbowAngleDeg: 90.99,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 90.0,//
+            leftThighAngleDeg: 130.0,
+            rightThighAngleDeg: 68,
+            leftKneeAngleDeg: -25,
+            rightKneeAngleDeg: -70.0,
+            hipYOffset: -15,
+        },
+          {
+            // FRAME 4
+            spineAngleDeg: -90,
+            shoulderJointDist: -10.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 160.0,
+            leftElbowAngleDeg: 135.0,
+            rightUpperArmAngleDeg: 130.6,
+            rightElbowAngleDeg: 100,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 90.0,//
+            leftThighAngleDeg: 120.0,
+            rightThighAngleDeg: 100,
+            leftKneeAngleDeg: -25,
+            rightKneeAngleDeg: -110.0,
+            hipYOffset: -20,
+        },
+         {
+            // FRAME 5
+            spineAngleDeg: -90,
+            shoulderJointDist: -10.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 180.0,
+            leftElbowAngleDeg: 135.0,
+            rightUpperArmAngleDeg: 160.6,
+            rightElbowAngleDeg: 100,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 90.0,//
+            leftThighAngleDeg: 90.0,
+            rightThighAngleDeg: 130,
+            leftKneeAngleDeg: -25,
+            rightKneeAngleDeg: -120.0,
+            hipYOffset: -40,
+        },
+         {
+            // FRAME 6
+            spineAngleDeg: -85,
+            shoulderJointDist: -10.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 180.0,
+            leftElbowAngleDeg: 135.0,
+            rightUpperArmAngleDeg: 170.6,
+            rightElbowAngleDeg: 100,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 90.0,//
+            leftThighAngleDeg: 70.0,
+            rightThighAngleDeg: 130,
+            leftKneeAngleDeg: -25,
+            rightKneeAngleDeg: -120.0,
+            hipYOffset: -50,
+        },
+         {
+            // FRAME 7
+            spineAngleDeg: -90,
+            shoulderJointDist: -10.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 185.0,
+            leftElbowAngleDeg: 135.0,
+            rightUpperArmAngleDeg: 175.6,
+            rightElbowAngleDeg: 100,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 90.0,//
+            leftThighAngleDeg: 70.0,
+            rightThighAngleDeg: 140,
+            leftKneeAngleDeg: -70,
+            rightKneeAngleDeg: -70.0,
+            hipYOffset: -50,
+        },
+         {
+            // FRAME 8
+            spineAngleDeg: -90,
+            shoulderJointDist: -10.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 190.0,
+            leftElbowAngleDeg: 135.0,
+            rightUpperArmAngleDeg: 180.6,
+            rightElbowAngleDeg: 100,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 90.0,//
+            leftThighAngleDeg: 90.0,
+            rightThighAngleDeg: 120,
+            leftKneeAngleDeg: -90,
+            rightKneeAngleDeg: -40.0,
+            hipYOffset: -40,
+        },
+        {
+            // FRAME 9
+            spineAngleDeg: -95,
+            shoulderJointDist: -10.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 160.0,
+            leftElbowAngleDeg: 120.0,
+            rightUpperArmAngleDeg: 200,
+            rightElbowAngleDeg: 80,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 90.0,//
+            leftThighAngleDeg: 140.0,
+            rightThighAngleDeg: 125,
+            leftKneeAngleDeg: -110,
+            rightKneeAngleDeg: -40.0,
+            hipYOffset: -40,
+        },
+        {
+            // FRAME 10
+            spineAngleDeg: -95,
+            shoulderJointDist: -10.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 130.0,
             leftElbowAngleDeg: 105.0,
-            rightUpperArmAngleDeg: 40.6,
+            rightUpperArmAngleDeg: 210.6,
+            rightElbowAngleDeg: 50,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 90.0,//
+            leftThighAngleDeg: 170.0,
+            rightThighAngleDeg: 110,
+            leftKneeAngleDeg: -80,
+            rightKneeAngleDeg: -20.0,
+            hipYOffset: -40,
+        },
+        {
+            // FRAME 2
+            spineAngleDeg: -94,
+            shoulderJointDist: -10.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 120.0,
+            leftElbowAngleDeg: 105.0,
+            rightUpperArmAngleDeg: 110.6,
+            rightElbowAngleDeg: 120.99,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 90.0,//
+            leftThighAngleDeg: 130.0,  
+            rightThighAngleDeg: 73,
+            leftKneeAngleDeg: -40,
+            rightKneeAngleDeg: -75.0,
+            hipYOffset: -15,
+        },
+        {
+            // FRAME 3
+            spineAngleDeg: -94,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 130.0,
+            leftElbowAngleDeg: 105.0,
+            rightUpperArmAngleDeg: 80.6,
+            rightElbowAngleDeg: 80,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 90.0,//
+            leftThighAngleDeg: 120.0,  
+            rightThighAngleDeg: 78,
+            leftKneeAngleDeg: -30,
+            rightKneeAngleDeg: -90.0,
+            hipYOffset: -20,
+        },
+        {
+            // FRAME 1
+            spineAngleDeg: -90.6,
+            shoulderJointDist: 10.0,
+            shoulderJointAngleDeg: 90.0,
+            leftUpperArmAngleDeg: 160.0,
+            leftElbowAngleDeg: 160.0,
+            rightUpperArmAngleDeg: 160.6,
             rightElbowAngleDeg: 76.99,
             pelvisJointDist: 5.0,
             pelvisJointAngleDeg: 110.0,
-            leftThighAngleDeg: 150.0,
+            leftThighAngleDeg: 110.0,
             rightThighAngleDeg: 74.52,
-            leftKneeAngleDeg: -104.52,
+            leftKneeAngleDeg: -124.52,
             rightKneeAngleDeg: -30.0,
-            hipYOffset: -17.2
+            hipYOffset:-20.2,
         },
          {
             // FRAME 2
@@ -7735,7 +7953,7 @@ export class Bowler {
             rightThighAngleDeg: 70,
             leftKneeAngleDeg: -104.52,
             rightKneeAngleDeg: -30.0,
-            hipYOffset: -17.2
+            hipYOffset: -22,
         },
        
         {
@@ -7753,7 +7971,7 @@ export class Bowler {
             rightThighAngleDeg: 60,
             leftKneeAngleDeg: -104.52,
             rightKneeAngleDeg: -30.0,
-            hipYOffset: -17.2
+            hipYOffset: -23,
         },
          {
             // FRAME 4
@@ -7764,13 +7982,13 @@ export class Bowler {
             leftElbowAngleDeg: 110.0,
             rightUpperArmAngleDeg: 52.6,
             rightElbowAngleDeg: 76.99,
-            pelvisJointDist: 5.0,
+            pelvisJointDist: 5.0  ,
             pelvisJointAngleDeg: 100.0,//
-            leftThighAngleDeg: 150.0,
+            leftThighAngleDeg: 150.0,  
             rightThighAngleDeg: 65,
             leftKneeAngleDeg: -85,
             rightKneeAngleDeg: -23.0,
-            hipYOffset: -17.2
+            hipYOffset: -25,  
         },
         {
             // FRAME 5
@@ -7787,7 +8005,7 @@ export class Bowler {
             rightThighAngleDeg: 68,
             leftKneeAngleDeg: -80,
             rightKneeAngleDeg: -21.0,
-            hipYOffset: -17.2
+            hipYOffset: -28,
         },
         {
             // FRAME 6
@@ -7804,7 +8022,7 @@ export class Bowler {
             rightThighAngleDeg: 70,
             leftKneeAngleDeg: -75,
             rightKneeAngleDeg: -20.0,
-            hipYOffset: -17.2
+            hipYOffset: -28,
         },//2 end
          {
             // FRAME 7
@@ -7821,10 +8039,27 @@ export class Bowler {
             rightThighAngleDeg: 65.0,
             leftKneeAngleDeg: -67,
             rightKneeAngleDeg: -25.0,
-            hipYOffset: -17.2
+            hipYOffset: -29,
         },
         {
             // FRAME 8
+            spineAngleDeg: -89,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 85.0,
+            leftUpperArmAngleDeg: 160.0,
+            leftElbowAngleDeg: 100.0,
+            rightUpperArmAngleDeg: 48,
+            rightElbowAngleDeg: 80,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 80.0,
+            leftThighAngleDeg: 155.0,
+            rightThighAngleDeg: 65.0,
+            leftKneeAngleDeg: -67,
+            rightKneeAngleDeg: -25.0,
+            hipYOffset: -32,
+        },
+        {
+            // FRAME 9
             spineAngleDeg: -86,
             shoulderJointDist: 40.0,
             shoulderJointAngleDeg: 80.0,
@@ -7838,11 +8073,147 @@ export class Bowler {
             rightThighAngleDeg: 60.0,
             leftKneeAngleDeg: -60,
             rightKneeAngleDeg: -30.0,
-            hipYOffset: -17.2
+            hipYOffset: -38,
+        },
+        {
+            // FRAME 10
+            spineAngleDeg: -84,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 164.0,
+            leftElbowAngleDeg: 100.0,
+            rightUpperArmAngleDeg: 40,
+            rightElbowAngleDeg: 85,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 80.0,
+            leftThighAngleDeg: 155.0,
+            rightThighAngleDeg: 60.0,
+            leftKneeAngleDeg: -65,
+            rightKneeAngleDeg: -30.0,
+            hipYOffset: -42,
+        },
+         {
+            // FRAME 11
+            spineAngleDeg: -80,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 164.0,
+            leftElbowAngleDeg: 100.0,
+            rightUpperArmAngleDeg: 40,
+            rightElbowAngleDeg: 85,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 80.0,
+            leftThighAngleDeg: 160.0,
+            rightThighAngleDeg: 60.0,
+            leftKneeAngleDeg: -70,
+            rightKneeAngleDeg: -30.0,
+            hipYOffset: -48,
+        },
+         {
+            // FRAME 12
+            spineAngleDeg: -80,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 164.0,
+            leftElbowAngleDeg: 100.0,
+            rightUpperArmAngleDeg: 40,
+            rightElbowAngleDeg: 85,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 80.0,
+            leftThighAngleDeg: 165.0,
+            rightThighAngleDeg: 60.0,
+            leftKneeAngleDeg: -75,
+            rightKneeAngleDeg: -30.0,
+            hipYOffset: -54,
+        },
+           {
+            // FRAME 13
+            spineAngleDeg: -78,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 80.0,
+            leftUpperArmAngleDeg: 164.0,
+            leftElbowAngleDeg: 100.0,
+            rightUpperArmAngleDeg: 40,
+            rightElbowAngleDeg: 85,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 80.0,
+            leftThighAngleDeg: 165.0,
+            rightThighAngleDeg: 60.0,
+            leftKneeAngleDeg: -75,
+            rightKneeAngleDeg: -30.0,
+            hipYOffset: -58,
+        },
+            {
+            // FRAME 14
+            spineAngleDeg: -78,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 85.0,
+            leftUpperArmAngleDeg: 164.0,
+            leftElbowAngleDeg: 100.0,
+            rightUpperArmAngleDeg: 40,
+            rightElbowAngleDeg: 85,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 80.0,
+            leftThighAngleDeg: 165.0,
+            rightThighAngleDeg: 60.0,
+            leftKneeAngleDeg: -75,
+            rightKneeAngleDeg: -30.0,
+            hipYOffset: -66,
+        },
+          {
+            // FRAME 15
+            spineAngleDeg: -78,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 85.0,
+            leftUpperArmAngleDeg: 164.0,
+            leftElbowAngleDeg: 100.0,
+            rightUpperArmAngleDeg: 40,
+            rightElbowAngleDeg: 85,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 80.0,
+            leftThighAngleDeg: 165.0,
+            rightThighAngleDeg: 60.0,
+            leftKneeAngleDeg: -75,
+            rightKneeAngleDeg: -30.0,
+            hipYOffset: -73,
+        },
+          {
+            // FRAME 16
+            spineAngleDeg: -78,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 85.0,
+            leftUpperArmAngleDeg: 164.0,
+            leftElbowAngleDeg: 100.0,
+            rightUpperArmAngleDeg: 40,
+            rightElbowAngleDeg: 85,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 80.0,
+            leftThighAngleDeg: 165.0,
+            rightThighAngleDeg: 60.0,
+            leftKneeAngleDeg: -75,
+            rightKneeAngleDeg: -30.0,
+            hipYOffset: -80,
+        },
+           {
+            // FRAME 17
+            spineAngleDeg: -78,
+            shoulderJointDist: 40.0,
+            shoulderJointAngleDeg: 85.0,
+            leftUpperArmAngleDeg: 164.0,
+            leftElbowAngleDeg: 100.0,
+            rightUpperArmAngleDeg: 40,
+            rightElbowAngleDeg: 85,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 80.0,
+            leftThighAngleDeg: 165.0,
+            rightThighAngleDeg: 60.0,
+            leftKneeAngleDeg: -75,
+            rightKneeAngleDeg: -30.0,
+            hipYOffset: -88,
         },
         {
             // FRAME 9
-            spineAngleDeg: -90,
+            spineAngleDeg: -85,
             shoulderJointDist: 50.0,
             shoulderJointAngleDeg: 90.0,
             leftUpperArmAngleDeg: 175.0,
@@ -7855,12 +8226,29 @@ export class Bowler {
             rightThighAngleDeg: 65.0,
             leftKneeAngleDeg: -43,
             rightKneeAngleDeg: -45.0,
-            hipYOffset: -17.2
+            hipYOffset: -95,
+        },//till 4th
+        {
+            // FRAME 10
+            spineAngleDeg: -85,
+            shoulderJointDist: 50.0,
+            shoulderJointAngleDeg: 90.0,
+            leftUpperArmAngleDeg: 175.0,
+            leftElbowAngleDeg: 90.0,
+            rightUpperArmAngleDeg: 40,
+            rightElbowAngleDeg: 85,
+            pelvisJointDist: 5.0,
+            pelvisJointAngleDeg: 80.0,
+            leftThighAngleDeg: 140.0,
+            rightThighAngleDeg: 65.0,
+            leftKneeAngleDeg: -43,
+            rightKneeAngleDeg: -45.0,
+            hipYOffset: -50,
         },//till 4th
 
           {
             // FRAME 10
-            spineAngleDeg: -90,
+            spineAngleDeg: -85,
             shoulderJointDist: 50.0,
             shoulderJointAngleDeg: 90.0,
             leftUpperArmAngleDeg: 185.0,
@@ -7873,11 +8261,28 @@ export class Bowler {
             rightThighAngleDeg: 70.0,
             leftKneeAngleDeg: -43,
             rightKneeAngleDeg: -70.0,
-            hipYOffset: -17.2
+            hipYOffset: -35,
         },//till 5th
-           {
+         {
             // FRAME 11
-            spineAngleDeg: -95,
+            spineAngleDeg: -85,
+            shoulderJointDist: 50.0,
+            shoulderJointAngleDeg: 90.0,
+            leftUpperArmAngleDeg: 195.0,
+            leftElbowAngleDeg: 90.0,
+            rightUpperArmAngleDeg: 45,
+            rightElbowAngleDeg: 85,
+            pelvisJointDist: -5.0,
+            pelvisJointAngleDeg: 80.0,
+            leftThighAngleDeg: 135.0,
+            rightThighAngleDeg: 70.0,  
+            leftKneeAngleDeg: -30,
+            rightKneeAngleDeg: -80.0,
+            hipYOffset: -25,
+        },//till 5th
+           {  
+            // FRAME 12
+            spineAngleDeg: -85,
             shoulderJointDist: 50.0,
             shoulderJointAngleDeg: 100.0,
             leftUpperArmAngleDeg: 185.0,
@@ -7888,9 +8293,9 @@ export class Bowler {
             pelvisJointAngleDeg: 80.0,
             leftThighAngleDeg: 135.0,
             rightThighAngleDeg: 80.0,
-            leftKneeAngleDeg: -50,
+            leftKneeAngleDeg: -40,
             rightKneeAngleDeg: -90.0,
-            hipYOffset: -17.2
+            hipYOffset: -17.2,
         },//till 6th
             {
             // FRAME 12
@@ -7907,7 +8312,7 @@ export class Bowler {
             rightThighAngleDeg: 60.0,
             leftKneeAngleDeg: -25,
             rightKneeAngleDeg: -90.0,
-            hipYOffset: -17.2
+            hipYOffset: -17.2,
         },//till 7th
            {
             // FRAME 13
@@ -7924,7 +8329,7 @@ export class Bowler {
             rightThighAngleDeg: 80.0,
             leftKneeAngleDeg: -25,
             rightKneeAngleDeg: -90.0,
-            hipYOffset: -17.2
+            hipYOffset: -17.2,
         },//till 8th
          {
             // FRAME 14
@@ -7941,7 +8346,7 @@ export class Bowler {
             rightThighAngleDeg: 100.0,
             leftKneeAngleDeg: -20,
             rightKneeAngleDeg: -125.0,
-            hipYOffset: -17.2
+            hipYOffset: -17.2,
         },//till 9th
          {
             // FRAME 15
@@ -7958,7 +8363,7 @@ export class Bowler {
             rightThighAngleDeg: 90.0,
             leftKneeAngleDeg: -25,
             rightKneeAngleDeg: -115.0,
-            hipYOffset: -21.2
+            hipYOffset: -21.2,
         },//till 11h
          {
             // FRAME 16
@@ -7975,7 +8380,7 @@ export class Bowler {
             rightThighAngleDeg: 105.0,
             leftKneeAngleDeg: -25,
             rightKneeAngleDeg: -120.0,
-            hipYOffset: -25.2
+            hipYOffset: -25.2,
         },//till 12h
            {
             // FRAME 17
@@ -7992,7 +8397,7 @@ export class Bowler {
             rightThighAngleDeg: 122.0,
             leftKneeAngleDeg: -25,
             rightKneeAngleDeg: -120.0,
-            hipYOffset: -26.2
+            hipYOffset: -26.2,
         },//till 14h 13 missing
           {
             // FRAME 18
@@ -8009,7 +8414,7 @@ export class Bowler {
             rightThighAngleDeg: 122.0,
             leftKneeAngleDeg: -25,
             rightKneeAngleDeg: -120.0,
-            hipYOffset: -26.2
+            hipYOffset: -26.2,
         },//till 15th
          {
             // FRAME 19
@@ -8026,7 +8431,7 @@ export class Bowler {
             rightThighAngleDeg: 122.0,
             leftKneeAngleDeg: -25,
             rightKneeAngleDeg: -105.0,
-            hipYOffset: -25.2
+            hipYOffset: -25.2,
         },//till 16th
         {
             // FRAME 20
@@ -8043,7 +8448,7 @@ export class Bowler {
             rightThighAngleDeg: 122.0,
             leftKneeAngleDeg: -25,
             rightKneeAngleDeg: -100.0,
-            hipYOffset: -25.2
+            hipYOffset: -25.2,
         },// 18th
          {
             // FRAME 21
@@ -8060,7 +8465,7 @@ export class Bowler {
             rightThighAngleDeg: 122.0,
             leftKneeAngleDeg: -25,
             rightKneeAngleDeg: -70.0,
-            hipYOffset: -29.2
+            hipYOffset: -29.2,
         },// 19th
 
         {
@@ -8078,7 +8483,7 @@ export class Bowler {
             rightThighAngleDeg: 135.0,
             leftKneeAngleDeg: -30,
             rightKneeAngleDeg: -50.0,
-            hipYOffset: -29.2
+            hipYOffset: -29.2,
         },// 21st
         {
             // FRAME 23
@@ -8095,7 +8500,7 @@ export class Bowler {
             rightThighAngleDeg: 160.0,
             leftKneeAngleDeg: -80,
             rightKneeAngleDeg: -50.0,
-            hipYOffset: -29.2
+            hipYOffset: -29.2,
         },// 23
 
            {
@@ -8113,7 +8518,7 @@ export class Bowler {
             rightThighAngleDeg: 140.0,
             leftKneeAngleDeg: -100,
             rightKneeAngleDeg: -25.0,
-            hipYOffset: -29.2
+            hipYOffset: -29.2,
         },// 26
            {
             // FRAME 25
@@ -8130,7 +8535,7 @@ export class Bowler {
             rightThighAngleDeg: 140.0,
             leftKneeAngleDeg: -130,
             rightKneeAngleDeg: -15.0,
-            hipYOffset: -24.2
+            hipYOffset: -24.2,
         },// 29
 
            {
@@ -8148,7 +8553,7 @@ export class Bowler {
             rightThighAngleDeg: 130.0,
             leftKneeAngleDeg: -130,
             rightKneeAngleDeg: -15.0,
-            hipYOffset: -20.2
+            hipYOffset: -20.2,
         },// 31
              {
             // FRAME 27
@@ -8165,7 +8570,7 @@ export class Bowler {
             rightThighAngleDeg: 110.0,
             leftKneeAngleDeg: -120,
             rightKneeAngleDeg: -15.0,
-            hipYOffset: -20.2
+            hipYOffset: -20.2,
         },// 33
            {
             // FRAME 28
@@ -8182,7 +8587,7 @@ export class Bowler {
             rightThighAngleDeg: 110.0,
             leftKneeAngleDeg: -120,
             rightKneeAngleDeg: -25.0,
-            hipYOffset: -29.2
+            hipYOffset: -29.2,
         },// 36+
            {
             // FRAME 29
@@ -8199,7 +8604,7 @@ export class Bowler {
             rightThighAngleDeg: 90.0,
             leftKneeAngleDeg: -90,
             rightKneeAngleDeg: -25.0,
-            hipYOffset: -29.2
+            hipYOffset: -29.2,
         },// 39
            {
             // FRAME 30
@@ -8216,7 +8621,7 @@ export class Bowler {
             rightThighAngleDeg: 85.0,
             leftKneeAngleDeg: -45,
             rightKneeAngleDeg: -35.0,
-            hipYOffset: -29.2
+            hipYOffset: -29.2,
         },// 41
           {
             // FRAME 31
@@ -8233,7 +8638,7 @@ export class Bowler {
             rightThighAngleDeg: 85.0,
             leftKneeAngleDeg: -25,
             rightKneeAngleDeg: -50.0,
-            hipYOffset: -24.2
+            hipYOffset: -24.2,
         },// 44
         {
             // FRAME 32
@@ -8250,7 +8655,7 @@ export class Bowler {
             rightThighAngleDeg: 75.0,
             leftKneeAngleDeg: -0,
             rightKneeAngleDeg: -60.0,
-            hipYOffset: -19.2
+            hipYOffset: -19.2,
         },// 47
          {
             // FRAME 33
@@ -8267,7 +8672,7 @@ export class Bowler {
             rightThighAngleDeg: 75.0,
             leftKneeAngleDeg: -0,
             rightKneeAngleDeg: -60.0,
-            hipYOffset: 0.2
+            hipYOffset: 0.2,
         },// 50
         {
             // FRAME 34
@@ -8284,7 +8689,7 @@ export class Bowler {
             rightThighAngleDeg: 75.0,
             leftKneeAngleDeg: -15,
             rightKneeAngleDeg: -40.0,
-            hipYOffset: 0.2
+            hipYOffset: 0.2,
         },// 55
 
         {
@@ -8302,7 +8707,7 @@ export class Bowler {
             rightThighAngleDeg: 75.0,
             leftKneeAngleDeg: -15,
             rightKneeAngleDeg: -50.0,
-            hipYOffset: 20
+            hipYOffset: 20,
         },// 55
          {
             // FRAME 36
@@ -8319,7 +8724,7 @@ export class Bowler {
             rightThighAngleDeg: 75.0,
             leftKneeAngleDeg: -0,
             rightKneeAngleDeg: -50.0,
-            hipYOffset: 20
+            hipYOffset: 20,
         },// my
         {
             // FRAME 37
@@ -8336,7 +8741,7 @@ export class Bowler {
             rightThighAngleDeg: 100.0,
             leftKneeAngleDeg: 2,
             rightKneeAngleDeg: -60.0, 
-            hipYOffset: 5
+            hipYOffset: 5,
         },// my
         {
             // FRAME 38  
@@ -8353,7 +8758,7 @@ export class Bowler {
             rightThighAngleDeg: 125.0, 
             leftKneeAngleDeg: -5, 
             rightKneeAngleDeg: -60.0,
-            hipYOffset: 5   
+            hipYOffset: 5   ,
         },// my
         {
             // FRAME 39    
@@ -8370,7 +8775,7 @@ export class Bowler {
             rightThighAngleDeg: 150.0, 
             leftKneeAngleDeg: 2, 
             rightKneeAngleDeg: -70.0,
-            hipYOffset: 1     
+            hipYOffset: 1     ,
         },// my
          {
             // FRAME 40
@@ -8387,7 +8792,7 @@ export class Bowler {
             rightThighAngleDeg: 160.0, 
             leftKneeAngleDeg: 2, 
             rightKneeAngleDeg: -75.0,
-            hipYOffset: 1     
+            hipYOffset: 1     ,
         },// my
 
          {
@@ -8405,7 +8810,7 @@ export class Bowler {
             rightThighAngleDeg: 185.0, 
             leftKneeAngleDeg: 2, 
             rightKneeAngleDeg: -75.0,
-            hipYOffset: -15  
+            hipYOffset: -15  ,
         },// my   
         {
             // FRAME 42
@@ -8420,14 +8825,20 @@ export class Bowler {
             pelvisJointAngleDeg: 80.0,    
             leftThighAngleDeg: 190.0,  
             rightThighAngleDeg: 215.0,  
-            leftKneeAngleDeg: 2, 
+            leftKneeAngleDeg: 2,
             rightKneeAngleDeg: -75.0,
-            hipYOffset: -25  
-        },// my   
-
-
-
+            hipYOffset: -25,
+        }
     ];
+
+    // Ensure all 42 frames of PRE_DELIVERY_JUMP explicitly have normalizedDisplacementRatio assigned
+    static {
+        Bowler.PRE_DELIVERY_JUMP.forEach((pose, idx) => {
+            if (pose.normalizedDisplacementRatio === undefined) {
+                pose.normalizedDisplacementRatio = Bowler.getJumpKeyframeStrideRatio(idx);
+            }
+        });
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
     constructor(startX = 1100) {
@@ -8773,11 +9184,6 @@ export class Bowler {
             const targetRightKnee = lerpDeg(lowerPose.rightKneeAngleDeg, upperPose.rightKneeAngleDeg, t);
             const targetHipY = lerpVal(lowerPose.hipYOffset, upperPose.hipYOffset, t);
 
-            // Calculate Keyframe-Driven Non-Linear Stride Displacement Ratio S(uIdx)
-            const strideRatio1 = Bowler.getJumpKeyframeStrideRatio(lIdx);
-            const strideRatio2 = Bowler.getJumpKeyframeStrideRatio(uIdx);
-            const targetStrideRatio = lerpVal(strideRatio1, strideRatio2, t);
-
             // 60 FPS Bat-Style Spring-Damper Inertia Filtering Gliding
             const lerpFactor = 0.18;
             this.currentProceduralSpineAngleDeg += (targetSpine - this.currentProceduralSpineAngleDeg) * lerpFactor;
@@ -8794,8 +9200,6 @@ export class Bowler {
             this.currentProceduralRightKneeDeg += (targetRightKnee - this.currentProceduralRightKneeDeg) * lerpFactor;
             this.currentProceduralHipYOffset += (targetHipY - this.currentProceduralHipYOffset) * lerpFactor;
 
-            this.currentProceduralJumpXOffset += (targetStrideRatio * 200.0 - this.currentProceduralJumpXOffset) * lerpFactor;
-
             // Offset paused per user request (Dynamic Offset = 0)
             this.dynamicOffsetDeg = 0.0;
 
@@ -8805,7 +9209,7 @@ export class Bowler {
             }
 
             // Pure Automatic Pointer Advancement (stuck at tail node, NEVER null!)
-            list.advancePointerSafely();
+            list.advancePointerSafely();    
 
             const leftUpperArmAngleDeg = (armAngleRad * 180 / Math.PI) - this.currentProceduralSpineAngleDeg - this.currentProceduralShoulderAngleDeg;
 

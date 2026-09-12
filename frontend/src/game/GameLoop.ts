@@ -193,6 +193,8 @@ export default class GameLoop{
             } else if (this.renderer.gameMode === 'NEW_BOWLER') {
                 // Left click before Space does NOTHING! Only triggers jump during active runup.
                 if (bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {
+                    bowler.preJumpStartX = bowler.currentHipPosition.x;
+                    bowler.isExecutingJump = true;
                     bowler.triggerPreJump();
                 }
             }
@@ -515,14 +517,16 @@ private getProjectileStateWithBounce(
 
             // 🏃 A/D or Arrow keys move bowler character Left / Right when idle
             if (!bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {
-                const moveSpeed = 450; // px/sec movement speed
+                const moveSpeed = 180; // Smooth 180 px/sec movement speed
                 let moved = false;
                 if (this.input.isKeyPressed("a") || this.input.isKeyPressed("KeyA") || this.input.isKeyPressed("ArrowLeft")) {
                     bowler.currentHipPosition.x -= moveSpeed * dt;
+                    bowler.preJumpStartX = bowler.currentHipPosition.x;
                     moved = true;
                 }
                 if (this.input.isKeyPressed("d") || this.input.isKeyPressed("KeyD") || this.input.isKeyPressed("ArrowRight")) {
                     bowler.currentHipPosition.x += moveSpeed * dt;
+                    bowler.preJumpStartX = bowler.currentHipPosition.x;
                     moved = true;
                 }
                 if (moved) {
@@ -531,7 +535,7 @@ private getProjectileStateWithBounce(
             }
 
             // 🟢 AUTOMATIC RUN-UP PHASE (Space Key): Native 400+ frame leg & body runup animation
-            if (bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning && !bowler.isCycleCompleted) {
+            if (bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning && !bowler.isPreJumpFrozen && !bowler.isCycleCompleted) {
                 bowler.update(dt);
             } 
             // 🟢 MANUAL JUMP & DELIVERY PHASE (Left Click during runup OR Idle)
@@ -541,11 +545,28 @@ private getProjectileStateWithBounce(
 
                 const interpolatedPose = bowler.getProceduralUpperBodyPose(this.currentArmAngleRad);
 
-                if (bowler.isExecutingJump || bowler.isPreJumpTransitioning || bowler.isCycleCompleted) {
+                if (bowler.isExecutingJump || bowler.isPreJumpTransitioning || bowler.isPreJumpFrozen) {
                     if (bowler.preJumpStartX === 0 || bowler.preJumpStartX === undefined) {
                         bowler.preJumpStartX = bowler.currentHipPosition.x;
                     }
+
+                    // 🏃 Decelerating Physics Curve: Initial runup speed (450 px/s) decelerates down to 0 px/s
+                    bowler.elapsedJumpTime += dt;
+                    const duration = bowler.totalJumpDurationSec > 0 ? bowler.totalJumpDurationSec : 1.2;
+                    const alpha = Math.min(1.0, bowler.elapsedJumpTime / duration);
+
+                    const initialSpeed = 450.0;
+                    const endSpeed = 0.0; // Smooth deceleration down to 0 px/s at the end
+                    const currentSpeed = endSpeed + (initialSpeed - endSpeed) * Math.pow(1.0 - alpha, 2);
+
+                    bowler.currentProceduralJumpXOffset += currentSpeed * dt;
+
                     const manualStepX = bowler.preJumpStartX - bowler.currentProceduralJumpXOffset;
+                    bowler.currentHipPosition.x = manualStepX;
+                    bowler.applyKeyframePose(interpolatedPose, manualStepX);
+                } else if (bowler.isCycleCompleted) {
+                    const manualStepX = bowler.preJumpStartX - bowler.totalJumpStrideDistance;
+                    bowler.currentHipPosition.x = manualStepX;
                     bowler.applyKeyframePose(interpolatedPose, manualStepX);
                 } else {
                     bowler.applyKeyframePose(interpolatedPose, bowler.currentHipPosition.x);
@@ -571,6 +592,32 @@ private getProjectileStateWithBounce(
             if (bowler.isRunning && bowler.currentHipPosition.x <= 750 && !bowler.isPreJumpTransitioning && !bowler.isExecutingJump) {
                 bowler.triggerPreJump();
             }
+            this.ball.update(dt);
+            this.renderer.wicket.update(dt);
+        } else if (this.renderer.gameMode === 'ANIMATION_PLAY') {
+            const bowler = this.renderer.bowler;
+            bowler.update(dt);
+
+            if (this.ball.isHeldInHand && (bowler.isRunning || bowler.isPreJumpTransitioning || bowler.isExecutingJump)) {
+                this.ball.pos.x = bowler.leftWrist.x;
+                this.ball.pos.y = bowler.leftWrist.y;
+                this.ball.prevPos.x = bowler.leftWrist.x;
+                this.ball.prevPos.y = bowler.leftWrist.y;
+                this.ball.isActive = true;
+
+                // Auto pre-jump trigger at middle of screen (x <= CANVAS_WIDTH / 2)
+                if (bowler.isRunning && bowler.currentHipPosition.x <= CANVAS_WIDTH / 2 && !bowler.isPreJumpTransitioning && !bowler.isExecutingJump) {
+                    bowler.preJumpStartX = bowler.currentHipPosition.x;
+                    bowler.triggerPreJump();
+                }
+            }
+
+            // Stop bowler cleanly when cycle finishes
+            if (bowler.isCycleCompleted) {
+                bowler.isRunning = false;
+                bowler.isExecutingJump = false;
+            }
+
             this.ball.update(dt);
             this.renderer.wicket.update(dt);
         } else {
@@ -611,10 +658,18 @@ private getProjectileStateWithBounce(
         this.renderer.render(this.renderAlpha);
     }
 
-    public setGameMode(mode: 'BATTING' | 'BOWLING' | 'NEW_BOWLER' | 'DEBUG_13_FRAMES') {
+    public setGameMode(mode: 'BATTING' | 'BOWLING' | 'NEW_BOWLER' | 'DEBUG_13_FRAMES' | 'ANIMATION_PLAY') {
         this.renderer.gameMode = mode;
         if (mode === 'NEW_BOWLER') {
             this.renderer.bowler.resetToIdle();
+            this.ball.isHeldInHand = true;
+            this.ball.isActive = true;
+        } else if (mode === 'ANIMATION_PLAY') {
+            const bowler = this.renderer.bowler;
+            bowler.resetToIdle();
+            bowler.resetProceduralUpperBodyState();
+            bowler.currentHipPosition.x = 1.4 * CANVAS_WIDTH;
+            bowler.startRunning();
             this.ball.isHeldInHand = true;
             this.ball.isActive = true;
         }
