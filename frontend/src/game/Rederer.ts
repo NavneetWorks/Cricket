@@ -102,8 +102,8 @@ export default class Renderer{
 
         this.wicket.draw(this.ctx);
 
-        // 🏏 Bat & Batsman Skeleton ONLY drawn in BATTING mode:
-        if (this.gameMode === 'BATTING') {
+        // 🏏 Bat & Batsman Skeleton drawn in both BATTING and NEW_BOWLER modes:
+        if (this.gameMode === 'BATTING' || this.gameMode === 'NEW_BOWLER' || this.gameMode === 'BOWLING') {
             this.drawBat();
         }
 

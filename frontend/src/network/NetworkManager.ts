@@ -93,7 +93,7 @@ export default class NetWorkManager{
                 this.handleBinaryUDPMessage(dcEvent.data);
             }
         };
-        this.unreliableChannel = this.pc.createDataChannel("gameStream", { ordered: false, maxRetransmits: 0 });
+        this.unreliableChannel = this.pc.createDataChannel("gameStream", { ordered: true });
         this.unreliableChannel.binaryType = "arraybuffer";
         this.unreliableChannel.onmessage = (dcEvent: MessageEvent) => {
             if (dcEvent.data instanceof ArrayBuffer) {
