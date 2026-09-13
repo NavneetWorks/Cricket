@@ -14,6 +14,7 @@ export default class Ball {
     public isActive = false; // Check karne ke liye ki ball hawa mein hai ya nahi
     public isStuck = false; // 1-frame dwell state jab bat se chipki ho
     public isHeldInHand = false; // Flag jab ball bowler ke haath me pakdi ho
+    public hasBeenHit = false; // Flag to prevent multiple re-collision hits per delivery
     public rotation = 0; // Ball ke spin ke liye
 
     constructor() {}
@@ -27,6 +28,7 @@ export default class Ball {
         this.rotation = 0; // Reset spin
         this.isStuck = false;
         this.isHeldInHand = false;
+        this.hasBeenHit = false;
         this.vel.x = vx;
         this.vel.y = vy;
         this.isActive = true;
@@ -41,6 +43,7 @@ export default class Ball {
         this.rotation = 0; // Reset spin
         this.isStuck = false;
         this.isHeldInHand = false;
+        this.hasBeenHit = false;
         
         // Math lagakar angle ko velocity (X aur Y) mein convert karna
         const angleRad = (angleDegrees * Math.PI) / 180;

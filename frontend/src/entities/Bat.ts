@@ -924,7 +924,7 @@ export default class Bat {
     }
     // Check karega ki ball Bat se takrai ya nahi
     public checkHit(ball: any, dt: number = 0.016): { hit: boolean; hitSubStep: number } {
-        if (!ball.isActive) return { hit: false, hitSubStep: 30 };
+        if (!ball.isActive || ball.hasBeenHit) return { hit: false, hitSubStep: 30 };
 
         // --- DWELL HOLD & RELEASE SYSTEM (Multi-Tier 144Hz) ---
         if (this.isBallStuck && this.stuckInfo) {
@@ -1043,6 +1043,7 @@ export default class Bat {
             };
 
             // Release ball!
+            ball.hasBeenHit = true;
             ball.isStuck = false;
             this.isBallStuck = false;
             this.stuckInfo = null;
@@ -1308,10 +1309,12 @@ export default class Bat {
                 hitPosY: ball.pos.y
             };
 
-            // Glitch se bachne ke liye ball ko bat se thoda bahar dhakel dena
-            ball.pos.x += 10; 
-            
+            ball.hasBeenHit = true;
             console.log(`HIT! Region: ${regionIndex}, Bounce: ${this.getRegionRestitution(regionIndex)}, Speed X: ${Math.floor(batHitSpeedX)}, Y: ${Math.floor(batHitSpeedY)}`);
+        }
+
+        if (hit) {
+            ball.hasBeenHit = true;
         }
 
         return { hit: hit, hitSubStep: hitSubStep };

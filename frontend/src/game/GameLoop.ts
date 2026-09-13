@@ -89,13 +89,8 @@ export default class GameLoop{
                 if (role !== 'BATSMAN' && this.network && this.network.isConnected) {
                     this.network.sendBowlerPosition(0, this.renderer.bowler.currentHipPosition.x);
                 }
-                // Naya match — purane snapshots/playhead clear karo (Step 2)
-                this.batPoseQueue = [];
-                this.batInterpTick = 0;
-                // Step 3: prediction flags bhi fresh
-                this.localPredictedHit = false;
-                this.suppressNextPacketSound = false;
-                this.hasAuthoritativeResult = false;
+                // Naya match — purane snapshots/playhead clear karo
+                this.resetPerBallState();
             };
             this.network.onBowlerRelease = (tick, releaseX, releaseY, vReleaseX, vReleaseY) => {
                 console.log("📩 Batter Received Authoritative Release Event! Packet Tick:", tick, "Current Tick:", this.networkTickNumber);
@@ -110,6 +105,8 @@ export default class GameLoop{
                     deltaTicks
                 );
                 console.log(`⏩ Roll-Forward by ${deltaTicks} ticks -> Target Pos: (${authState.finalX.toFixed(1)}, ${authState.finalY.toFixed(1)}) Vel: (${authState.finalVx.toFixed(1)}, ${authState.finalVy.toFixed(1)})`);
+                this.renderer.bowler.debugReconciliationPoint = { x: authState.finalX, y: authState.finalY };
+
                 this.ball.isHeldInHand = false;
                 this.ball.isActive = true;
                 this.ball.vel.x = authState.finalVx;
@@ -121,15 +118,13 @@ export default class GameLoop{
                 this.ball.prevPos.y = authState.finalY;
                 this.hasLocalPredictedRelease = true;
 
-            
-                 this.renderer.wicket.reset();
-                // this.renderer.bowler.debugReleasePoint = { x: startX, y: startY };
-                // this.renderer.bowler.ballTrailPoints = [{ x: startX, y: startY }];
+                this.renderer.wicket.reset();
                 this.ball.throwBallWithVelocity(this.ball.pos.x, this.ball.pos.y, this.ball.vel.x, this.ball.vel.y);
-                // // 🟢 STEP 3: naya ball aaya — per-ball prediction flags reset
-                // this.localPredictedHit = false;
-                // this.suppressNextPacketSound = false;
-                // this.hasAuthoritativeResult = false;
+
+                // 🟢 Per-ball prediction flags reset on new ball release
+                this.localPredictedHit = false;
+                this.suppressNextPacketSound = false;
+                this.hasAuthoritativeResult = false;
             };
         
             this.network.onOpponentBatSwing = (tick, mouseX, mouseY, angle) => {
@@ -157,11 +152,23 @@ export default class GameLoop{
                 this.ball.vel.x = finalVx;
                 this.ball.vel.y = finalVy;
       
-                this.ball.prevPos.x = exitX;
-                this.ball.prevPos.y = exitY;
+                this.ball.prevPos.x = finalX;
+                this.ball.prevPos.y = finalY;
+
+                // 🟢 Clean Trail Reconstruction: Remove local prediction noise & connect exitX,exitY -> finalX,finalY
+                const bowler = this.renderer.bowler;
+                if (bowler && bowler.ballTrailPoints) {
+                    const releaseIdx = bowler.localReleaseTrailIndex || 0;
+                    if (releaseIdx > 0 && releaseIdx < bowler.ballTrailPoints.length) {
+                        bowler.ballTrailPoints = bowler.ballTrailPoints.slice(0, releaseIdx);
+                    }
+                    bowler.ballTrailPoints.push({ x: exitX, y: exitY });
+                    bowler.ballTrailPoints.push({ x: finalX, y: finalY });
+                }
     
                 this.bat.clearStuckState();
                 this.ball.isStuck = false;
+                this.ball.hasBeenHit = true;
       
                 this.hasAuthoritativeResult = true;
                 this.localPredictedHit = false;
@@ -359,15 +366,15 @@ export default class GameLoop{
                     startBowlerDelivery();
                 } else if (this.renderer.gameMode === 'NEW_BOWLER') {
                     if (!bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {
+                        this.resetPerBallState();
                         const startX = bowler.currentHipPosition.x < (BOWLER_START_X - 600) ? BOWLER_START_X : bowler.currentHipPosition.x;
                         bowler.resetToIdle();
                         bowler.currentHipPosition.x = startX;
                         bowler.startRunning();
-                        this.hasSentReleasePacket = false;
                         if (this.isOnlineMode && this.network && this.network.isConnected) {
-                        console.log("🟢 Opponent Bowler Start Run Sent!");
-                        this.network.sendBowlerStartRun(this.networkTickNumber);
-                    }
+                            console.log("🟢 Opponent Bowler Start Run Sent!");
+                            this.network.sendBowlerStartRun(this.networkTickNumber);
+                        }
                         this.ball.isHeldInHand = true;
                         this.ball.isActive = true;
                     }
@@ -378,6 +385,7 @@ export default class GameLoop{
         // 3. Keyboard par 'R' button dabane par Bowling ball, Bowler, Joystick & Wickets reset karna
         window.addEventListener("keydown", (event) => {
             if (event.code === "KeyR" || event.key.toLowerCase() === 'r') {
+                this.resetPerBallState();
                 if (this.renderer.gameMode === 'NEW_BOWLER') {
                     const bowler = this.renderer.bowler;
                     bowler.resetToIdle();
@@ -389,7 +397,6 @@ export default class GameLoop{
                     bowler.isPreJumpFrozen = false;
                     bowler.isRunning = false;
                     bowler.isCycleCompleted = false;
-                    this.hasSentReleasePacket = false;
 
                     this.currentArmAngleRad = Math.PI;
                     this.isHandTargetInitialized = false;
@@ -416,10 +423,6 @@ export default class GameLoop{
                 } else {
                     this.renderer.bowlingArea.reset(this.ball);
                     this.renderer.wicket.reset();
-                    this.hasSentReleasePacket = false;
-                    this.localPredictedHit = false;
-                    this.suppressNextPacketSound = false;
-                    this.hasAuthoritativeResult = false;
                 }
             }
         });
@@ -529,9 +532,25 @@ export default class GameLoop{
             y = a.mouseY + (b.mouseY - a.mouseY) * alpha;
         }
 
-        // 6. Smooth pose ko poore skeleton par apply karo (jaise pehle hota tha,
-        //    bas ab values raw packets se nahi — LERP se aayi hui hain)
+        // 6. Smooth pose ko poore skeleton par apply karo
         this.bat.setBatPoseFromMouse(x, y);
+    }
+
+    private resetPerBallState(): void {
+        this.localPredictedHit = false;
+        this.suppressNextPacketSound = false;
+        this.hasAuthoritativeResult = false;
+        this.hasSentReleasePacket = false;
+        this.hasLocalPredictedRelease = false;
+        this.batPoseQueue = [];
+        this.batInterpTick = 0;
+        if (this.ball) {
+            this.ball.hasBeenHit = false;
+        }
+        if (this.renderer && this.renderer.bowler) {
+            this.renderer.bowler.pendingVisualThrow = null;
+            this.renderer.bowler.releaseDelayTimer = 0;
+        }
     }
 
 private getProjectileStateWithBounce(
@@ -1185,19 +1204,12 @@ private getProjectileStateWithBounce(
                     bowler.lastReleaseSpeed = totalSpeed;
                     bowler.lastReleaseAngleDeg = launchAngleDeg;
 
-                    // Detach ball from hand and launch into free flight physics!
-                    this.ball.isHeldInHand = false;
-                    this.ball.isActive = true;
-                    this.ball.pos.x = releaseX;
-                    this.ball.pos.y = releaseY;
-                    this.ball.prevPos.x = releaseX;
-                    this.ball.prevPos.y = releaseY;
-                    this.ball.vel.x = vReleaseX;
-                    this.ball.vel.y = vReleaseY;
+                    // Detach ball from hand and set up release state!
                     bowler.isBallReleased = true;
                     bowler.postReleaseDelaySec = bowler.POST_RELEASE_DELAY_SEC;
                     bowler.debugReleasePoint = { x: releaseX, y: releaseY };
 
+                    // 1. Send network release packet immediately to Batter over DataChannel!
                     if (this.isOnlineMode && !this.hasSentReleasePacket && this.network && this.network.isConnected) {
                        console.log("🚀 Bowler Sent Release Event! Tick:", this.networkTickNumber, "Pos:", releaseX, releaseY, "Vel:", vReleaseX, vReleaseY);
                         this.network.sendBowlerRelease(
@@ -1210,8 +1222,29 @@ private getProjectileStateWithBounce(
                         this.hasSentReleasePacket = true;
                     }
 
-                    // Update initial flight physics step for this frame
-                    this.ball.update(dt * 0.5);
+                    // 2. Set Visual Release Delay (Full Median RTT) on Bowler Screen matching feat/backend!
+                    const releaseDelaySec = (this.isOnlineMode && this.network) ? this.network.getRTT() / 1000 : 0;
+                    bowler.releaseDelayTimer = releaseDelaySec;
+                    bowler.pendingVisualThrow = { releaseX, releaseY, vReleaseX, vReleaseY };
+
+                    if (releaseDelaySec <= 0) {
+                        // Offline mode or 0ms RTT: launch immediately
+                        this.ball.isHeldInHand = false;
+                        this.ball.isActive = true;
+                        this.ball.throwBallWithVelocity(releaseX, releaseY, vReleaseX, vReleaseY);
+                        bowler.pendingVisualThrow = null;
+                        this.ball.update(dt * 0.5);
+                    } else {
+                        // Hold ball at release position during RTT/2 delay while arm follow-through animates
+                        this.ball.isHeldInHand = false;
+                        this.ball.isActive = true;
+                        this.ball.pos.x = releaseX;
+                        this.ball.pos.y = releaseY;
+                        this.ball.prevPos.x = releaseX;
+                        this.ball.prevPos.y = releaseY;
+                        this.ball.vel.x = 0;
+                        this.ball.vel.y = 0;
+                    }
                 } else {
                     // Ball is still held in hand before crossing Green Line:
                     this.ball.isHeldInHand = true;
@@ -1231,8 +1264,42 @@ private getProjectileStateWithBounce(
                 this.ball.prevPos.y = bowler.leftWrist.y;
             }
             } else if (bowler.isBallReleased) {
-                // Ball has been released: update flight physics (Gravity, Friction & Pitch Bounce!)
-                this.ball.update(dt);
+                if (bowler.pendingVisualThrow) {
+                    bowler.releaseDelayTimer -= dt;
+                    if (bowler.releaseDelayTimer <= 0) {
+                        const throwInfo = bowler.pendingVisualThrow;
+                        this.ball.isHeldInHand = false;
+                        this.ball.isActive = true;
+                        this.ball.throwBallWithVelocity(throwInfo.releaseX, throwInfo.releaseY, throwInfo.vReleaseX, throwInfo.vReleaseY);
+                        bowler.pendingVisualThrow = null;
+                        console.log("🚀 Visual Release Delay (RTT/2) Expired -> Ball Flight Launched on Bowler Screen!");
+                    } else {
+                        // Anchor ball at release position during RTT/2 delay
+                        this.ball.isHeldInHand = false;
+                        this.ball.isActive = true;
+                        this.ball.pos.x = bowler.pendingVisualThrow.releaseX;
+                        this.ball.pos.y = bowler.pendingVisualThrow.releaseY;
+                        this.ball.prevPos.x = bowler.pendingVisualThrow.releaseX;
+                        this.ball.prevPos.y = bowler.pendingVisualThrow.releaseY;
+                        this.ball.vel.x = 0;
+                        this.ball.vel.y = 0;
+                    }
+                } else {
+                    // Ball has been released: update flight physics (Gravity, Air Drag, Friction & Pitch Bounce!)
+                    this.ball.update(dt);
+
+                    // ⚡ ONLINE MODE LOCAL PREDICTIVE COLLISION CHECK ON BOWLER SCREEN (0ms Audio Feedback + Instant Local Launch)
+                    if (this.isOnlineMode && this.ball.isActive && !this.ball.isHeldInHand && !this.hasAuthoritativeResult && !this.localPredictedHit) {
+                        const predicted = this.bat.checkHit(this.ball, dt);
+                        if (predicted.hit && !this.ball.isStuck) {
+                            this.localPredictedHit = true;
+                            this.suppressNextPacketSound = true;
+                            const si = this.bat.lastSoundImpact;
+                            SoundManager.getInstance().playBatHit(si?.speed ?? 1000, si?.offset ?? 100);
+                            console.log("⚡ Bowler Local Hit Prediction Triggered! (Instant Local Launch + 0ms Audio)");
+                        }
+                    }
+                }
             } else {
                 this.ball.isHeldInHand = true;
                 this.ball.isActive = true;

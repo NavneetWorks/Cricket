@@ -178,6 +178,8 @@ export class Bowler {
     public lastReceivedPacketTime: number = 0;
     public playheadDelayMs: number = 30;
     public isExtrapolating: boolean = false;
+    public releaseDelayTimer: number = 0;
+    public pendingVisualThrow: { releaseX: number; releaseY: number; vReleaseX: number; vReleaseY: number } | null = null;
 
     public startRunning(): void {     
         this.isRunning = true;
@@ -248,6 +250,8 @@ export class Bowler {
         this.gatheringAngleTraveledDeg = 0.0;
         this.ballTrailPoints = [];
         this.isBallReleased = false;
+        this.releaseDelayTimer = 0;
+        this.pendingVisualThrow = null;
         this.lastReleaseVx = null;
         this.lastReleaseVy = null;
         this.lastReleaseVBodyX = null;

@@ -26,7 +26,7 @@ export default class NetWorkManager{
     private rttPingTimer: any = null;
     public lastRTT:number = 0;
     private readonly RTT_CLAMP_MIN = 20;
-    private readonly RTT_WINDOW_SIZE = 8;
+    private readonly RTT_WINDOW_SIZE = 10;
 
     public connect(serverUrl:string = "ws://localhost:9001"){
         this.ws = new WebSocket(serverUrl);
