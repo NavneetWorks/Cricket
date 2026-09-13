@@ -6,7 +6,7 @@ import Renderer from "./Rederer";
 import Input from "./Input";
 import NetworkManager from "../network/NetworkManager";
 import { SoundManager } from "../audio/SoundManager";
-import {GRAVITY,RESTITUTION_GROUND,BOWLER_WICKET_X, CANVAS_HEIGHT, CANVAS_WIDTH, GROUND_HEIGHT ,k_values, SERVER_CONFIG, BAT_SNAPSHOT_QUEUE_SIZE, BAT_INTERP_BUFFER_TICKS, BAT_MAX_EXTRAPOLATION_TICKS, BOWLER_START_X } from "./constants";
+import {GRAVITY, RESTITUTION_GROUND, FRICTION_GROUND, AIR_DRAG_COEFF, BOWLER_WICKET_X, CANVAS_HEIGHT, CANVAS_WIDTH, GROUND_HEIGHT ,k_values, SERVER_CONFIG, BAT_SNAPSHOT_QUEUE_SIZE, BAT_INTERP_BUFFER_TICKS, BAT_MAX_EXTRAPOLATION_TICKS, BOWLER_START_X } from "./constants";
 
 // Ek remote bat snapshot: batter ke client par kya pose tha, kis tick par
 interface BatSnapshot {
@@ -217,20 +217,23 @@ export default class GameLoop{
                 bowler.isGatheringArmActive = true;
                 bowler.gatheringAngleTraveledDeg = 0.0;
                 bowler.accumulatedJoystickAngleDeg = 0.0;
+                bowler.maxObservedOmegaRad = 0.0;
+                bowler.prevLeftWristY = 0.0;
+                bowler.lastReceivedJoystickTick = -1;
+                bowler.targetNetworkJoystickAngleRad = null;
+                bowler.targetNetworkJoystickRadiusRatio = 1.0;
+                bowler.debugReconciliationPoint = null;
+                bowler.localReleaseTrailIndex = 0;
                 bowler.ballTrailPoints = [];
             };
             this.network.onOpponentBowlerJoystick = (tick, smoothAngleRad, smoothRadiusRatio) => {
                 const bowler = this.renderer.bowler;
-                if (bowler.lastJoystickAngleRad !== null) {
-                    let deltaRad = smoothAngleRad - bowler.lastJoystickAngleRad;
-                    while (deltaRad > Math.PI) deltaRad -= Math.PI * 2;
-                    while (deltaRad < -Math.PI) deltaRad += Math.PI * 2;
-                    let deltaDeg = (deltaRad * 180) / Math.PI;
-                    bowler.accumulatedJoystickAngleDeg += Math.abs(deltaDeg);
-                }
-                bowler.lastJoystickAngleRad = smoothAngleRad;
-                bowler.smoothJoystickAngleRad = smoothAngleRad;
-                bowler.smoothJoystickRadiusRatio = smoothRadiusRatio;
+                // 🛡️ 1. Discard Out-Of-Order late packets!
+                if (tick <= bowler.lastReceivedJoystickTick) return;
+                bowler.lastReceivedJoystickTick = tick;
+
+                bowler.targetNetworkJoystickAngleRad = smoothAngleRad;
+                bowler.targetNetworkJoystickRadiusRatio = smoothRadiusRatio;
             };
             this.network.onBowlerRelease = (tick, releaseX, releaseY, vReleaseX, vReleaseY) => {
                 console.log("📩 Batter Received Authoritative Release Event! Packet Tick:", tick, "Current Tick:", this.networkTickNumber);
@@ -238,7 +241,8 @@ export default class GameLoop{
                 const currentTick = this.networkTickNumber;
                 const deltaTicks = Math.max(0, currentTick - tick);
 
-                const authState = this.getProjectileStateWithBounce(
+                // Fast-Forward real release values by elapsed deltaTicks (including Gravity, Air Drag, Bounce & Friction)
+                const realMomentState = this.getProjectileStateWithBounce(
                     releaseX,
                     releaseY,
                     vReleaseX,
@@ -246,18 +250,46 @@ export default class GameLoop{
                     deltaTicks
                 );
 
-                console.log(`⏩ Roll-Forward by ${deltaTicks} ticks -> Target Pos: (${authState.finalX.toFixed(1)}, ${authState.finalY.toFixed(1)}) Vel: (${authState.finalVx.toFixed(1)}, ${authState.finalVy.toFixed(1)})`);
+                console.log(`⏩ Roll-Forward by ${deltaTicks} ticks -> Target Pos: (${realMomentState.finalX.toFixed(1)}, ${realMomentState.finalY.toFixed(1)}) Vel: (${realMomentState.finalVx.toFixed(1)}, ${realMomentState.finalVy.toFixed(1)})`);
 
-                const targetX = this.hasLocalPredictedRelease ? (this.ball.pos.x * 0.5 + authState.finalX * 0.5) : authState.finalX;
-                const targetY = this.hasLocalPredictedRelease ? (this.ball.pos.y * 0.5 + authState.finalY * 0.5) : authState.finalY;
+                // 🟢 Capture Debug Green Reconciliation Point
+                this.renderer.bowler.debugReconciliationPoint = { x: realMomentState.finalX, y: realMomentState.finalY };
 
-                this.ball.throwBallWithVelocity(
-                    targetX,
-                    targetY,
-                    authState.finalVx,
-                    authState.finalVy
-                );
-                this.hasLocalPredictedRelease = true;
+                if (this.hasLocalPredictedRelease) {
+                    const bowler = this.renderer.bowler;
+                    // Smoothly shift existing trail points by (dx, dy) to eliminate V-shape diagonal snap artifact!
+                    const oldX = this.ball.pos.x;
+                    const oldY = this.ball.pos.y;
+                    const dx = realMomentState.finalX - oldX;
+                    const dy = realMomentState.finalY - oldY;
+
+                    if (Math.hypot(dx, dy) > 0.1 && bowler.ballTrailPoints) {
+                        const startIdx = bowler.localReleaseTrailIndex || 0;
+                        for (let i = startIdx; i < bowler.ballTrailPoints.length; i++) {
+                            bowler.ballTrailPoints[i].x += dx;
+                            bowler.ballTrailPoints[i].y += dy;
+                        }
+                    }
+
+                    // Direct state update at current tick moment (No double-launch re-initialization)
+                    this.ball.isHeldInHand = false;
+                    this.ball.isActive = true;
+                    this.ball.pos.x = realMomentState.finalX;
+                    this.ball.pos.y = realMomentState.finalY;
+                    this.ball.prevPos.x = realMomentState.finalX;
+                    this.ball.prevPos.y = realMomentState.finalY;
+                    this.ball.vel.x = realMomentState.finalVx;
+                    this.ball.vel.y = realMomentState.finalVy;
+                } else {
+                    // Fallback launch if local prediction hasn't fired
+                    this.ball.throwBallWithVelocity(
+                        realMomentState.finalX,
+                        realMomentState.finalY,
+                        realMomentState.finalVx,
+                        realMomentState.finalVy
+                    );
+                    this.hasLocalPredictedRelease = true;
+                }
             };
         }
         const startBowlerDelivery = () => {
@@ -329,6 +361,7 @@ export default class GameLoop{
                         bowler.resetToIdle();
                         bowler.currentHipPosition.x = startX;
                         bowler.startRunning();
+                        this.hasSentReleasePacket = false;
                         if (this.isOnlineMode && this.network && this.network.isConnected) {
                         console.log("🟢 Opponent Bowler Start Run Sent!");
                         this.network.sendBowlerStartRun(this.networkTickNumber);
@@ -354,6 +387,7 @@ export default class GameLoop{
                     bowler.isPreJumpFrozen = false;
                     bowler.isRunning = false;
                     bowler.isCycleCompleted = false;
+                    this.hasSentReleasePacket = false;
 
                     this.currentArmAngleRad = Math.PI;
                     this.isHandTargetInitialized = false;
@@ -506,7 +540,6 @@ private getProjectileStateWithBounce(
     t: number,
     ballRadius: number = 10
 ) {
-    
     let currX = initialX;
     let currY = initialY;
     let currVx = initialVx;
@@ -515,20 +548,27 @@ private getProjectileStateWithBounce(
     const groundY = CANVAS_HEIGHT - GROUND_HEIGHT - ballRadius;
     const stepDt = 0.001; // 1ms precision step
     let elapsedTime = 0;
+    const totalTime = t / 60;
 
-    while (elapsedTime < t/60) {
-        const dt = Math.min(stepDt, t - elapsedTime);
+    while (elapsedTime < totalTime) {
+        const dt = Math.min(stepDt, totalTime - elapsedTime);
 
-        // Gravity & Velocity update
-        currVy += GRAVITY * dt;
+        // 🟢 Exact Air Drag + Gravity Physics (100% same as Ball.ts)
+        const speed = Math.hypot(currVx, currVy);
+        const dragForceX = -AIR_DRAG_COEFF * speed * currVx;
+        const dragForceY = -AIR_DRAG_COEFF * speed * currVy;
+
+        currVx += dragForceX * dt;
+        currVy += (GRAVITY + dragForceY) * dt;
+
         currX += currVx * dt;
         currY += currVy * dt;
 
-        // Ground Bounce check
-        if (currY >= groundY) {
+        // Ground Bounce check (Only when ball is moving downward into the pitch!)
+        if (currY >= groundY && currVy > 0) {
             currY = groundY;
             currVy = -currVy * RESTITUTION_GROUND;
-            currVx *= 0.98; // Friction
+            currVx *= FRICTION_GROUND;
         }
 
         elapsedTime += dt;
@@ -561,6 +601,42 @@ private getProjectileStateWithBounce(
 
             // 🏃 Bowler & Ball Attachment / Release logic in BATTING Mode
             const bowler = this.renderer.bowler;
+
+            // 🌐 Batter Screen Input-Driven Spring-Damper Physics Replication (100% Identical to Bowler Screen)
+            if (this.isOnlineMode && bowler.targetNetworkJoystickAngleRad !== null) {
+                const rawTargetRad = bowler.targetNetworkJoystickAngleRad;
+                const targetRadiusRatio = bowler.targetNetworkJoystickRadiusRatio;
+
+                let angleDiffRad = rawTargetRad - bowler.smoothJoystickAngleRad;
+                while (angleDiffRad > Math.PI) angleDiffRad -= Math.PI * 2;
+                while (angleDiffRad < -Math.PI) angleDiffRad += Math.PI * 2;
+
+                const springForceAngle = angleDiffRad * bowler.JOYSTICK_ANGLE_STIFFNESS;
+                const dampingForceAngle = -bowler.joystickAngularVelRad * bowler.JOYSTICK_ANGLE_DAMPING;
+                bowler.joystickAngularVelRad += (springForceAngle + dampingForceAngle) * dt;
+                bowler.smoothJoystickAngleRad += bowler.joystickAngularVelRad * dt;
+
+                const radiusDiff = targetRadiusRatio - bowler.smoothJoystickRadiusRatio;
+                const springForceRadius = radiusDiff * bowler.JOYSTICK_RADIUS_STIFFNESS;
+                const dampingForceRadius = -bowler.joystickRadiusVelRatio * bowler.JOYSTICK_RADIUS_DAMPING;
+                bowler.joystickRadiusVelRatio += (springForceRadius + dampingForceRadius) * dt;
+                bowler.smoothJoystickRadiusRatio += bowler.joystickRadiusVelRatio * dt;
+
+                const currentOmega = Math.abs(bowler.joystickAngularVelRad);
+                if (currentOmega > bowler.maxObservedOmegaRad) {
+                    bowler.maxObservedOmegaRad = currentOmega;
+                }
+
+                if (bowler.lastJoystickAngleRad !== null) {
+                    let deltaRad = bowler.smoothJoystickAngleRad - bowler.lastJoystickAngleRad;
+                    while (deltaRad > Math.PI) deltaRad -= Math.PI * 2;
+                    while (deltaRad < -Math.PI) deltaRad += Math.PI * 2;
+                    let deltaDeg = (deltaRad * 180) / Math.PI;
+                    bowler.accumulatedJoystickAngleDeg += Math.abs(deltaDeg);
+                }
+                bowler.lastJoystickAngleRad = bowler.smoothJoystickAngleRad;
+            }
+
             if (bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning && !bowler.isPreJumpFrozen && !bowler.isCycleCompleted) {
                 bowler.update(dt);
             }
@@ -621,33 +697,79 @@ private getProjectileStateWithBounce(
             
 
             if (this.ball.isHeldInHand && (bowler.isRunning || bowler.isPreJumpTransitioning || bowler.isExecutingJump)) {
+                    const prevWristY = bowler.prevLeftWristY > 0 ? bowler.prevLeftWristY : bowler.leftWrist.y;
+                    bowler.prevLeftWristY = bowler.leftWrist.y;
+
                     this.ball.pos.x = bowler.leftWrist.x;
                     this.ball.pos.y = bowler.leftWrist.y;
                     this.ball.prevPos.x = bowler.leftWrist.x;
                     this.ball.prevPos.y = bowler.leftWrist.y;
                     this.ball.isActive = true;
 
-                    // ⚡ ONLINE MODE LOCAL PREDICTIVE BALL RELEASE (Instant Visual Launch)
+                    // ⚡ ONLINE MODE LOCAL PREDICTIVE BALL RELEASE (Exact Bowler Release Physics)
                     if (this.isOnlineMode && !this.hasLocalPredictedRelease && bowler.isExecutingJump) {
                         const totalJumpFrames = Bowler.PRE_DELIVERY_JUMP.length;
                         const totalArmPathDeg = 370.6;
                         const progressRatio = Math.min(1.0, Math.max(0.0, bowler.accumulatedJoystickAngleDeg / totalArmPathDeg));
                         const currentFrame = progressRatio * (totalJumpFrames - 1);
 
-                        // Frame 63 to 66: Top release arc par local prediction launch
+                        // Frame 63 to 66: Top release arc par local prediction launch (Identical Trigger Condition as Bowler)
                         if (currentFrame >= JUMP_RELEASE_FRAME_MIN) {
-                            const releaseX = bowler.leftWrist.x;
-                            const releaseY = bowler.leftWrist.y;
-                            
-                            const estSpeed = bowler.lastRunupSpeedX > 0 ? bowler.lastRunupSpeedX * 1.8 : 1200;
-                            const estVx = -Math.abs(estSpeed);
-                            const estVy = 150;
+                            let releaseTriggered = false;
 
-                            this.ball.throwBallWithVelocity(releaseX, releaseY, estVx, estVy);
+                            // 🚀 1. Track Peak Angular Velocity during active arm swing
+                            const currentOmega = Math.abs(bowler.joystickAngularVelRad);
+                            if (currentOmega > bowler.maxObservedOmegaRad) {
+                                bowler.maxObservedOmegaRad = currentOmega;
+                            }
 
-                            this.hasLocalPredictedRelease = true;
-                            this.localReleaseTick = this.networkTickNumber;
-                            console.log("⚡ Batter Local Predicted Release Triggered at Tick:", this.localReleaseTick);
+                            // 🚀 2. Check Significant Deceleration Trigger (High Swing Speed + Speed Drop in Top Arc)
+                            if (bowler.maxObservedOmegaRad >= DECEL_MIN_SWING_SPEED && currentOmega <= bowler.maxObservedOmegaRad * (1.0 - DECEL_DROP_RATIO)) {
+                                let normAngle = bowler.smoothJoystickAngleRad % (Math.PI * 2);
+                                if (normAngle < 0) normAngle += Math.PI * 2;
+                                if (normAngle >= 3.7 && normAngle <= 5.4) {
+                                    releaseTriggered = true;
+                                }
+                            }
+
+                            // 🚀 3. Max Frame Boundary (Frame 66 out of 71): Force release if reached without earlier deceleration
+                            if (!releaseTriggered && currentFrame >= JUMP_RELEASE_FRAME_MAX) {
+                                releaseTriggered = true;
+                            }
+
+                            if (releaseTriggered) {
+                                const releaseX = bowler.leftWrist.x;
+                                const releaseY = bowler.leftWrist.y;
+                                
+                                // 📐 Exact 100% Bowler Screen Release Velocity Math
+                                const sign = bowler.joystickAngularVelRad >= 0 ? 1 : -1;
+                                const peakOmega = Math.max(Math.abs(bowler.joystickAngularVelRad), bowler.maxObservedOmegaRad);
+                                const releaseOmega = peakOmega * sign;
+
+                                const totalArmLen = bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
+                                const minReach = Math.abs(bowler.FRONT_UPPER_ARM - bowler.FRONT_LOWER_ARM) + 5;
+                                const armR = minReach + (totalArmLen - minReach - 1.0) * bowler.smoothJoystickRadiusRatio;
+                                const theta = bowler.smoothJoystickAngleRad;
+
+                                const vArmX = -armR * Math.sin(theta) * releaseOmega;
+                                const dt = 1 / 60;
+                                const vWristY = (releaseY - prevWristY) / dt;
+                                const polarVArmY = armR * Math.cos(theta) * releaseOmega;
+                                const vArmY = Math.abs(releaseOmega) > 0.5 ? (polarVArmY * 0.5 + vWristY * 0.5) : vWristY;
+
+                                let vBodyX = -Math.abs(bowler.lastRunupSpeedX > 0 ? bowler.lastRunupSpeedX : 800.0);
+                                vBodyX = -Math.abs(vBodyX * 1.5);
+
+                                const vReleaseX = -Math.abs(vBodyX + vArmX);
+                                const vReleaseY = vArmY;
+
+                                this.ball.throwBallWithVelocity(releaseX, releaseY, vReleaseX, vReleaseY);
+
+                                this.hasLocalPredictedRelease = true;
+                                this.localReleaseTick = this.networkTickNumber;
+                                bowler.localReleaseTrailIndex = bowler.ballTrailPoints.length;
+                                console.log("⚡ Batter Local Predicted Release (Exact Trigger + Formula) at Frame:", currentFrame.toFixed(1), "Tick:", this.localReleaseTick, "Vel:", vReleaseX, vReleaseY);
+                            }
                         }
                     }
 
@@ -749,10 +871,13 @@ private getProjectileStateWithBounce(
 
             if (isTickAdvanced && this.isOnlineMode && this.network && this.network.isConnected) {
                 if (!bowler.isBallReleased && (bowler.isGatheringArmActive || bowler.isExecutingJump || bowler.isRunning)) {
+                    const joystick = this.renderer.joystick;
+                    const rawTargetRad = joystick.angleRad;
+                    const targetRadiusRatio = joystick.distanceRatio > 0.05 ? joystick.distanceRatio : 1.0;
                     this.network.sendBowlerJoystickUDP(
                         this.networkTickNumber,
-                        bowler.smoothJoystickAngleRad,
-                        bowler.smoothJoystickRadiusRatio
+                        rawTargetRad,
+                        targetRadiusRatio
                     );
                 }
             }

@@ -168,7 +168,13 @@ export class Bowler {
     private lastPoseSnapshot: KeyframePose | null = null;
 
     public maxObservedOmegaRad: number = 0.0;
+    public prevLeftWristY: number = 0.0;
     public postReleaseDelaySec: number = 0.0;
+    public lastReceivedJoystickTick: number = -1;
+    public targetNetworkJoystickAngleRad: number | null = null;
+    public targetNetworkJoystickRadiusRatio: number = 1.0;
+    public debugReconciliationPoint: Vec2 | null = null;
+    public localReleaseTrailIndex: number = 0;
 
     public startRunning(): void {     
         this.isRunning = true;

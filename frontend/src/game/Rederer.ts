@@ -713,6 +713,28 @@ export default class Renderer{
         this.ctx.arc(last.x, last.y, 4, 0, Math.PI * 2);
         this.ctx.fill();
 
+        // 🟢 Draw Glowing Green Debug Dot where authoritative real release update replaced local ball state!
+        if (this.bowler.debugReconciliationPoint) {
+            const pt = this.bowler.debugReconciliationPoint;
+            this.ctx.beginPath();
+            this.ctx.arc(pt.x, pt.y, 12, 0, Math.PI * 2);
+            this.ctx.fillStyle = "rgba(34, 197, 94, 0.4)";
+            this.ctx.fill();
+
+            this.ctx.beginPath();
+            this.ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2);
+            this.ctx.fillStyle = "#22c55e"; // Bright Green
+            this.ctx.strokeStyle = "#ffffff";
+            this.ctx.lineWidth = 2;
+            this.ctx.fill();
+            this.ctx.stroke();
+
+            this.ctx.font = "bold 12px Inter, Arial, sans-serif";
+            this.ctx.fillStyle = "#22c55e";
+            this.ctx.textAlign = "center";
+            this.ctx.fillText("REAL RECONCILIATION UPDATE", pt.x, pt.y - 16);
+        }
+
         this.ctx.restore();
     }
 }
