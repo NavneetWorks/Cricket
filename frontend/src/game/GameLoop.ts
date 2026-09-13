@@ -595,23 +595,37 @@ private getProjectileStateWithBounce(
                     bowler.joystickAngularVelRad = 0.0;
                 }
 
-                // 🏃 Angle Spring-Damper Physics Simulation
-                let angleDiffRad = rawJoystickRad - bowler.smoothJoystickAngleRad;
-                while (angleDiffRad > Math.PI) angleDiffRad -= Math.PI * 2;
-                while (angleDiffRad < -Math.PI) angleDiffRad += Math.PI * 2;
+                // 🏃 Angle & Follow-Through Physics Simulation
+                if (bowler.isBallReleased) {
+                    if (bowler.postReleaseDelaySec > 0) {
+                        // ⏳ POST-RELEASE GRACE PERIOD: Allow ball to clear hand completely before follow-through engages
+                        bowler.postReleaseDelaySec -= dt;
+                        bowler.smoothJoystickAngleRad += bowler.joystickAngularVelRad * dt;
+                    } else {
+                        // 🟢 AUTOMATIC FOLLOW-THROUGH PHASE: Detach user input and maintain release angular velocity
+                        const frictionDecay = Math.pow(0.96, dt * 60);
+                        bowler.joystickAngularVelRad *= frictionDecay;
+                        bowler.smoothJoystickAngleRad += bowler.joystickAngularVelRad * dt;
+                    }
+                } else {
+                    // 🏋️ USER CONTROLLED PHASE: Angle Spring-Damper Physics
+                    let angleDiffRad = rawJoystickRad - bowler.smoothJoystickAngleRad;
+                    while (angleDiffRad > Math.PI) angleDiffRad -= Math.PI * 2;
+                    while (angleDiffRad < -Math.PI) angleDiffRad += Math.PI * 2;
 
-                const springForceAngle = angleDiffRad * bowler.JOYSTICK_ANGLE_STIFFNESS;
-                const dampingForceAngle = -bowler.joystickAngularVelRad * bowler.JOYSTICK_ANGLE_DAMPING;
-                bowler.joystickAngularVelRad += (springForceAngle + dampingForceAngle) * dt;
-                bowler.smoothJoystickAngleRad += bowler.joystickAngularVelRad * dt;
+                    const springForceAngle = angleDiffRad * bowler.JOYSTICK_ANGLE_STIFFNESS;
+                    const dampingForceAngle = -bowler.joystickAngularVelRad * bowler.JOYSTICK_ANGLE_DAMPING;
+                    bowler.joystickAngularVelRad += (springForceAngle + dampingForceAngle) * dt;
+                    bowler.smoothJoystickAngleRad += bowler.joystickAngularVelRad * dt;
 
-                // Radius Spring-Damper Physics Simulation (Resistance when changing arm reach)
-                const targetRadiusRatio = joystick.distanceRatio > 0.05 ? joystick.distanceRatio : 1.0;
-                const radiusDiff = targetRadiusRatio - bowler.smoothJoystickRadiusRatio;
-                const springForceRadius = radiusDiff * bowler.JOYSTICK_RADIUS_STIFFNESS;
-                const dampingForceRadius = -bowler.joystickRadiusVelRatio * bowler.JOYSTICK_RADIUS_DAMPING;
-                bowler.joystickRadiusVelRatio += (springForceRadius + dampingForceRadius) * dt;
-                bowler.smoothJoystickRadiusRatio += bowler.joystickRadiusVelRatio * dt;
+                    // Radius Spring-Damper Physics Simulation (Resistance when changing arm reach)
+                    const targetRadiusRatio = joystick.distanceRatio > 0.05 ? joystick.distanceRatio : 1.0;
+                    const radiusDiff = targetRadiusRatio - bowler.smoothJoystickRadiusRatio;
+                    const springForceRadius = radiusDiff * bowler.JOYSTICK_RADIUS_STIFFNESS;
+                    const dampingForceRadius = -bowler.joystickRadiusVelRatio * bowler.JOYSTICK_RADIUS_DAMPING;
+                    bowler.joystickRadiusVelRatio += (springForceRadius + dampingForceRadius) * dt;
+                    bowler.smoothJoystickRadiusRatio += bowler.joystickRadiusVelRatio * dt;
+                }
 
                 this.currentArmAngleRad = bowler.smoothJoystickAngleRad;
 
@@ -629,8 +643,15 @@ private getProjectileStateWithBounce(
                 // 📐 Option 2 Formula: progressRatio = accumulatedAngle / 370.6
                 const totalJumpFrames = Bowler.PRE_DELIVERY_JUMP.length;
                 const totalArmPathDeg = 370.6;
-                const progressRatio = Math.min(1.0, Math.max(0.0, bowler.accumulatedJoystickAngleDeg / totalArmPathDeg));
 
+                // 🛑 Clamp at Last Frame (Frame 71): Stop follow-through rotation at end of jump animation
+                if (bowler.accumulatedJoystickAngleDeg >= totalArmPathDeg) {
+                    bowler.accumulatedJoystickAngleDeg = totalArmPathDeg;
+                    bowler.joystickAngularVelRad = 0.0;
+                    bowler.isCycleCompleted = true;
+                }
+
+                const progressRatio = Math.min(1.0, Math.max(0.0, bowler.accumulatedJoystickAngleDeg / totalArmPathDeg));
                 const decimalFrameIndex = progressRatio * (totalJumpFrames - 1);
 
                 // 60 FPS Sub-frame interpolation for body joints & displacementX
@@ -672,11 +693,14 @@ private getProjectileStateWithBounce(
                     bowler.applyKeyframePose(interpolatedPose, bowler.currentHipPosition.x);
                 }
 
-                const totalArmLen = bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
-                const minReach = Math.abs(bowler.FRONT_UPPER_ARM - bowler.FRONT_LOWER_ARM) + 5;
-                const armReach = minReach + (totalArmLen - minReach - 1.0) * bowler.smoothJoystickRadiusRatio;
+                // 🛑 Apply IK override ONLY while cycle is active before reaching Frame 71
+                if (!bowler.isCycleCompleted && progressRatio < 1.0) {
+                    const totalArmLen = bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
+                    const minReach = Math.abs(bowler.FRONT_UPPER_ARM - bowler.FRONT_LOWER_ARM) + 5;
+                    const armReach = minReach + (totalArmLen - minReach - 1.0) * bowler.smoothJoystickRadiusRatio;
 
-                bowler.overrideLeftArmWithIK(this.currentArmAngleRad, armReach);
+                    bowler.overrideLeftArmWithIK(this.currentArmAngleRad, armReach);
+                }
             }
 
             // 🟢 FRAME RANGE WINDOW (63 to 66) & DECELERATION SNAP BALL RELEASE ENGINE
@@ -766,6 +790,7 @@ private getProjectileStateWithBounce(
                     this.ball.vel.x = vReleaseX;
                     this.ball.vel.y = vReleaseY;
                     bowler.isBallReleased = true;
+                    bowler.postReleaseDelaySec = 0.10; // 100ms post-release delay before follow-through friction engages
 
                     // Update initial flight physics step for this frame
                     this.ball.update(dt * 0.5);

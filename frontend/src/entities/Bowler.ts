@@ -3,7 +3,7 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT, GROUND_HEIGHT, PLAYER_LENGTH_FACTOR, BOWLE
 // ── 🚀 DECELERATION RELEASE ENGINE CONSTANTS ─────────────────────────────
 // 1. Minimum angular speed (in rad/sec) required to register an active swing. Default: 5.0 rad/sec (~286 deg/sec)
 export const DECEL_MIN_SWING_SPEED: number = 5.0;
-export const DECEL_DROP_RATIO: number = 0.3;
+export const DECEL_DROP_RATIO: number = 0.6;
 
 // ── ⏱️ FRAME RANGE RELEASE WINDOW CONSTANTS ─────────────────────────────
 // Minimum allowed release frame in 71 total jump frame scale (Default: 63.0)
@@ -167,6 +167,7 @@ export class Bowler {
     private lastPoseSnapshot: KeyframePose | null = null;
 
     public maxObservedOmegaRad: number = 0.0;
+    public postReleaseDelaySec: number = 0.0;
 
     public startRunning(): void {     
         this.isRunning = true;
@@ -177,6 +178,7 @@ export class Bowler {
         this.hasReleasedBall = false;
         this.targetIntensity = 1.0;
         this.maxObservedOmegaRad = 0.0;
+        this.postReleaseDelaySec = 0.0;
     }
 
     public triggerPreJump(): void {
@@ -224,6 +226,7 @@ export class Bowler {
         this.targetIntensity = 0.0;
         this.runIntensity = 0.0;
         this.maxObservedOmegaRad = 0.0;
+        this.postReleaseDelaySec = 0.0;
         this.resetProceduralUpperBodyState();
         if (this.currentHipPosition.x < 2000) {
             this.currentHipPosition.x = BOWLER_START_X; // Far right starting position for runup
@@ -282,12 +285,12 @@ export class Bowler {
     // 🎛️ Dedicated Tuning Constants (Angle & Radius Resistance for Jump & Gathering phases)
     public JOYSTICK_ANGLE_STIFFNESS: number = 1000.0;
     public JOYSTICK_ANGLE_DAMPING: number = 100.0;
-    public JOYSTICK_RADIUS_STIFFNESS: number = 1000.0;
+    public JOYSTICK_RADIUS_STIFFNESS: number = 100.0;
     public JOYSTICK_RADIUS_DAMPING: number = 100.0;
 
     public GATHERING_ANGLE_STIFFNESS: number = 1000.0;
     public GATHERING_ANGLE_DAMPING: number = 100.0;
-    public GATHERING_RADIUS_STIFFNESS: number = 1000.0;
+    public GATHERING_RADIUS_STIFFNESS: number = 100.0;
     public GATHERING_RADIUS_DAMPING: number = 100.0;  
 
     public resetProceduralUpperBodyState(): void {  
