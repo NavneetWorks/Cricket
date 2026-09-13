@@ -144,8 +144,8 @@ export default class Renderer{
             this.ctx.fillText("JUMP POINT", markX, groundY - 54);
             this.ctx.restore();
 
-            // 🟢 Green Vertical Line (300px Left of startJumpX, Height 500px from Ground)
-            const greenLineX = markX - 300;
+            // 🟢 Green Vertical Line (Dynamic Creeping Line from startJumpX, Height 500px from Ground)
+            const greenLineX = this.bowler.getGreenLineX();
             this.ctx.save();
             this.ctx.strokeStyle = "#22c55e"; // Vibrant Green
             this.ctx.lineWidth = 3;
@@ -162,11 +162,11 @@ export default class Renderer{
             this.ctx.arc(greenLineX, groundY - 500, 6, 0, Math.PI * 2);
             this.ctx.fill();
 
-            // Green text label
+            // Green text label showing live dynamic offset distance
             this.ctx.font = "bold 11px Inter, Arial, sans-serif";
             this.ctx.fillStyle = "#22c55e";
             this.ctx.textAlign = "center";
-            this.ctx.fillText("300px MARK", greenLineX, groundY - 510);
+            this.ctx.fillText(`${Math.round(this.bowler.currentGreenLineOffset)}px MARK`, greenLineX, groundY - 510);
             this.ctx.restore();
         }
 
@@ -179,7 +179,6 @@ export default class Renderer{
 
         // 🕹️ Draw Bottom-Right Bowling Arm Joystick & Top Screen Debug HUD in NEW_BOWLER mode:
         if (this.gameMode === 'NEW_BOWLER') {
-            this.joystick.updatePosition(CANVAS_WIDTH, CANVAS_HEIGHT);
             this.joystick.setSyncedKnobPos(this.bowler.smoothJoystickAngleRad, this.bowler.smoothJoystickRadiusRatio);
             this.joystick.draw(this.ctx);
 

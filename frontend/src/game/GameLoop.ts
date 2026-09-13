@@ -522,6 +522,7 @@ private getProjectileStateWithBounce(
             this.renderer.wicket.checkHit(this.ball, batHitResult.hit, batHitResult.hitSubStep);
         } else if (this.renderer.gameMode === 'NEW_BOWLER') {
             const bowler = this.renderer.bowler;
+            bowler.updateGreenLineCreep(dt);
 
             // 🏃 A/D or Arrow keys move bowler character Left / Right when idle
             if (!bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {
@@ -679,21 +680,45 @@ private getProjectileStateWithBounce(
                 bowler.overrideLeftArmWithIK(this.currentArmAngleRad, armReach);
             }
 
-            // 🟢 10x SUB-STEPPING BALL RELEASE & FLIGHT ENGINE (600 Hz Physics Rate)
+            // 🟢 10x RELATIVE SUB-STEPPING BALL RELEASE & FLIGHT ENGINE (600 Hz Physics Rate)
             if (!bowler.isBallReleased && bowler.startJumpX) {
-                const greenLineX = bowler.startJumpX - 300;
-                const prevX = this.ball.prevPos.x > 0 ? this.ball.prevPos.x : bowler.leftWrist.x;
-                const currX = bowler.leftWrist.x;
+                const prevGreenLineX = bowler.getPrevGreenLineX();
+                const currGreenLineX = bowler.getGreenLineX();
 
-                // 🎯 Check if Ball's wrist position crosses the Green Line from Right to Left
-                if (prevX > greenLineX && currX <= greenLineX) {
-                    // Exact 10x Sub-stepping Time Fraction Calculation
-                    const f = Math.min(1.0, Math.max(0.0, (prevX - greenLineX) / Math.max(1, prevX - currX)));
-                    const prevY = this.ball.prevPos.y > 0 ? this.ball.prevPos.y : bowler.leftWrist.y;
-                    const currY = bowler.leftWrist.y;
+                const prevWristX = this.ball.prevPos.x > 0 ? this.ball.prevPos.x : bowler.leftWrist.x;
+                const currWristX = bowler.leftWrist.x;
+                const prevWristY = this.ball.prevPos.y > 0 ? this.ball.prevPos.y : bowler.leftWrist.y;
+                const currWristY = bowler.leftWrist.y;
 
-                    const releaseX = greenLineX;
-                    const releaseY = prevY + f * (currY - prevY);
+                let releaseTriggered = false;
+                let releaseFraction = 0;
+
+                const SUB_STEPS = 10;
+                for (let k = 1; k <= SUB_STEPS; k++) {
+                    const tPrev = (k - 1) / SUB_STEPS;
+                    const tCurr = k / SUB_STEPS;
+
+                    const subPrevWristX = prevWristX + tPrev * (currWristX - prevWristX);
+                    const subPrevLineX = prevGreenLineX + tPrev * (currGreenLineX - prevGreenLineX);
+                    const subPrevD = subPrevWristX - subPrevLineX;
+
+                    const subCurrWristX = prevWristX + tCurr * (currWristX - prevWristX);
+                    const subCurrLineX = prevGreenLineX + tCurr * (currGreenLineX - prevGreenLineX);
+                    const subCurrD = subCurrWristX - subCurrLineX;
+
+                    // 🎯 Check if relative distance D(t) = WristX - LineX crosses zero from Right (>0) to Left (<=0)
+                    if (subPrevD > 0 && subCurrD <= 0) {
+                        const microFrac = Math.min(1.0, Math.max(0.0, subPrevD / Math.max(0.001, subPrevD - subCurrD)));
+                        releaseFraction = (k - 1 + microFrac) / SUB_STEPS;
+                        releaseTriggered = true;
+                        break;
+                    }
+                }
+
+                if (releaseTriggered) {
+                    const f = releaseFraction;
+                    const releaseX = prevGreenLineX + f * (currGreenLineX - prevGreenLineX);
+                    const releaseY = prevWristY + f * (currWristY - prevWristY);
 
                     // 📐 Instantaneous Tangential Velocity Component (Raw Derivative without Math.abs)
                     const omega = bowler.joystickAngularVelRad; // Signed rad/sec (+ or -)
@@ -704,7 +729,7 @@ private getProjectileStateWithBounce(
 
                     // Exact 2D Circular Tangential Velocity Derivative with Wrist Motion Continuity
                     const vArmX = -armR * Math.sin(theta) * omega;
-                    const vWristY = (currY - prevY) / dt;
+                    const vWristY = (currWristY - prevWristY) / dt;
                     const polarVArmY = armR * Math.cos(theta) * omega;
                     // Blend polar arm Y speed with actual physical wrist Y delta velocity for 100% smooth trajectory continuity
                     const vArmY = Math.abs(omega) > 0.5 ? (polarVArmY * 0.5 + vWristY * 0.5) : vWristY;

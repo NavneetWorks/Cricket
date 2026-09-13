@@ -1,8 +1,10 @@
+import { CANVAS_WIDTH, CANVAS_HEIGHT } from "./constants";
+
 export default class Joystick {
-    public centerX: number = 0;
-    public centerY: number = 0;
-    public baseRadius: number = 120;
-    public knobRadius: number = 20;
+    public centerX: number = CANVAS_WIDTH - 220;
+    public centerY: number = CANVAS_HEIGHT - 150;
+    public baseRadius: number = 100;
+    public knobRadius: number = 10;
 
     public isActive: boolean = false;
     public knobX: number = 0;
@@ -25,10 +27,10 @@ export default class Joystick {
         window.addEventListener("mouseup", (e: MouseEvent) => this.handleMouseUp(e));
     }
 
-    public updatePosition(canvasWidth: number, canvasHeight: number): void {
-        this.centerX = canvasWidth - 200;  
-        this.centerY = canvasHeight - 150;        
-    }
+    // public updatePosition(canvasWidth: number, canvasHeight: number): void {
+    //     this.centerX = canvasWidth - 200;  
+    //     this.centerY = canvasHeight - 150;        
+    // }
 
     public setSyncedKnobPos(smoothAngleRad: number, smoothRadiusRatio: number): void {
         this.knobX = this.centerX + Math.cos(smoothAngleRad) * (smoothRadiusRatio * this.baseRadius);
