@@ -6,7 +6,7 @@ import Renderer from "./Rederer";
 import Input from "./Input";
 import NetworkManager from "../network/NetworkManager";
 import { SoundManager } from "../audio/SoundManager";
-import {GRAVITY,RESTITUTION_GROUND, CANVAS_HEIGHT, CANVAS_WIDTH, GROUND_HEIGHT ,k_values, SERVER_CONFIG, BAT_SNAPSHOT_QUEUE_SIZE, BAT_INTERP_BUFFER_TICKS, BAT_MAX_EXTRAPOLATION_TICKS, BOWLER_START_X } from "./constants";
+import {GRAVITY,RESTITUTION_GROUND,BOWLER_WICKET_X, CANVAS_HEIGHT, CANVAS_WIDTH, GROUND_HEIGHT ,k_values, SERVER_CONFIG, BAT_SNAPSHOT_QUEUE_SIZE, BAT_INTERP_BUFFER_TICKS, BAT_MAX_EXTRAPOLATION_TICKS, BOWLER_START_X } from "./constants";
 
 // Ek remote bat snapshot: batter ke client par kya pose tha, kis tick par
 interface BatSnapshot {
@@ -22,6 +22,8 @@ export default class GameLoop{
     public renderer:Renderer;
     private input: Input;
     private lastFrameTime = 0;
+    private preJumpDistance = 1000;
+
 
     public isOnlineMode: boolean = false;
     public network: NetworkManager | null = null;
@@ -82,6 +84,7 @@ export default class GameLoop{
                 this.networkTickNumber = 0;
                 this.hasSentReleasePacket = false;
 
+                this.renderer.bowler.resetToIdle();
                 if (role !== 'BATSMAN' && this.network && this.network.isConnected) {
                     this.network.sendBowlerPosition(0, this.renderer.bowler.currentHipPosition.x);
                 }
@@ -161,18 +164,16 @@ export default class GameLoop{
                 };
             }
             this.network.onOpponentBowlerPosition = (tick, hipX) => {
+                console.log("📩 Batter Received Bowler Reset Position:", hipX);
+
                 const bowler = this.renderer.bowler;
-                bowler.currentHipPosition.x = hipX;
-                bowler.preJumpStartX = hipX;
-                bowler.setInitialRunPose();
+                bowler.resetToIdle();
             };
             this.network.onOpponentBowlerStartRun = (tick) => {
                 const bowler = this.renderer.bowler;
-                
+                 console.log("🟢 Opponent Bowler Start Run Received!");
                 // 1. Reset bowler & ball to fresh runup state
-                bowler.resetToIdle();
-                const startX = bowler.preJumpStartX > 0 ? bowler.preJumpStartX : BOWLER_START_X;
-                bowler.currentHipPosition.x = startX;
+               //bowler.resetToIdle();
                 
                 this.ball.isHeldInHand = true;
                 this.ball.isActive = true;
@@ -182,18 +183,25 @@ export default class GameLoop{
             };
             this.network.onOpponentBowlerStartGather = (tick, clickX) => {
                 const bowler = this.renderer.bowler;
-                const minBoundaryX = bowler.DEFAULT_START_JUMP_X;
-                const gatheringDist = Math.max(200, (clickX - minBoundaryX) * 0.8);
-                const targetX = Math.max(minBoundaryX, clickX - gatheringDist);
-                bowler.startJumpX = targetX;
+                const targetX = clickX - this.preJumpDistance;
+                bowler.startJumpX = Math.max(BOWLER_WICKET_X, targetX);
                 bowler.gatheringStartX = clickX;
                 bowler.gatheringTargetX = bowler.startJumpX;
                 bowler.isGatheringArmActive = true;
                 bowler.gatheringAngleTraveledDeg = 0.0;
                 bowler.accumulatedJoystickAngleDeg = 0.0;
+                bowler.ballTrailPoints = [];
             };
             this.network.onOpponentBowlerJoystick = (tick, smoothAngleRad, smoothRadiusRatio) => {
                 const bowler = this.renderer.bowler;
+                if (bowler.lastJoystickAngleRad !== null) {
+                    let deltaRad = smoothAngleRad - bowler.lastJoystickAngleRad;
+                    while (deltaRad > Math.PI) deltaRad -= Math.PI * 2;
+                    while (deltaRad < -Math.PI) deltaRad += Math.PI * 2;
+                    let deltaDeg = (deltaRad * 180) / Math.PI;
+                    bowler.accumulatedJoystickAngleDeg += Math.abs(deltaDeg);
+                }
+                bowler.lastJoystickAngleRad = smoothAngleRad;
                 bowler.smoothJoystickAngleRad = smoothAngleRad;
                 bowler.smoothJoystickRadiusRatio = smoothRadiusRatio;
             };
@@ -234,18 +242,17 @@ export default class GameLoop{
             if (!this.isOnlineMode && this.renderer.gameMode === 'BATTING') {
                 startBowlerDelivery();
             } else if (this.renderer.gameMode === 'NEW_BOWLER') {
-                // Left click triggers gathering stance dynamically towards the crease boundary
+                // Left click sets startJumpX preJumpDistance (1000px) to the left of current bowler position!
                 if (bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {
                     const clickX = bowler.currentHipPosition.x;
-                    const minBoundaryX = bowler.DEFAULT_START_JUMP_X;
-                    const gatheringDist = Math.max(200, (clickX - minBoundaryX) * 0.8);
-                    const targetX = Math.max(minBoundaryX, clickX - gatheringDist);
-                    bowler.startJumpX = targetX;
+                    const targetX = clickX - this.preJumpDistance;
+                    bowler.startJumpX = Math.max(BOWLER_WICKET_X, targetX);
                     bowler.gatheringStartX = clickX;
                     bowler.gatheringTargetX = bowler.startJumpX;
                     bowler.isGatheringArmActive = true;
                     bowler.gatheringAngleTraveledDeg = 0.0;
                     bowler.accumulatedJoystickAngleDeg = 0.0;
+                    bowler.ballTrailPoints = [];
 
                     // 📡 Send Left-Click Gathering Event to Opponent!
                     if (this.isOnlineMode && this.network && this.network.isConnected) {
@@ -269,6 +276,7 @@ export default class GameLoop{
                         bowler.currentHipPosition.x = startX;
                         bowler.startRunning();
                         if (this.isOnlineMode && this.network && this.network.isConnected) {
+                        console.log("🟢 Opponent Bowler Start Run Sent!");
                         this.network.sendBowlerStartRun(this.networkTickNumber);
                     }
                         this.ball.isHeldInHand = true;
@@ -300,6 +308,7 @@ export default class GameLoop{
                         this.renderer.joystick.reset();
                     }
                     if (this.isOnlineMode && this.network && this.network.isConnected) {
+                         console.log("🚀 'R' Key Pressed: Sending Bowler Position Reset:", bowler.currentHipPosition.x);
                         this.network.sendBowlerPosition(this.networkTickNumber, bowler.currentHipPosition.x);
                     }
 
@@ -490,7 +499,7 @@ private getProjectileStateWithBounce(
 
         if (this.renderer.gameMode === 'BATTING') {
             const currentCommand = this.input.getHistory().peek();
-            if(currentCommand === null){
+            if(!this.isOnlineMode && currentCommand === null){
                 console.log("No mouse history available to update bat.");
                 return;
             }
@@ -498,7 +507,64 @@ private getProjectileStateWithBounce(
 
             // 🏃 Bowler & Ball Attachment / Release logic in BATTING Mode
             const bowler = this.renderer.bowler;
-            bowler.update(dt);
+            if (bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning && !bowler.isPreJumpFrozen && !bowler.isCycleCompleted) {
+                bowler.update(dt);
+            }
+            if (bowler.isExecutingJump || bowler.isPreJumpTransitioning) {
+    const totalJumpFrames = Bowler.PRE_DELIVERY_JUMP.length;
+    const totalArmPathDeg = 370.6;
+    const progressRatio = Math.min(1.0, Math.max(0.0, bowler.accumulatedJoystickAngleDeg / totalArmPathDeg));
+    const decimalFrameIndex = progressRatio * (totalJumpFrames - 1);
+    const interpolatedPose = bowler.interpolatePoseAtDecimalFrame(decimalFrameIndex);
+
+    const currDisplacementX = interpolatedPose.displacementX ?? -20.0;
+    const manualStepX = Math.max(0, -(currDisplacementX - bowler.lastInterpolatedDisplacementX));
+    bowler.lastInterpolatedDisplacementX = currDisplacementX;
+
+    const fadeLimitFrames = totalJumpFrames / 2.5;
+    const decayRatio = Math.max(0, 1.0 - (decimalFrameIndex / fadeLimitFrames));
+    const transferFactor = bowler.momentumTransferFactor ?? 0.5;
+    const runupStepX = (bowler.initialRunupSpeedX * transferFactor) * dt * decayRatio;
+
+    const effectiveStepX = Math.max(runupStepX, manualStepX);
+    bowler.accumulatedDisplacementX += effectiveStepX;
+
+    const effectiveHipX = bowler.preJumpStartX - bowler.accumulatedDisplacementX;
+    bowler.currentHipPosition.x = effectiveHipX;
+    bowler.applyKeyframePose(interpolatedPose, effectiveHipX);
+
+    const isFollowThroughFinished = bowler.isBallReleased && bowler.postReleaseDelaySec <= 0;
+    if (progressRatio >= 0.99 || isFollowThroughFinished) {
+        bowler.isCycleCompleted = true;
+    }
+} else if (bowler.isCycleCompleted) {
+    const totalJumpFrames = Bowler.PRE_DELIVERY_JUMP.length;
+    const lastPose = Bowler.PRE_DELIVERY_JUMP[totalJumpFrames - 1];
+    const effectiveHipX = bowler.preJumpStartX - bowler.accumulatedDisplacementX;
+    bowler.currentHipPosition.x = effectiveHipX;
+    bowler.applyKeyframePose(lastPose, effectiveHipX);
+    bowler.isRunning = false;
+    bowler.isExecutingJump = false;
+    bowler.isPreJumpTransitioning = false;
+    bowler.isPreJumpFrozen = false;
+}else if (bowler.isGatheringArmActive) {
+    // 🟢 Runup legs natural chalte rahenge, sirf Bowling Arm Joystick Angle se rotate hoga:
+    const totalArmLen = bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
+    const minReach = Math.abs(bowler.FRONT_UPPER_ARM - bowler.FRONT_LOWER_ARM) + 5;
+    const armReach = minReach + (totalArmLen - minReach - 1.0) * bowler.smoothJoystickRadiusRatio;
+    bowler.overrideLeftArmWithIK(bowler.smoothJoystickAngleRad, armReach);
+}
+            // 🎯 Batter Screen par Red Line (startJumpX) reach hote hi Jump Stance Physics me switch karo!
+            if (bowler.isRunning && bowler.startJumpX && bowler.currentHipPosition.x <= bowler.startJumpX && !bowler.isPreJumpTransitioning && !bowler.isExecutingJump) {
+                bowler.isGatheringArmActive = false;
+                bowler.preJumpStartX = bowler.currentHipPosition.x;
+                bowler.initialRunupSpeedX = bowler.lastRunupSpeedX > 0 ? bowler.lastRunupSpeedX : 800.0;
+                bowler.lastInterpolatedDisplacementX = Bowler.PRE_DELIVERY_JUMP[0].displacementX ?? -20.0;
+                bowler.accumulatedDisplacementX = Math.abs(bowler.lastInterpolatedDisplacementX);
+                bowler.isExecutingJump = true;
+                bowler.triggerPreJump(); // 👈 Switch to Gathering Stance & Jump Physics!
+            }
+            
 
             if (this.ball.isHeldInHand && (bowler.isRunning || bowler.isPreJumpTransitioning || bowler.isExecutingJump)) {
                 this.ball.pos.x = bowler.leftWrist.x;
@@ -508,6 +574,7 @@ private getProjectileStateWithBounce(
                 this.ball.isActive = true;
 
                 // Auto pre-jump trigger near crease (x <= 750)
+               if(!this.isOnlineMode){ 
                 if (bowler.isRunning && bowler.currentHipPosition.x <= 1.2*CANVAS_WIDTH && !bowler.isPreJumpTransitioning && !bowler.isExecutingJump) {
                     bowler.triggerPreJump();
                 }
@@ -524,7 +591,7 @@ private getProjectileStateWithBounce(
                         this.currentDeliverySpeed,
                         this.currentDeliveryAngle
                     );
-                }
+                }}
             }
 
             this.ball.update(dt);
@@ -716,8 +783,11 @@ private getProjectileStateWithBounce(
                 const totalArmPathDeg = 370.6;
 
                 // 🛑 Clamp at Last Frame (Frame 71): Stop follow-through rotation at end of jump animation
-                if (bowler.accumulatedJoystickAngleDeg >= totalArmPathDeg) {
-                    bowler.accumulatedJoystickAngleDeg = totalArmPathDeg;
+             // 🛑 Clamp at Last Frame OR Finish when Ball Released and Follow-Through Slows Down:
+                const isFollowThroughFinished = bowler.isBallReleased && bowler.postReleaseDelaySec <= 0 && Math.abs(bowler.joystickAngularVelRad) < 0.1;
+
+                if (bowler.accumulatedJoystickAngleDeg >= totalArmPathDeg || isFollowThroughFinished) {
+                    bowler.accumulatedJoystickAngleDeg = Math.min(totalArmPathDeg, bowler.accumulatedJoystickAngleDeg);
                     bowler.joystickAngularVelRad = 0.0;
                     bowler.isCycleCompleted = true;
                 }
@@ -760,6 +830,11 @@ private getProjectileStateWithBounce(
                     const effectiveHipX = bowler.preJumpStartX - bowler.accumulatedDisplacementX;
                     bowler.currentHipPosition.x = effectiveHipX;
                     bowler.applyKeyframePose(lastPose, effectiveHipX);
+                    bowler.isRunning = false;
+                    bowler.isExecutingJump = false;
+                    bowler.isPreJumpTransitioning = false;
+                    bowler.isPreJumpFrozen = false;
+                    
                 } else {
                     bowler.applyKeyframePose(interpolatedPose, bowler.currentHipPosition.x);
                 }

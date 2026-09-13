@@ -13,8 +13,11 @@ import {
     GROUND_HEIGHT,
     GRAVITY,
     AIR_DRAG_COEFF,
+    WICKET_X,
     PITCH_LENGTH,
-    BOUNDARY_DISTANCE
+    BOWLER_WICKET_X,
+    BOUNDARY_DISTANCE,
+    BOWLER_START_X
 } from "./constants";
 
 export default class Renderer{
@@ -41,7 +44,7 @@ export default class Renderer{
         this.bat = bat;
         this.input = input;
         this.ball = ball;
-        this.bowler = new Bowler(1500);
+        this.bowler = new Bowler(BOWLER_START_X);
         this.wicket = new Wicket(this.bat);
         this.bowlingArea = new BowlingArea();
         this.joystick = new Joystick();
@@ -64,11 +67,12 @@ export default class Renderer{
             
             // 🔒 During Manual Jump Phase: Lock camera at preJumpStartX so ground stops scrolling & character glides forward across the screen!
             const bowler = this.bowler;
-            if (bowler.isExecutingJump || bowler.isPreJumpTransitioning || bowler.isPreJumpFrozen || bowler.isCycleCompleted) {
+           if ((bowler.isExecutingJump || bowler.isPreJumpTransitioning || bowler.isPreJumpFrozen) && !bowler.isCycleCompleted) {
                 const preJumpX = bowler.preJumpStartX > 0 ? bowler.preJumpStartX : bowler.currentHipPosition.x;
                 const preJumpCamX = preJumpX - (CANVAS_WIDTH - rightOffset);
                 this.cameraX = Math.max(0, preJumpCamX);
-            } else {
+            }
+            else {
                 const targetCamX = bowler.currentHipPosition.x - (CANVAS_WIDTH - rightOffset);
                 this.cameraX = Math.max(0, targetCamX);
             }
@@ -108,9 +112,9 @@ export default class Renderer{
             this.bowlingArea.draw(this.ctx);
         }
 
-        // 🏏 Bowler End Wicket (Drawn at wicketWorldX + PITCH_LENGTH)
-        const wicketWorldX = this.wicket ? this.wicket.FIXED_X : 150;
-        this.wicket.drawAt(this.ctx, wicketWorldX + PITCH_LENGTH);
+        // 🏏 Bowler End Wicket (Drawn at BOWLER_WICKET_X)
+        const wicketWorldX = this.wicket ? this.wicket.FIXED_X : WICKET_X;
+        this.wicket.drawAt(this.ctx, BOWLER_WICKET_X);
 
         // 🏃 Bowler Skeleton draw in NEW_BOWLER, BOWLING, BATTING, and ANIMATION_PLAY modes:
         if (this.gameMode === 'NEW_BOWLER' || this.gameMode === 'BOWLING' || this.gameMode === 'BATTING' || this.gameMode === 'ANIMATION_PLAY') {
@@ -118,7 +122,7 @@ export default class Renderer{
         }
 
         // 📍 Draw Red Jump Indicator Line on Ground in NEW_BOWLER mode
-        if (this.gameMode === 'NEW_BOWLER' && this.bowler.startJumpX) {
+        if ((this.gameMode === 'NEW_BOWLER' || this.gameMode === 'BATTING') && this.bowler.startJumpX) {
             const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
             const markX = this.bowler.startJumpX;
 
@@ -556,8 +560,8 @@ export default class Renderer{
         this.ctx.lineTo(boxX + boxW, miniGroundY);
         this.ctx.stroke();
 
-        // 4. TINY VERTICAL WICKET LINE (AT WORLD X = 150) - Batsman End Wicket
-        const wicketWorldX = this.wicket ? this.wicket.FIXED_X : 150;
+        // 4. TINY VERTICAL WICKET LINE (AT WORLD X = WICKET_X) - Batsman End Wicket
+        const wicketWorldX = this.wicket ? this.wicket.FIXED_X : WICKET_X;
         const miniWicketX = boxX + (wicketWorldX - minWorldX) * scaleX;
         this.ctx.strokeStyle = "#38bdf8"; // Bright cyan wicket line
         this.ctx.lineWidth = 2.0;
@@ -566,8 +570,8 @@ export default class Renderer{
         this.ctx.lineTo(miniWicketX, miniGroundY - 14); // 14px height
         this.ctx.stroke();
 
-        // 4b. TINY VERTICAL BOWLER WICKET LINE (AT WORLD X = wicketWorldX + PITCH_LENGTH)
-        const bowlerWicketX = wicketWorldX + PITCH_LENGTH;
+        // 4b. TINY VERTICAL BOWLER WICKET LINE (AT WORLD X = BOWLER_WICKET_X)
+        const bowlerWicketX = BOWLER_WICKET_X;
         const miniBowlerWicketX = boxX + (bowlerWicketX - minWorldX) * scaleX;
         this.ctx.strokeStyle = "#38bdf8"; // Bright cyan wicket line
         this.ctx.lineWidth = 2.0;

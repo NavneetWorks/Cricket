@@ -37,9 +37,13 @@ class RTCManager{
                 sendSignalingMessage(msg.dump());
             });
             peerConnection->onDataChannel([this](std::shared_ptr<rtc::DataChannel> dc) {
+                std::string label = dc->label();
                 std::cout << "🚀 [WebRTC] UDP DATA CHANNEL OPEN for Player " << id << "!\n";
-                dataChannel = dc;
-            
+            if (label == "gameStream") {
+                    unreliableChannel = dc;
+                } else {
+                    reliableChannel = dc;
+                }            
                 // Jab UDP se message aayega
                  dc->onMessage([this](std::variant<rtc::binary, rtc::string> data) {
                     if (std::holds_alternative<rtc::binary>(data)) {
@@ -63,14 +67,27 @@ class RTCManager{
             if (peerConnection) peerConnection->close();
         }
         void sendUDP(const rtc::binary& data) {
-            if (dataChannel && dataChannel->isOpen()) {
-                dataChannel->send(data);
+            if (data.empty()) return;
+            uint8_t opcode = static_cast<uint8_t>(data[0]);
+            // 0x02 = Bat Swing Stream, 0x09 = Joystick Stream (Unreliable 60Hz stream)
+            bool isStreamPacket = (opcode == 0x02 || opcode == 0x09);
+            if (isStreamPacket) {
+                // 🌊 Unreliable 60Hz Telemetry -> Only over Unreliable Channel
+                if (unreliableChannel && unreliableChannel->isOpen()) {
+                    unreliableChannel->send(data);
+                }
+            } else {
+                // 🎯 Critical Reliable Events -> Only over Reliable Channel
+                if (reliableChannel && reliableChannel->isOpen()) {
+                    reliableChannel->send(data);
+                }
             }
+
         }
         int id;
         std::shared_ptr<rtc::PeerConnection> peerConnection;
         std::function<void(std::string)> sendSignalingMessage;
         PacketCallback onPacketForward;
-        std::shared_ptr<rtc::DataChannel> dataChannel;
-
+        std::shared_ptr<rtc::DataChannel> reliableChannel;
+        std::shared_ptr<rtc::DataChannel> unreliableChannel;
 };

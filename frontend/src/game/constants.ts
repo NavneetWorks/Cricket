@@ -80,7 +80,9 @@ export const RESTITUTION_GROUND = .72; // Zameen aur Ball ki takkar ka bounce (7
 export const FRICTION_GROUND = 0.96;   // Zameen aur Ball ki ragad (4% speed loss per bounce/step)
 export const AIR_DRAG_COEFF = 0.00018; // Quadratic Aerodynamic Air Drag Constant
 
-export const PITCH_LENGTH = CANVAS_WIDTH-120;       // Pitch length in pixels from Batsman Wicket (150px + 1400px = 1550px Bowler Wicket)
+export const WICKET_X = 150;                         // Batsman End Wicket X (150px)
+export const PITCH_LENGTH = CANVAS_WIDTH-180;       // Pitch length in pixels from Batsman Wicket (150px + 1400px = 1550px Bowler Wicket)
+export const BOWLER_WICKET_X = WICKET_X + PITCH_LENGTH; // Bowler End Wicket X (1550px)
 export const BOUNDARY_DISTANCE = PITCH_LENGTH*3.5;  // Boundary distance in pixels from Batsman Wicket (4x Canvas Width = 7200px)
 
 export const TARGET_ANGLE_THRESHOLD = 0.02;

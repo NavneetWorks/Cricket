@@ -1,4 +1,5 @@
-import { CANVAS_WIDTH, CANVAS_HEIGHT, GROUND_HEIGHT, PLAYER_LENGTH_FACTOR, BOWLER_START_X } from "../game/constants";
+import { CANVAS_WIDTH, CANVAS_HEIGHT, GROUND_HEIGHT, PLAYER_LENGTH_FACTOR, BOWLER_START_X , BOWLER_WICKET_X 
+} from "../game/constants";
 
 // ── 🚀 DECELERATION RELEASE ENGINE CONSTANTS ─────────────────────────────
 // 1. Minimum angular speed (in rad/sec) required to register an active swing. Default: 5.0 rad/sec (~286 deg/sec)
@@ -231,7 +232,7 @@ export class Bowler {
         if (this.currentHipPosition.x < 2000) {
             this.currentHipPosition.x = BOWLER_START_X; // Far right starting position for runup
         }
-        this.startJumpX = 750.0;
+        this.startJumpX = BOWLER_WICKET_X;
         this.gatheringStartX = null;
         this.gatheringTargetX = null;
         this.isGatheringArmActive = false;
@@ -9833,11 +9834,11 @@ export class Bowler {
         this.currentHipPosition.x -= horizontalSpeed * dt;
 
         // Reset when off screen
-        if (this.currentHipPosition.x < 100) {
-            this.currentHipPosition.x = 1100;
-            this.stridePhase = 0;
+       // 🟢 Naya Fix: Screen se bahar jate hi bowler STOP ho jaye
+        if (this.currentHipPosition.x <= 0) {
+            this.isRunning = false;
+            this.setInitialRunPose();
         }
-
         // Catmull-Rom Keyframe Interpolation across 4 points
         const totalFrames = Bowler.STATIC_FRAMES.length;
         const frameFloat = this.stridePhase * totalFrames;

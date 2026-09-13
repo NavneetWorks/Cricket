@@ -44,7 +44,7 @@ function GameCanvas({ isOnline = false,onBackToHome }: GameCanvasProps) {
     const [debugFilterText, setDebugFilterText] = useState<string>("3, 6, 7");
     const [debugSource, setDebugSource] = useState<'RUNUP' | 'JUMP'>('RUNUP');
 
-    const handleModeSwitch = (mode: 'BATTING' | 'BOWLING' | 'NEW_BOWLER' | 'DEBUG_13_FRAMES') => {
+    const handleModeSwitch = (mode: 'BATTING' | 'BOWLING' | 'NEW_BOWLER' | 'DEBUG_13_FRAMES' | 'ANIMATION_PLAY') => {
         setGameMode(mode);
         if (gameLoopRef.current) {
             (gameLoopRef.current as any).setGameMode(mode);

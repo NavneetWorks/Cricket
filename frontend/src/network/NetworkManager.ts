@@ -336,10 +336,12 @@ export default class NetWorkManager{
             }
                 }
         public sendBowlerStartRun(tick: number) {
+            console.log("🟢 1.Sending Bowler Start Run Packet to Opponent readystate : ",this.reliableChannel?.readyState);
             if (this.reliableChannel && this.reliableChannel.readyState === "open") {
                 const buffer = serializeBowlerStartRun(this.myPlayerId, tick);
+                console.log("🟢2 . Sending Bowler Start Run Packet to Opponent");
                 this.reliableChannel.send(buffer);
-            }
+            }    
         }
         public sendBowlerStartGather(tick: number, clickX: number) {
             if (this.reliableChannel && this.reliableChannel.readyState === "open") {
