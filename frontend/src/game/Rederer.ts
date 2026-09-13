@@ -217,7 +217,7 @@ export default class Renderer{
 
             // 🚀 Release Speed Debug HUD Pill (Positioned right below at Y = 110)
             if (bowler.lastReleaseSpeed !== null) {
-                const relBadgeW = 540;
+                const relBadgeW = 680;
                 const relBadgeH = 38;
                 const relBadgeX = CANVAS_WIDTH - relBadgeW - 20;
                 const relBadgeY = 110;
@@ -232,17 +232,19 @@ export default class Renderer{
                 this.ctx.lineWidth = 1.5;
                 this.ctx.stroke();
 
-                this.ctx.font = "bold 13px Inter, Arial, sans-serif";
+                this.ctx.font = "bold 12.5px Inter, Arial, sans-serif";
                 this.ctx.fillStyle = "#38bdf8"; // Vibrant Cyan text
                 this.ctx.textAlign = "center";
                 this.ctx.textBaseline = "middle";
 
                 const vx = bowler.lastReleaseVx?.toFixed(0) ?? "0";
                 const vy = bowler.lastReleaseVy?.toFixed(0) ?? "0";
+                const vBodyX = bowler.lastReleaseVBodyX?.toFixed(0) ?? "0";
+                const vArmX = bowler.lastReleaseVArmX?.toFixed(0) ?? "0";
                 const speed = bowler.lastReleaseSpeed?.toFixed(0) ?? "0";
                 const angle = bowler.lastReleaseAngleDeg?.toFixed(1) ?? "0";
 
-                const relText = `🚀 RELEASE SPEED: ${speed} px/s  |  Vx: ${vx} px/s  |  Vy: ${vy} px/s  |  Angle: ${angle}°`;
+                const relText = `🚀 RELEASE: ${speed} px/s | Vx = ${vBodyX} (runup) + ${vArmX} (arm) = ${vx} px/s | Vy: ${vy} px/s | Angle: ${angle}°`;
                 this.ctx.fillText(relText, relBadgeX + relBadgeW / 2, relBadgeY + relBadgeH / 2);
                 this.ctx.restore();
             }

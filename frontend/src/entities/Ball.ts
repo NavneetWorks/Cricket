@@ -98,45 +98,72 @@ export default class Ball {
         ctx.restore();
     }
 
-    // Har frame mein ball ki physics (Gravity aur Bounce) calculate karna
+    // Har frame mein ball ki physics with 10x Sub-stepping CCD (Continuous Collision Detection)
     public update(dt: number): void {
         if (!this.isActive || this.isStuck || this.isHeldInHand) return;
 
         this.prevPos.x = this.pos.x;
         this.prevPos.y = this.pos.y;
 
-        // 1. Gravity apply karna (Neeche ki taraf speed badhana)
-        this.vel.y += GRAVITY * dt;
-
-        // 2. Velocity ke hisaab se Position change karna
-        this.pos.x += this.vel.x * dt;
-        this.pos.y += this.vel.y * dt;
-
-        // Calculate rotation based on velocity (spin effect)
-        this.rotation += (this.vel.x * dt) / this.radius;
-
-        // 3. Ground Collision (Zameen se takrana)
         const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
-        
-        if (this.pos.y + this.radius >= groundY) {
-            // Play hard pitch bounce sound ONLY on real downward impact (>120px/s)
-        
-                SoundManager.getInstance().playPitchBounce(this.vel.y, this.pos.x);
-        
+        const targetY = groundY - this.radius;
 
-            // Ball ko zameen ke andar ghusne se rokna
-            this.pos.y = groundY - this.radius;
+        // 🟢 10x Sub-stepping Physics Engine (600 Hz Sampling)
+        const SUB_STEPS = 10;
+        const subDt = dt / SUB_STEPS;
 
-            // Y velocity ko ulta (reverse) karna aur bounce (restitution) lagana
-            this.vel.y = -this.vel.y * RESTITUTION_GROUND;
+        for (let step = 0; step < SUB_STEPS; step++) {
+            const stepPrevX = this.pos.x;
+            const stepPrevY = this.pos.y;
 
-            // Zameen ki ragad (friction) ki wajah se aage jaane ki speed thodi kam karna
-            this.vel.x *= this.friction;
+            // Apply gravity for sub-step
+            this.vel.y += GRAVITY * subDt;
 
-            // Agar bounce bohot chota (almost khatam) ho gaya hai, toh ball ko vertical rok dena
-            if (Math.abs(this.vel.y) < 20) {
-                this.vel.y = 0;
+            // Integrate position for sub-step
+            const nextX = this.pos.x + this.vel.x * subDt;
+            const nextY = this.pos.y + this.vel.y * subDt;
+
+            // Continuous Collision Check against Ground Surface (targetY = groundY - radius)
+            if (stepPrevY < targetY && nextY >= targetY) {
+                // Exact Fractional Sub-step Intersection Point
+                const f = Math.min(1.0, Math.max(0.0, (targetY - stepPrevY) / Math.max(0.001, nextY - stepPrevY)));
+
+                // Snap to exact surface touch point
+                const bounceX = stepPrevX + f * (nextX - stepPrevX);
+                const bounceY = targetY;
+
+                this.pos.x = bounceX;
+                this.pos.y = bounceY;
+
+                // Pitch Sound Effect
+                if (Math.abs(this.vel.y) > 100) {
+                    SoundManager.getInstance().playPitchBounce(this.vel.y, bounceX);
+                }
+
+                // Realistic Pitch Restitution & Friction
+                const FRICTION_PITCH = 0.88;
+
+                this.vel.y = -Math.abs(this.vel.y) * RESTITUTION_GROUND;
+                this.vel.x *= FRICTION_PITCH;
+
+                if (Math.abs(this.vel.y) < 20) {
+                    this.vel.y = 0;
+                }
+
+                // Continue remaining sub-step time for post-bounce flight
+                const remainingSubDt = subDt * (1.0 - f);
+                this.pos.x += this.vel.x * remainingSubDt;
+                this.pos.y += this.vel.y * remainingSubDt;
+            } else {
+                this.pos.x = nextX;
+                this.pos.y = nextY;
+                if (this.pos.y >= targetY) {
+                    this.pos.y = targetY;
+                    if (this.vel.y > 0) this.vel.y = -this.vel.y * RESTITUTION_GROUND;
+                }
             }
+
+            this.rotation += (this.vel.x * subDt) / this.radius;
         }
     }
 }

@@ -707,8 +707,9 @@ private getProjectileStateWithBounce(
                     const vArmY = armR * Math.cos(theta) * omega;
 
                     // 🏃 Forward Body Horizontal Velocity Component (-X direction towards pitch, natural un-amplified)
-                    const vBodyX = -Math.abs(bowler.lastRunupSpeedX > 0 ? bowler.lastRunupSpeedX : 800.0);
-
+                    let vBodyX = -Math.abs(bowler.lastRunupSpeedX > 0 ? bowler.lastRunupSpeedX : 800.0);
+                    const scaleLinear = 1.5;
+                    vBodyX = -Math.abs(vBodyX * scaleLinear);
                     // 🚀 Combined Natural Launch Velocity Vector (Guaranteed Forward -X Flight)
                     const vReleaseX = -Math.abs(vBodyX + vArmX);
                     const vReleaseY = vArmY;
@@ -718,6 +719,8 @@ private getProjectileStateWithBounce(
                     // Store Release Speed Debug Info
                     bowler.lastReleaseVx = vReleaseX;
                     bowler.lastReleaseVy = vReleaseY;
+                    bowler.lastReleaseVBodyX = vBodyX;
+                    bowler.lastReleaseVArmX = vArmX;
                     bowler.lastReleaseSpeed = totalSpeed;
                     bowler.lastReleaseAngleDeg = launchAngleDeg;
 

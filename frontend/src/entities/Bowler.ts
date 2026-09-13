@@ -95,7 +95,7 @@ export class RangeLinkedList {
 export class Bowler {
 
     // ── Segment lengths ────────────────────────────────────────────────────
-    private readonly BOWLER_SCALE = 1.2;
+    private readonly BOWLER_SCALE = 1.1;       
     public readonly TOTAL_RIGHT_ARM_LENGTH = 3.4 * PLAYER_LENGTH_FACTOR*this.BOWLER_SCALE;
     public readonly TOTAL_LEFT_ARM_LENGTH  = 3.5 * PLAYER_LENGTH_FACTOR*this.BOWLER_SCALE;
 
@@ -222,6 +222,8 @@ export class Bowler {
         this.isBallReleased = false;
         this.lastReleaseVx = null;
         this.lastReleaseVy = null;
+        this.lastReleaseVBodyX = null;
+        this.lastReleaseVArmX = null;
         this.lastReleaseSpeed = null;
         this.lastReleaseAngleDeg = null;
         this.setInitialRunPose();
@@ -237,6 +239,8 @@ export class Bowler {
     public isBallReleased: boolean = false;
     public lastReleaseVx: number | null = null;
     public lastReleaseVy: number | null = null;
+    public lastReleaseVBodyX: number | null = null;
+    public lastReleaseVArmX: number | null = null;
     public lastReleaseSpeed: number | null = null;
     public lastReleaseAngleDeg: number | null = null;
     public runupGatheringEndSpeedFactor: number = 0.5; // 0.5 = 50% end momentum at jump takeoff
@@ -266,10 +270,10 @@ export class Bowler {
     public JOYSTICK_RADIUS_STIFFNESS: number = 100.0;
     public JOYSTICK_RADIUS_DAMPING: number = 100.0;
 
-    public GATHERING_ANGLE_STIFFNESS: number = 150.0;
-    public GATHERING_ANGLE_DAMPING: number = 80.0;
+    public GATHERING_ANGLE_STIFFNESS: number = 250.0;
+    public GATHERING_ANGLE_DAMPING: number = 20.0;
     public GATHERING_RADIUS_STIFFNESS: number = 100.0;
-    public GATHERING_RADIUS_DAMPING: number = 70.0;
+    public GATHERING_RADIUS_DAMPING: number = 100.0;
 
     public resetProceduralUpperBodyState(): void {
         this.currentProceduralNBArmAngleDeg = 48.0;
@@ -303,6 +307,8 @@ export class Bowler {
         this.isBallReleased = false;
         this.lastReleaseVx = null;
         this.lastReleaseVy = null;
+        this.lastReleaseVBodyX = null;
+        this.lastReleaseVArmX = null;
         this.lastReleaseSpeed = null;
         this.lastReleaseAngleDeg = null;
         Bowler.resetAllRangeLUTPointers();

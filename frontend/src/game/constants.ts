@@ -74,10 +74,10 @@ export const BOWLER_START_X = 4600; // Master tuning variable for Bowler startin
 
 export const BAT_CENTER_OF_MASS_RATIO = 0.75;
 
-export const GRAVITY = 5566;
+export const GRAVITY = 4066;
 
 //export const RESTITUTION_BAT = 0.1; // Bat aur Ball ki takkar ka bounce
-export const RESTITUTION_GROUND = 0.7; // Zameen aur Ball ki takkar ka bounce
+export const RESTITUTION_GROUND = .8; // Zameen aur Ball ki takkar ka bounce
 
 export const TARGET_ANGLE_THRESHOLD = 0.02;
 
