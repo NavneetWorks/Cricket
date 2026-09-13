@@ -12,7 +12,7 @@ export default class NetWorkManager{
 
     public onMatchStart?:(role:'BATSMAN' | 'BOWLER' | 'NONE' , myId:number,oppId:number)=>void;
     public onOpponentBatSwing?:(tick:number,handleX:number,handleY:number,angle:number)=>void;
-    public onBowlerRelease?: (startX: number, startY: number, startVx: number, startVy: number) => void;
+    public onBowlerRelease?: (tick:number,startX: number, startY: number, startVx: number, startVy: number) => void;
     public onHitResult?: (exitX: number, exitY: number, exitVx: number, exitVy: number, impactSpeed: number, hitPixelOffset: number,tick:number) => void;
     public onOpponentBowlerPosition: ((tick: number, hipX: number) => void) | null = null;
     public onOpponentBowlerStartRun?: (tick: number) => void;
@@ -187,7 +187,7 @@ export default class NetWorkManager{
             const startVy = view.getFloat32(19, true);   
 
             if (this.onBowlerRelease) {
-                this.onBowlerRelease(startX, startY, startVx, startVy);
+                this.onBowlerRelease(tick, startX, startY, startVx, startVy);
             }
         
         }else if(opcode === PacketType.BAT_SWING_STREAM){

@@ -23,7 +23,8 @@ export default class GameLoop{
     private input: Input;
     private lastFrameTime = 0;
     private preJumpDistance = 1000;
-
+    private hasLocalPredictedRelease: boolean = false;
+    private localReleaseTick: number = 0;
 
     public isOnlineMode: boolean = false;
     public network: NetworkManager | null = null;
@@ -96,15 +97,39 @@ export default class GameLoop{
                 this.suppressNextPacketSound = false;
                 this.hasAuthoritativeResult = false;
             };
-            this.network.onBowlerRelease = (startX, startY, startVx, startVy) => {
-                this.renderer.wicket.reset();
-                this.renderer.bowler.debugReleasePoint = { x: startX, y: startY };
-                this.renderer.bowler.ballTrailPoints = [{ x: startX, y: startY }];
-                this.ball.throwBallWithVelocity(startX, startY, startVx, startVy);
-                // 🟢 STEP 3: naya ball aaya — per-ball prediction flags reset
-                this.localPredictedHit = false;
-                this.suppressNextPacketSound = false;
-                this.hasAuthoritativeResult = false;
+            this.network.onBowlerRelease = (tick, releaseX, releaseY, vReleaseX, vReleaseY) => {
+                console.log("📩 Batter Received Authoritative Release Event! Packet Tick:", tick, "Current Tick:", this.networkTickNumber);
+                // 1. Calculate Tick Lag Delta: (Current Tick - Release Packet Tick)
+                const currentTick = this.networkTickNumber;
+                const deltaTicks = Math.max(0, currentTick - tick);
+                const authState = this.getProjectileStateWithBounce(
+                    releaseX,
+                    releaseY,
+                    vReleaseX,
+                    vReleaseY,
+                    deltaTicks
+                );
+                console.log(`⏩ Roll-Forward by ${deltaTicks} ticks -> Target Pos: (${authState.finalX.toFixed(1)}, ${authState.finalY.toFixed(1)}) Vel: (${authState.finalVx.toFixed(1)}, ${authState.finalVy.toFixed(1)})`);
+                this.ball.isHeldInHand = false;
+                this.ball.isActive = true;
+                this.ball.vel.x = authState.finalVx;
+                this.ball.vel.y = authState.finalVy;
+
+                this.ball.pos.x = authState.finalX;
+                this.ball.pos.y = authState.finalY;
+                this.ball.prevPos.x = authState.finalX;
+                this.ball.prevPos.y = authState.finalY;
+                this.hasLocalPredictedRelease = true;
+
+            
+                 this.renderer.wicket.reset();
+                // this.renderer.bowler.debugReleasePoint = { x: startX, y: startY };
+                // this.renderer.bowler.ballTrailPoints = [{ x: startX, y: startY }];
+                this.ball.throwBallWithVelocity(this.ball.pos.x, this.ball.pos.y, this.ball.vel.x, this.ball.vel.y);
+                // // 🟢 STEP 3: naya ball aaya — per-ball prediction flags reset
+                // this.localPredictedHit = false;
+                // this.suppressNextPacketSound = false;
+                // this.hasAuthoritativeResult = false;
             };
         
             this.network.onOpponentBatSwing = (tick, mouseX, mouseY, angle) => {
@@ -177,6 +202,8 @@ export default class GameLoop{
                 
                 this.ball.isHeldInHand = true;
                 this.ball.isActive = true;
+                this.hasLocalPredictedRelease = false;
+                bowler.ballTrailPoints = [];
                 
                 // 2. Trigger local runup animation
                 bowler.startRunning();
@@ -204,6 +231,33 @@ export default class GameLoop{
                 bowler.lastJoystickAngleRad = smoothAngleRad;
                 bowler.smoothJoystickAngleRad = smoothAngleRad;
                 bowler.smoothJoystickRadiusRatio = smoothRadiusRatio;
+            };
+            this.network.onBowlerRelease = (tick, releaseX, releaseY, vReleaseX, vReleaseY) => {
+                console.log("📩 Batter Received Authoritative Release Event! Packet Tick:", tick, "Current Tick:", this.networkTickNumber);
+
+                const currentTick = this.networkTickNumber;
+                const deltaTicks = Math.max(0, currentTick - tick);
+
+                const authState = this.getProjectileStateWithBounce(
+                    releaseX,
+                    releaseY,
+                    vReleaseX,
+                    vReleaseY,
+                    deltaTicks
+                );
+
+                console.log(`⏩ Roll-Forward by ${deltaTicks} ticks -> Target Pos: (${authState.finalX.toFixed(1)}, ${authState.finalY.toFixed(1)}) Vel: (${authState.finalVx.toFixed(1)}, ${authState.finalVy.toFixed(1)})`);
+
+                const targetX = this.hasLocalPredictedRelease ? (this.ball.pos.x * 0.5 + authState.finalX * 0.5) : authState.finalX;
+                const targetY = this.hasLocalPredictedRelease ? (this.ball.pos.y * 0.5 + authState.finalY * 0.5) : authState.finalY;
+
+                this.ball.throwBallWithVelocity(
+                    targetX,
+                    targetY,
+                    authState.finalVx,
+                    authState.finalVy
+                );
+                this.hasLocalPredictedRelease = true;
             };
         }
         const startBowlerDelivery = () => {
@@ -567,11 +621,35 @@ private getProjectileStateWithBounce(
             
 
             if (this.ball.isHeldInHand && (bowler.isRunning || bowler.isPreJumpTransitioning || bowler.isExecutingJump)) {
-                this.ball.pos.x = bowler.leftWrist.x;
-                this.ball.pos.y = bowler.leftWrist.y;
-                this.ball.prevPos.x = bowler.leftWrist.x;
-                this.ball.prevPos.y = bowler.leftWrist.y;
-                this.ball.isActive = true;
+                    this.ball.pos.x = bowler.leftWrist.x;
+                    this.ball.pos.y = bowler.leftWrist.y;
+                    this.ball.prevPos.x = bowler.leftWrist.x;
+                    this.ball.prevPos.y = bowler.leftWrist.y;
+                    this.ball.isActive = true;
+
+                    // ⚡ ONLINE MODE LOCAL PREDICTIVE BALL RELEASE (Instant Visual Launch)
+                    if (this.isOnlineMode && !this.hasLocalPredictedRelease && bowler.isExecutingJump) {
+                        const totalJumpFrames = Bowler.PRE_DELIVERY_JUMP.length;
+                        const totalArmPathDeg = 370.6;
+                        const progressRatio = Math.min(1.0, Math.max(0.0, bowler.accumulatedJoystickAngleDeg / totalArmPathDeg));
+                        const currentFrame = progressRatio * (totalJumpFrames - 1);
+
+                        // Frame 63 to 66: Top release arc par local prediction launch
+                        if (currentFrame >= JUMP_RELEASE_FRAME_MIN) {
+                            const releaseX = bowler.leftWrist.x;
+                            const releaseY = bowler.leftWrist.y;
+                            
+                            const estSpeed = bowler.lastRunupSpeedX > 0 ? bowler.lastRunupSpeedX * 1.8 : 1200;
+                            const estVx = -Math.abs(estSpeed);
+                            const estVy = 150;
+
+                            this.ball.throwBallWithVelocity(releaseX, releaseY, estVx, estVy);
+
+                            this.hasLocalPredictedRelease = true;
+                            this.localReleaseTick = this.networkTickNumber;
+                            console.log("⚡ Batter Local Predicted Release Triggered at Tick:", this.localReleaseTick);
+                        }
+                    }
 
                 // Auto pre-jump trigger near crease (x <= 750)
                if(!this.isOnlineMode){ 
@@ -596,6 +674,28 @@ private getProjectileStateWithBounce(
 
             this.ball.update(dt);
             this.renderer.wicket.update(dt);
+
+            // 🔴 Record Ball Trail Points for smooth trajectory rendering on Batter Screen
+            if (bowler.isGatheringArmActive || bowler.isExecutingJump || bowler.isPreJumpTransitioning || bowler.isPreJumpFrozen || bowler.isCycleCompleted || bowler.isBallReleased || this.hasLocalPredictedRelease) {
+                const pts = bowler.ballTrailPoints;
+                const currX = this.ball.pos.x;
+                const currY = this.ball.pos.y;
+                if (pts.length > 0) {
+                    const lastPt = pts[pts.length - 1];
+                    const dist = Math.hypot(currX - lastPt.x, currY - lastPt.y);
+                    if (dist > 6) {
+                        const steps = Math.min(10, Math.ceil(dist / 3));
+                        for (let s = 1; s < steps; s++) {
+                            const ratio = s / steps;
+                            pts.push({
+                                x: lastPt.x + (currX - lastPt.x) * ratio,
+                                y: lastPt.y + (currY - lastPt.y) * ratio
+                            });
+                        }
+                    }
+                }
+                pts.push({ x: currX, y: currY });
+            }
          
             if (isTickAdvanced && this.isOnlineMode && this.network && this.network.isConnected) {
                 this.network.sendBatSwingUDP(
@@ -940,6 +1040,7 @@ private getProjectileStateWithBounce(
                     bowler.debugReleasePoint = { x: releaseX, y: releaseY };
 
                     if (this.isOnlineMode && !this.hasSentReleasePacket && this.network && this.network.isConnected) {
+                       console.log("🚀 Bowler Sent Release Event! Tick:", this.networkTickNumber, "Pos:", releaseX, releaseY, "Vel:", vReleaseX, vReleaseY);
                         this.network.sendBowlerRelease(
                             this.networkTickNumber,
                             releaseX,
