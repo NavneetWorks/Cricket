@@ -10,7 +10,7 @@ export const PITCH_WIDTH = 180;
 export const QUEUE_SIZE = 3;
 export const NORMAL_DIRECTION_ASSIST = 90; // 0 to 100 scale. E.g. 10 = bends 10% towards Normal
 
-export const GLOBAL_RESTITUTION_SCALE = .5;
+export const GLOBAL_RESTITUTION_SCALE = 2;
 export const REGION1 = 1;
 export const REGION2 = REGION1;
 export const REGION3 = REGION1;
@@ -74,10 +74,14 @@ export const BOWLER_START_X = 4600; // Master tuning variable for Bowler startin
 
 export const BAT_CENTER_OF_MASS_RATIO = 0.75;
 
-export const GRAVITY = 4066;
+export const GRAVITY = 3266;
 
-//export const RESTITUTION_BAT = 0.1; // Bat aur Ball ki takkar ka bounce
-export const RESTITUTION_GROUND = .8; // Zameen aur Ball ki takkar ka bounce
+export const RESTITUTION_GROUND = .72; // Zameen aur Ball ki takkar ka bounce (72% pitch bounce)
+export const FRICTION_GROUND = 0.96;   // Zameen aur Ball ki ragad (4% speed loss per bounce/step)
+export const AIR_DRAG_COEFF = 0.00018; // Quadratic Aerodynamic Air Drag Constant
+
+export const PITCH_LENGTH = CANVAS_WIDTH-120;       // Pitch length in pixels from Batsman Wicket (150px + 1400px = 1550px Bowler Wicket)
+export const BOUNDARY_DISTANCE = PITCH_LENGTH*3.5;  // Boundary distance in pixels from Batsman Wicket (4x Canvas Width = 7200px)
 
 export const TARGET_ANGLE_THRESHOLD = 0.02;
 

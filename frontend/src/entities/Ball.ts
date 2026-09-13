@@ -1,4 +1,4 @@
-import { CANVAS_HEIGHT, GROUND_HEIGHT, GRAVITY, RESTITUTION_GROUND,PLAYER_LENGTH_FACTOR } from "../game/constants";
+import { CANVAS_HEIGHT, GROUND_HEIGHT, GRAVITY, RESTITUTION_GROUND, FRICTION_GROUND, AIR_DRAG_COEFF, PLAYER_LENGTH_FACTOR } from "../game/constants";
 import { SoundManager } from "../audio/SoundManager";
 
 type Vec2 = { x: number; y: number };
@@ -116,8 +116,14 @@ export default class Ball {
             const stepPrevX = this.pos.x;
             const stepPrevY = this.pos.y;
 
-            // Apply gravity for sub-step
-            this.vel.y += GRAVITY * subDt;
+            // 🟢 Aerodynamic Quadratic Air Drag (-k_air * speed * velocity)
+            const speed = Math.hypot(this.vel.x, this.vel.y);
+            const dragForceX = -AIR_DRAG_COEFF * speed * this.vel.x;
+            const dragForceY = -AIR_DRAG_COEFF * speed * this.vel.y;
+
+            // Apply gravity and air drag for sub-step
+            this.vel.x += dragForceX * subDt;
+            this.vel.y += (GRAVITY + dragForceY) * subDt;
 
             // Integrate position for sub-step
             const nextX = this.pos.x + this.vel.x * subDt;
@@ -140,11 +146,9 @@ export default class Ball {
                     SoundManager.getInstance().playPitchBounce(this.vel.y, bounceX);
                 }
 
-                // Realistic Pitch Restitution & Friction
-                const FRICTION_PITCH = 0.88;
-
+                // Realistic Pitch Restitution & Ground Friction
                 this.vel.y = -Math.abs(this.vel.y) * RESTITUTION_GROUND;
-                this.vel.x *= FRICTION_PITCH;
+                this.vel.x *= FRICTION_GROUND;
 
                 if (Math.abs(this.vel.y) < 20) {
                     this.vel.y = 0;

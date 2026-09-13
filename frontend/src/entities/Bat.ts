@@ -9,6 +9,7 @@ import {
     CANVAS_HEIGHT,
     GROUND_HEIGHT,
     GRAVITY,
+    AIR_DRAG_COEFF,
     QUEUE_SIZE,
     BAT_REGIONS_RESTITUTION,
     GLOBAL_RESTITUTION_SCALE,
@@ -33,9 +34,11 @@ export interface BatRegion {
 
 export default class Bat {
 
-    private readonly BAT_MASS = 1.0;
-    private readonly SPRING_STIFFNESS = 260;
-    private readonly DAMPING = 22;
+    private readonly BAT_MASS: number = 1.0;
+    private SPRING_STIFFNESS: number = 250.0;
+    private DAMPING: number = 25.0;
+    public swingMomentumRatio: number = 0.0;
+    private lastMouseAngleRad: number | null = null;
     // --- Wrist Rotation Physics ---
     private readonly WRIST_TILT_SPEED_SCALE: number = 0.0014; // Scaled down to 0.7x per user request
 
@@ -687,7 +690,41 @@ export default class Bat {
             this.prevComTarget = { x: this.comTarget.x, y: this.comTarget.y };
         }
         const targetVelocityX = (this.comTarget.x - this.prevComTarget.x) / dt;
+        const targetVelocityY = (this.comTarget.y - this.prevComTarget.y) / dt;
         this.prevComTarget = { x: this.comTarget.x, y: this.comTarget.y };
+
+        // 🟢 CONTINUOUS NON-LINEAR DIFFERENTIAL MOMENTUM ENGINE (All Speeds & Direction Continuity)
+        const targetSpeed = Math.hypot(targetVelocityX, targetVelocityY);
+
+        // Continuous Non-linear Power Curve: (Speed / 1500)^1.5 for ALL continuous speeds
+        const speedRatio = Math.min(1.0, targetSpeed / 1500.0);
+        const buildFactor = Math.pow(speedRatio, 1.5);
+
+        // Continuous Direction Alignment Check (cos delta theta)
+        const currDirAngle = Math.atan2(targetVelocityY, targetVelocityX);
+        let dirMatch = 1.0;
+        if (this.lastMouseAngleRad !== null && targetSpeed > 50) {
+            let dAngle = currDirAngle - this.lastMouseAngleRad;
+            while (dAngle > Math.PI) dAngle -= Math.PI * 2;
+            while (dAngle < -Math.PI) dAngle += Math.PI * 2;
+            dirMatch = Math.cos(dAngle);
+        }
+        if (targetSpeed > 50) {
+            this.lastMouseAngleRad = currDirAngle;
+        }
+
+        // Differential Momentum Equation (Handles All Speeds, Acceleration, Direction Reversals & Stop/Pauses)
+        const buildRate = 2.8 * buildFactor;
+        const dirDecayRate = Math.max(0.0, 1.0 - dirMatch) * 4.0;
+        const stopDecayRate = targetSpeed < 120 ? 6.0 : 0.0;
+        const totalDecayRate = (dirDecayRate + stopDecayRate) * this.swingMomentumRatio;
+
+        const deltaMomentum = (buildRate - totalDecayRate) * dt;
+        this.swingMomentumRatio = Math.min(1.0, Math.max(0.0, this.swingMomentumRatio + deltaMomentum));
+
+        // 🎛️ Continuous Dynamic Mapping: Damping (25 -> 10) & Stiffness (250 -> 400)
+        this.DAMPING = 25.0 - (15.0 * this.swingMomentumRatio);
+        this.SPRING_STIFFNESS = 250.0 + (150.0 * this.swingMomentumRatio);
 
         // 🟢 DYNAMIC SWING ARC MOMENTUM & CENTRIFUGAL OVERTAKE ACCELERATION
         if (targetVelocityX !== 0) {
@@ -1283,16 +1320,29 @@ export default class Bat {
     // isliye GameLoop onHitResult me predictedRange khud calculate karne ke liye isko call karta hai
     public calculatePredictedRange(pos: { x: number; y: number }, vel: { x: number; y: number }): number {
         const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
-        const dy = groundY - pos.y;
-        const g = GRAVITY; // Real game physics gravity (3566 px/s^2)
-        const vy = vel.y;
-        const vx = vel.x;
-        const disc = (vy * vy) + (2 * g * dy);
-        if (disc >= 0) {
-            const flightTime = (-vy + Math.sqrt(disc)) / g;
-            return Math.abs(vx) * flightTime;
+        const targetY = groundY - (0.27 * PLAYER_LENGTH_FACTOR);
+        let currX = pos.x;
+        let currY = pos.y;
+        let currVx = vel.x;
+        let currVy = vel.y;
+
+        const simDt = 0.005; // 200 Hz precise step-by-step air drag simulation
+        for (let t = 0; t < 5.0; t += simDt) {
+            const speed = Math.hypot(currVx, currVy);
+            const dragForceX = -AIR_DRAG_COEFF * speed * currVx;
+            const dragForceY = -AIR_DRAG_COEFF * speed * currVy;
+
+            currVx += dragForceX * simDt;
+            currVy += (GRAVITY + dragForceY) * simDt;
+
+            currX += currVx * simDt;
+            currY += currVy * simDt;
+
+            if (currY >= targetY) {
+                break;
+            }
         }
-        return 0;
+        return Math.max(0, currX - pos.x);
     }
 
     private simulateComPhysics(dt: number): void {

@@ -11,7 +11,10 @@ import {
     CANVAS_HEIGHT,
     GAME_COLORS,
     GROUND_HEIGHT,
-    GRAVITY
+    GRAVITY,
+    AIR_DRAG_COEFF,
+    PITCH_LENGTH,
+    BOUNDARY_DISTANCE
 } from "./constants";
 
 export default class Renderer{
@@ -105,8 +108,9 @@ export default class Renderer{
             this.bowlingArea.draw(this.ctx);
         }
 
-        // 🏏 Bowler End Wicket (Right Wicket at X = CANVAS_WIDTH - 250 = 1550px) drawn BEFORE bowler
-        this.wicket.drawAt(this.ctx, CANVAS_WIDTH - 50);
+        // 🏏 Bowler End Wicket (Drawn at wicketWorldX + PITCH_LENGTH)
+        const wicketWorldX = this.wicket ? this.wicket.FIXED_X : 150;
+        this.wicket.drawAt(this.ctx, wicketWorldX + PITCH_LENGTH);
 
         // 🏃 Bowler Skeleton draw in NEW_BOWLER, BOWLING, BATTING, and ANIMATION_PLAY modes:
         if (this.gameMode === 'NEW_BOWLER' || this.gameMode === 'BOWLING' || this.gameMode === 'BATTING' || this.gameMode === 'ANIMATION_PLAY') {
@@ -587,8 +591,8 @@ export default class Renderer{
         this.ctx.lineTo(miniWicketX, miniGroundY - 14); // 14px height
         this.ctx.stroke();
 
-        // 4b. TINY VERTICAL BOWLER WICKET LINE (AT WORLD X = CANVAS_WIDTH - 250 = 1550px)
-        const bowlerWicketX = CANVAS_WIDTH - 250;
+        // 4b. TINY VERTICAL BOWLER WICKET LINE (AT WORLD X = wicketWorldX + PITCH_LENGTH)
+        const bowlerWicketX = wicketWorldX + PITCH_LENGTH;
         const miniBowlerWicketX = boxX + (bowlerWicketX - minWorldX) * scaleX;
         this.ctx.strokeStyle = "#38bdf8"; // Bright cyan wicket line
         this.ctx.lineWidth = 2.0;
@@ -596,6 +600,33 @@ export default class Renderer{
         this.ctx.moveTo(miniBowlerWicketX, miniGroundY);
         this.ctx.lineTo(miniBowlerWicketX, miniGroundY - 14); // 14px height
         this.ctx.stroke();
+
+        // 4c. GREEN BOUNDARY MARKER POINT (AT BOUNDARY_DISTANCE FROM BATSMAN WICKET)
+        const boundaryWorldX = wicketWorldX + BOUNDARY_DISTANCE;
+        const mini4xX = boxX + (boundaryWorldX - minWorldX) * scaleX;
+
+        this.ctx.save();
+        this.ctx.strokeStyle = "rgba(34, 197, 94, 0.65)"; // Vibrant Emerald Green
+        this.ctx.lineWidth = 1.5;
+        this.ctx.setLineDash([3, 3]);
+        this.ctx.beginPath();
+        this.ctx.moveTo(mini4xX, miniGroundY);
+        this.ctx.lineTo(mini4xX, boxY + 30);
+        this.ctx.stroke();
+
+        // Green Boundary Point Circle
+        this.ctx.fillStyle = "#22c55e";
+        this.ctx.beginPath();
+        this.ctx.arc(mini4xX, miniGroundY, 5, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        // Text Badge Label
+        this.ctx.font = "bold 10px Inter, Arial, sans-serif";
+        this.ctx.fillStyle = "#22c55e";
+        this.ctx.textAlign = "center";
+        this.ctx.textBaseline = "bottom";
+        this.ctx.fillText(`BOUNDARY: ${BOUNDARY_DISTANCE}px`, mini4xX, boxY + 28);
+        this.ctx.restore();
 
         // 5. FULL PARABOLIC TRAJECTORY ARC AFTER HIT (0..10,000 px)
         if (lastStats && lastStats.ballSpeedAfterX !== undefined) {
@@ -610,13 +641,25 @@ export default class Renderer{
             this.ctx.setLineDash([3, 3]); // Dashed arc
             this.ctx.beginPath();
 
-            const stepDt = 0.015;
-            let firstPoint = true;
-            for (let t = 0; t <= 3.0; t += stepDt) {
-                const px = startX + vx * t;
-                const py = startY + vy * t + 0.5 * g * t * t;
+            const simDt = 0.008; // 125 Hz precise step simulation with air drag
+            let px = startX;
+            let py = startY;
+            let simVx = vx;
+            let simVy = vy;
 
-                if (py > groundY + 10 || px > maxWorldX + 500) break;
+            let firstPoint = true;
+            for (let t = 0; t <= 5.0; t += simDt) {
+                const speed = Math.hypot(simVx, simVy);
+                const dragForceX = -AIR_DRAG_COEFF * speed * simVx;
+                const dragForceY = -AIR_DRAG_COEFF * speed * simVy;
+
+                simVx += dragForceX * simDt;
+                simVy += (GRAVITY + dragForceY) * simDt;
+
+                px += simVx * simDt;
+                py += simVy * simDt;
+
+                if (py > groundY + 5 || px > maxWorldX + 500) break;
 
                 const mx = boxX + (px - minWorldX) * scaleX;
                 const my = miniGroundY - (groundY - py) * scaleY;
