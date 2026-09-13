@@ -268,12 +268,12 @@ export class Bowler {
     public JOYSTICK_ANGLE_STIFFNESS: number = 250.0;
     public JOYSTICK_ANGLE_DAMPING: number = 20.0;
     public JOYSTICK_RADIUS_STIFFNESS: number = 100.0;
-    public JOYSTICK_RADIUS_DAMPING: number = 100.0;
+    public JOYSTICK_RADIUS_DAMPING: number = 30.0;
 
     public GATHERING_ANGLE_STIFFNESS: number = 250.0;
     public GATHERING_ANGLE_DAMPING: number = 20.0;
     public GATHERING_RADIUS_STIFFNESS: number = 100.0;
-    public GATHERING_RADIUS_DAMPING: number = 100.0;
+    public GATHERING_RADIUS_DAMPING: number = 30.0;
 
     public resetProceduralUpperBodyState(): void {
         this.currentProceduralNBArmAngleDeg = 48.0;

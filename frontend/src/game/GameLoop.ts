@@ -702,9 +702,12 @@ private getProjectileStateWithBounce(
                     const armR = minReach + (totalArmLen - minReach - 1.0) * bowler.smoothJoystickRadiusRatio;
                     const theta = bowler.smoothJoystickAngleRad;
 
-                    // Exact 2D Circular Tangential Velocity Derivative: dx/dt = -R * sin(theta) * omega, dy/dt = R * cos(theta) * omega
+                    // Exact 2D Circular Tangential Velocity Derivative with Wrist Motion Continuity
                     const vArmX = -armR * Math.sin(theta) * omega;
-                    const vArmY = armR * Math.cos(theta) * omega;
+                    const vWristY = (currY - prevY) / dt;
+                    const polarVArmY = armR * Math.cos(theta) * omega;
+                    // Blend polar arm Y speed with actual physical wrist Y delta velocity for 100% smooth trajectory continuity
+                    const vArmY = Math.abs(omega) > 0.5 ? (polarVArmY * 0.5 + vWristY * 0.5) : vWristY;
 
                     // 🏃 Forward Body Horizontal Velocity Component (-X direction towards pitch, natural un-amplified)
                     let vBodyX = -Math.abs(bowler.lastRunupSpeedX > 0 ? bowler.lastRunupSpeedX : 800.0);
