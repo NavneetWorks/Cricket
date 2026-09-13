@@ -522,7 +522,6 @@ private getProjectileStateWithBounce(
             this.renderer.wicket.checkHit(this.ball, batHitResult.hit, batHitResult.hitSubStep);
         } else if (this.renderer.gameMode === 'NEW_BOWLER') {
             const bowler = this.renderer.bowler;
-            bowler.updateGreenLineCreep(dt);
 
             // 🏃 A/D or Arrow keys move bowler character Left / Right when idle
             if (!bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {

@@ -1,17 +1,5 @@
 import { CANVAS_WIDTH, CANVAS_HEIGHT, GROUND_HEIGHT, PLAYER_LENGTH_FACTOR, BOWLER_START_X } from "../game/constants";
 
-// ── 🎯 DYNAMIC RELEASE LINE TUNING CONSTANTS ─────────────────────────────
-// 1. Initial distance (in px) of the Green Release Line to the left of jump point (startJumpX).
-//    Change this value to adjust starting distance from jump point. Default: 300.0 px
-export const GREEN_LINE_INITIAL_OFFSET: number = 350.0;
-
-// 2. Creep / Shift speed (in px/sec) of the Green Line towards startJumpX after crossing jump point.
-//    Tune this value at the top of Bowler.ts! Default: 120.0 px/sec
-export const GREEN_LINE_CREEP_SPEED: number = 70.0;  
-
-// 3. Minimum allowed offset (in px) from jump point so line doesn't creep behind jump point. Default: 50.0 px
-export const GREEN_LINE_MIN_OFFSET: number = 100.0;
-
 // ── 🚀 DECELERATION RELEASE ENGINE CONSTANTS ─────────────────────────────
 // 1. Minimum angular speed (in rad/sec) required to register an active swing. Default: 5.0 rad/sec (~286 deg/sec)
 export const DECEL_MIN_SWING_SPEED: number = 5.0;
@@ -178,24 +166,7 @@ export class Bowler {
     private preJumpJointVelocities: Record<string, number> = {};
     private lastPoseSnapshot: KeyframePose | null = null;
 
-    public currentGreenLineOffset: number = GREEN_LINE_INITIAL_OFFSET;
-    public prevGreenLineOffset: number = GREEN_LINE_INITIAL_OFFSET;
     public maxObservedOmegaRad: number = 0.0;
-
-    public getGreenLineX(): number {
-        return this.startJumpX - this.currentGreenLineOffset;
-    }
-
-    public getPrevGreenLineX(): number {
-        return this.startJumpX - this.prevGreenLineOffset;
-    }
-
-    public updateGreenLineCreep(dt: number): void {
-        this.prevGreenLineOffset = this.currentGreenLineOffset;
-        if (this.currentHipPosition.x <= this.startJumpX || this.isPreJumpTransitioning || this.isExecutingJump || this.isPreJumpFrozen) {
-            this.currentGreenLineOffset = Math.max(GREEN_LINE_MIN_OFFSET, this.currentGreenLineOffset - GREEN_LINE_CREEP_SPEED * dt);
-        }
-    }
 
     public startRunning(): void {     
         this.isRunning = true;
@@ -205,8 +176,6 @@ export class Bowler {
         this.jumpPhase = 0;
         this.hasReleasedBall = false;
         this.targetIntensity = 1.0;
-        this.currentGreenLineOffset = GREEN_LINE_INITIAL_OFFSET;
-        this.prevGreenLineOffset = GREEN_LINE_INITIAL_OFFSET;
         this.maxObservedOmegaRad = 0.0;
     }
 
@@ -254,8 +223,6 @@ export class Bowler {
         this.hasReleasedBall = false;
         this.targetIntensity = 0.0;
         this.runIntensity = 0.0;
-        this.currentGreenLineOffset = GREEN_LINE_INITIAL_OFFSET;
-        this.prevGreenLineOffset = GREEN_LINE_INITIAL_OFFSET;
         this.maxObservedOmegaRad = 0.0;
         this.resetProceduralUpperBodyState();
         if (this.currentHipPosition.x < 2000) {
@@ -324,7 +291,6 @@ export class Bowler {
     public GATHERING_RADIUS_DAMPING: number = 100.0;  
 
     public resetProceduralUpperBodyState(): void {  
-        this.currentGreenLineOffset = GREEN_LINE_INITIAL_OFFSET;
         this.currentProceduralNBArmAngleDeg = 48.0;
         this.currentProceduralNBElbowAngleDeg = 75.0;
         this.currentProceduralSpineAngleDeg = -130.0;
@@ -9134,11 +9100,6 @@ export class Bowler {
 
     // ─────────────────────────────────────────────────────────────────────────
     public update(dt: number): void {
-        // 🟢 Dynamic Green Release Line Creep Logic (Shifts towards startJumpX after crossing jump point)
-        if (this.currentHipPosition.x <= this.startJumpX || this.isPreJumpTransitioning || this.isExecutingJump || this.isPreJumpFrozen) {
-            this.currentGreenLineOffset = Math.max(GREEN_LINE_MIN_OFFSET, this.currentGreenLineOffset - GREEN_LINE_CREEP_SPEED * dt);
-        }
-
         // Smoothly interpolate run intensity gradually over runup
         const accel = 0.90; // Fast punchy run-up acceleration factor
         this.runIntensity += (this.targetIntensity - this.runIntensity) * accel * dt;
