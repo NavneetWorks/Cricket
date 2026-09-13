@@ -175,6 +175,9 @@ export class Bowler {
     public targetNetworkJoystickRadiusRatio: number = 1.0;
     public debugReconciliationPoint: Vec2 | null = null;
     public localReleaseTrailIndex: number = 0;
+    public lastReceivedPacketTime: number = 0;
+    public playheadDelayMs: number = 30;
+    public isExtrapolating: boolean = false;
 
     public startRunning(): void {     
         this.isRunning = true;

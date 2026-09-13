@@ -232,6 +232,8 @@ export default class GameLoop{
                 if (tick <= bowler.lastReceivedJoystickTick) return;
                 bowler.lastReceivedJoystickTick = tick;
 
+                const now = performance.now();
+                bowler.lastReceivedPacketTime = now;
                 bowler.targetNetworkJoystickAngleRad = smoothAngleRad;
                 bowler.targetNetworkJoystickRadiusRatio = smoothRadiusRatio;
             };
@@ -602,37 +604,69 @@ private getProjectileStateWithBounce(
             // 🏃 Bowler & Ball Attachment / Release logic in BATTING Mode
             const bowler = this.renderer.bowler;
 
-            // 🌐 Batter Screen Input-Driven Spring-Damper Physics Replication (100% Identical to Bowler Screen)
+            // 📡 Option 2: Dynamic End-to-End Playhead Delay Buffer (Clamped strictly between 25ms and 75ms)
+            const endToEndRTT = (this.network && this.network.isConnected) ? this.network.getRTT() : 40.0;
+            const rawOneWayDelay = (endToEndRTT * 0.5) + 15.0; // One-way trip + 15ms safety buffer
+            bowler.playheadDelayMs = Math.min(75.0, Math.max(25.0, rawOneWayDelay));
+
+            // 🌐 Batter Screen Input-Driven Spring-Damper Physics Replication & Dead-Reckoning Extrapolation
             if (this.isOnlineMode && bowler.targetNetworkJoystickAngleRad !== null) {
-                const rawTargetRad = bowler.targetNetworkJoystickAngleRad;
-                const targetRadiusRatio = bowler.targetNetworkJoystickRadiusRatio;
+                if (bowler.isBallReleased || this.hasLocalPredictedRelease) {
+                    // 🟢 POST-RELEASE AUTOMATIC FOLLOW-THROUGH PHASE: Detach user mouse input (Identical to Bowler screen)
+                    if (bowler.postReleaseDelaySec > 0) {
+                        bowler.postReleaseDelaySec -= dt;
+                        bowler.smoothJoystickAngleRad += bowler.joystickAngularVelRad * dt;
+                    } else {
+                        const frictionDecay = Math.pow(0.96, dt * 60);
+                        bowler.joystickAngularVelRad *= frictionDecay;
+                        bowler.smoothJoystickAngleRad += bowler.joystickAngularVelRad * dt;
+                    }
+                } else {
+                    // 🏋️ PRE-RELEASE USER CONTROLLED PHASE: Input-Driven Spring-Damper Physics
+                    const now = performance.now();
+                    const timeSinceLastUDP = now - bowler.lastReceivedPacketTime;
 
-                let angleDiffRad = rawTargetRad - bowler.smoothJoystickAngleRad;
-                while (angleDiffRad > Math.PI) angleDiffRad -= Math.PI * 2;
-                while (angleDiffRad < -Math.PI) angleDiffRad += Math.PI * 2;
+                    // 🛡️ Dead-Reckoning Extrapolation if UDP packet is delayed > 22ms
+                    if (bowler.lastReceivedPacketTime > 0 && timeSinceLastUDP > 22.0) {
+                        bowler.isExtrapolating = true;
+                        bowler.smoothJoystickAngleRad += bowler.joystickAngularVelRad * dt;
+                        bowler.joystickAngularVelRad *= Math.pow(0.98, dt * 60);
+                    } else {
+                        bowler.isExtrapolating = false;
+                        const rawTargetRad = bowler.targetNetworkJoystickAngleRad;
+                        const targetRadiusRatio = bowler.targetNetworkJoystickRadiusRatio;
 
-                const springForceAngle = angleDiffRad * bowler.JOYSTICK_ANGLE_STIFFNESS;
-                const dampingForceAngle = -bowler.joystickAngularVelRad * bowler.JOYSTICK_ANGLE_DAMPING;
-                bowler.joystickAngularVelRad += (springForceAngle + dampingForceAngle) * dt;
-                bowler.smoothJoystickAngleRad += bowler.joystickAngularVelRad * dt;
+                        let angleDiffRad = rawTargetRad - bowler.smoothJoystickAngleRad;
+                        while (angleDiffRad > Math.PI) angleDiffRad -= Math.PI * 2;
+                        while (angleDiffRad < -Math.PI) angleDiffRad += Math.PI * 2;
 
-                const radiusDiff = targetRadiusRatio - bowler.smoothJoystickRadiusRatio;
-                const springForceRadius = radiusDiff * bowler.JOYSTICK_RADIUS_STIFFNESS;
-                const dampingForceRadius = -bowler.joystickRadiusVelRatio * bowler.JOYSTICK_RADIUS_DAMPING;
-                bowler.joystickRadiusVelRatio += (springForceRadius + dampingForceRadius) * dt;
-                bowler.smoothJoystickRadiusRatio += bowler.joystickRadiusVelRatio * dt;
+                        const springForceAngle = angleDiffRad * bowler.JOYSTICK_ANGLE_STIFFNESS;
+                        const dampingForceAngle = -bowler.joystickAngularVelRad * bowler.JOYSTICK_ANGLE_DAMPING;
+                        bowler.joystickAngularVelRad += (springForceAngle + dampingForceAngle) * dt;
+                        bowler.smoothJoystickAngleRad += bowler.joystickAngularVelRad * dt;
+
+                        const radiusDiff = targetRadiusRatio - bowler.smoothJoystickRadiusRatio;
+                        const springForceRadius = radiusDiff * bowler.JOYSTICK_RADIUS_STIFFNESS;
+                        const dampingForceRadius = -bowler.joystickRadiusVelRatio * bowler.JOYSTICK_RADIUS_DAMPING;
+                        bowler.joystickRadiusVelRatio += (springForceRadius + dampingForceRadius) * dt;
+                        bowler.smoothJoystickRadiusRatio += bowler.joystickRadiusVelRatio * dt;
+                    }
+                }
 
                 const currentOmega = Math.abs(bowler.joystickAngularVelRad);
                 if (currentOmega > bowler.maxObservedOmegaRad) {
                     bowler.maxObservedOmegaRad = currentOmega;
                 }
 
-                if (bowler.lastJoystickAngleRad !== null) {
-                    let deltaRad = bowler.smoothJoystickAngleRad - bowler.lastJoystickAngleRad;
-                    while (deltaRad > Math.PI) deltaRad -= Math.PI * 2;
-                    while (deltaRad < -Math.PI) deltaRad += Math.PI * 2;
-                    let deltaDeg = (deltaRad * 180) / Math.PI;
-                    bowler.accumulatedJoystickAngleDeg += Math.abs(deltaDeg);
+                // 🎯 CRITICAL BUGFIX: Only accumulate jump progress angle during JUMP phase!
+                if (bowler.isExecutingJump || bowler.isPreJumpTransitioning) {
+                    if (bowler.lastJoystickAngleRad !== null) {
+                        let deltaRad = bowler.smoothJoystickAngleRad - bowler.lastJoystickAngleRad;
+                        while (deltaRad > Math.PI) deltaRad -= Math.PI * 2;
+                        while (deltaRad < -Math.PI) deltaRad += Math.PI * 2;
+                        let deltaDeg = (deltaRad * 180) / Math.PI;
+                        bowler.accumulatedJoystickAngleDeg += Math.abs(deltaDeg);
+                    }
                 }
                 bowler.lastJoystickAngleRad = bowler.smoothJoystickAngleRad;
             }
