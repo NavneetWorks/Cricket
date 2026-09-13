@@ -180,6 +180,7 @@ export default class Renderer{
         // 🕹️ Draw Bottom-Right Bowling Arm Joystick & Top Screen Debug HUD in NEW_BOWLER mode:
         if (this.gameMode === 'NEW_BOWLER') {
             this.joystick.updatePosition(CANVAS_WIDTH, CANVAS_HEIGHT);
+            this.joystick.setSyncedKnobPos(this.bowler.smoothJoystickAngleRad, this.bowler.smoothJoystickRadiusRatio);
             this.joystick.draw(this.ctx);
 
             // 🟢 Right Side Debug HUD Pill for Pre-Delivery Jump Initiation (Below Top Buttons)

@@ -28,10 +28,11 @@ export default class Joystick {
     public updatePosition(canvasWidth: number, canvasHeight: number): void {
         this.centerX = canvasWidth - 200;  
         this.centerY = canvasHeight - 150;        
-        if (!this.isPointerDown) {
-            this.knobX = this.centerX + Math.cos(this.angleRad) * (this.distanceRatio * this.baseRadius);
-            this.knobY = this.centerY + Math.sin(this.angleRad) * (this.distanceRatio * this.baseRadius);
-        }
+    }
+
+    public setSyncedKnobPos(smoothAngleRad: number, smoothRadiusRatio: number): void {
+        this.knobX = this.centerX + Math.cos(smoothAngleRad) * (smoothRadiusRatio * this.baseRadius);
+        this.knobY = this.centerY + Math.sin(smoothAngleRad) * (smoothRadiusRatio * this.baseRadius);
     }
 
     private handlePointerDown(e: PointerEvent): void {

@@ -265,21 +265,21 @@ export class Bowler {
     public joystickRadiusVelRatio: number = 0.0;
 
     // 🎛️ Dedicated Tuning Constants (Angle & Radius Resistance for Jump & Gathering phases)
-    public JOYSTICK_ANGLE_STIFFNESS: number = 250.0;
-    public JOYSTICK_ANGLE_DAMPING: number = 20.0;
-    public JOYSTICK_RADIUS_STIFFNESS: number = 100.0;
-    public JOYSTICK_RADIUS_DAMPING: number = 30.0;
+    public JOYSTICK_ANGLE_STIFFNESS: number = 1000.0;
+    public JOYSTICK_ANGLE_DAMPING: number = 100.0;
+    public JOYSTICK_RADIUS_STIFFNESS: number = 1000.0;
+    public JOYSTICK_RADIUS_DAMPING: number = 100.0;
 
-    public GATHERING_ANGLE_STIFFNESS: number = 250.0;
-    public GATHERING_ANGLE_DAMPING: number = 20.0;
-    public GATHERING_RADIUS_STIFFNESS: number = 100.0;
-    public GATHERING_RADIUS_DAMPING: number = 30.0;
+    public GATHERING_ANGLE_STIFFNESS: number = 1000.0;
+    public GATHERING_ANGLE_DAMPING: number = 100.0;
+    public GATHERING_RADIUS_STIFFNESS: number = 1000.0;
+    public GATHERING_RADIUS_DAMPING: number = 100.0;  
 
-    public resetProceduralUpperBodyState(): void {
+    public resetProceduralUpperBodyState(): void {  
         this.currentProceduralNBArmAngleDeg = 48.0;
         this.currentProceduralNBElbowAngleDeg = 75.0;
         this.currentProceduralSpineAngleDeg = -130.0;
-        this.currentProceduralShoulderAngleDeg = 100.0;
+        this.currentProceduralShoulderAngleDeg = 100.0;  
         this.currentProceduralShoulderDist = 15.0;
         this.unwrappedArmAngleDeg = 180.0;
         this.lastArmAngleRad = null;
