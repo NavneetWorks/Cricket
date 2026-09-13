@@ -12,12 +12,24 @@ export const GREEN_LINE_CREEP_SPEED: number = 70.0;
 // 3. Minimum allowed offset (in px) from jump point so line doesn't creep behind jump point. Default: 50.0 px
 export const GREEN_LINE_MIN_OFFSET: number = 100.0;
 
+// ── 🚀 DECELERATION RELEASE ENGINE CONSTANTS ─────────────────────────────
+// 1. Minimum angular speed (in rad/sec) required to register an active swing. Default: 5.0 rad/sec (~286 deg/sec)
+export const DECEL_MIN_SWING_SPEED: number = 5.0;
+export const DECEL_DROP_RATIO: number = 0.3;
+
+// ── ⏱️ FRAME RANGE RELEASE WINDOW CONSTANTS ─────────────────────────────
+// Minimum allowed release frame in 71 total jump frame scale (Default: 63.0)
+export const JUMP_RELEASE_FRAME_MIN: number = 58.0;
+
+// Maximum allowed release frame in 71 total jump frame scale (Default: 66.0)
+export const JUMP_RELEASE_FRAME_MAX: number = 71.0;
+
 export interface Vec2 {
     x: number;
     y: number;
 }
 
-export interface KeyframePose {
+export interface KeyframePose {  
     // 4. Spine
     spineAngleDeg: number;         // Absolute angle wrt positive X axis. (e.g. -90 = straight up, -110 = leaning left)
     
@@ -168,6 +180,7 @@ export class Bowler {
 
     public currentGreenLineOffset: number = GREEN_LINE_INITIAL_OFFSET;
     public prevGreenLineOffset: number = GREEN_LINE_INITIAL_OFFSET;
+    public maxObservedOmegaRad: number = 0.0;
 
     public getGreenLineX(): number {
         return this.startJumpX - this.currentGreenLineOffset;
@@ -194,6 +207,7 @@ export class Bowler {
         this.targetIntensity = 1.0;
         this.currentGreenLineOffset = GREEN_LINE_INITIAL_OFFSET;
         this.prevGreenLineOffset = GREEN_LINE_INITIAL_OFFSET;
+        this.maxObservedOmegaRad = 0.0;
     }
 
     public triggerPreJump(): void {
@@ -242,6 +256,7 @@ export class Bowler {
         this.runIntensity = 0.0;
         this.currentGreenLineOffset = GREEN_LINE_INITIAL_OFFSET;
         this.prevGreenLineOffset = GREEN_LINE_INITIAL_OFFSET;
+        this.maxObservedOmegaRad = 0.0;
         this.resetProceduralUpperBodyState();
         if (this.currentHipPosition.x < 2000) {
             this.currentHipPosition.x = BOWLER_START_X; // Far right starting position for runup

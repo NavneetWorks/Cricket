@@ -143,31 +143,6 @@ export default class Renderer{
             this.ctx.textAlign = "center";
             this.ctx.fillText("JUMP POINT", markX, groundY - 54);
             this.ctx.restore();
-
-            // 🟢 Green Vertical Line (Dynamic Creeping Line from startJumpX, Height 500px from Ground)
-            const greenLineX = this.bowler.getGreenLineX();
-            this.ctx.save();
-            this.ctx.strokeStyle = "#22c55e"; // Vibrant Green
-            this.ctx.lineWidth = 3;
-            this.ctx.setLineDash([8, 4]);
-            this.ctx.beginPath();
-            this.ctx.moveTo(greenLineX, groundY);
-            this.ctx.lineTo(greenLineX, groundY - 500);
-            this.ctx.stroke();
-            this.ctx.setLineDash([]);
-
-            // Green top badge
-            this.ctx.fillStyle = "#22c55e";
-            this.ctx.beginPath();
-            this.ctx.arc(greenLineX, groundY - 500, 6, 0, Math.PI * 2);
-            this.ctx.fill();
-
-            // Green text label showing live dynamic offset distance
-            this.ctx.font = "bold 11px Inter, Arial, sans-serif";
-            this.ctx.fillStyle = "#22c55e";
-            this.ctx.textAlign = "center";
-            this.ctx.fillText(`${Math.round(this.bowler.currentGreenLineOffset)}px MARK`, greenLineX, groundY - 510);
-            this.ctx.restore();
         }
 
         this.drawBallTrail();

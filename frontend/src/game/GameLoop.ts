@@ -1,6 +1,6 @@
 import Bat from "../entities/Bat";
 import Ball from "../entities/Ball";
-import { Bowler } from "../entities/Bowler";
+import { Bowler, DECEL_MIN_SWING_SPEED, DECEL_DROP_RATIO, JUMP_RELEASE_FRAME_MIN, JUMP_RELEASE_FRAME_MAX } from "../entities/Bowler";
 import BowlingArea from "../entities/BowlingArea";
 import Renderer from "./Rederer";
 import Input from "./Input";
@@ -680,59 +680,64 @@ private getProjectileStateWithBounce(
                 bowler.overrideLeftArmWithIK(this.currentArmAngleRad, armReach);
             }
 
-            // 🟢 10x RELATIVE SUB-STEPPING BALL RELEASE & FLIGHT ENGINE (600 Hz Physics Rate)
-            if (!bowler.isBallReleased && bowler.startJumpX) {
-                const prevGreenLineX = bowler.getPrevGreenLineX();
-                const currGreenLineX = bowler.getGreenLineX();
+            // 🟢 FRAME RANGE WINDOW (63 to 66) & DECELERATION SNAP BALL RELEASE ENGINE
+            if (!bowler.isBallReleased && (bowler.isExecutingJump || bowler.isPreJumpTransitioning || bowler.currentHipPosition.x <= bowler.startJumpX)) {
+                // ⏱️ Compute current jump animation frame index (0 to 70 out of 71 total frames)
+                const totalJumpFrames = Bowler.PRE_DELIVERY_JUMP.length;
+                const totalArmPathDeg = 370.6;
+                const progressRatio = Math.min(1.0, Math.max(0.0, bowler.accumulatedJoystickAngleDeg / totalArmPathDeg));
+                const currentJumpFrameIndex = progressRatio * (totalJumpFrames - 1);
 
-                const prevWristX = this.ball.prevPos.x > 0 ? this.ball.prevPos.x : bowler.leftWrist.x;
-                const currWristX = bowler.leftWrist.x;
-                const prevWristY = this.ball.prevPos.y > 0 ? this.ball.prevPos.y : bowler.leftWrist.y;
-                const currWristY = bowler.leftWrist.y;
+                // 🛑 Block release if current frame is before Frame 63 (out of 71 total frames)
+                if (currentJumpFrameIndex >= JUMP_RELEASE_FRAME_MIN) {
+                    const prevWristX = this.ball.prevPos.x > 0 ? this.ball.prevPos.x : bowler.leftWrist.x;
+                    const currWristX = bowler.leftWrist.x;
+                    const prevWristY = this.ball.prevPos.y > 0 ? this.ball.prevPos.y : bowler.leftWrist.y;
+                    const currWristY = bowler.leftWrist.y;
 
-                let releaseTriggered = false;
-                let releaseFraction = 0;
+                    let releaseTriggered = false;
 
-                const SUB_STEPS = 10;
-                for (let k = 1; k <= SUB_STEPS; k++) {
-                    const tPrev = (k - 1) / SUB_STEPS;
-                    const tCurr = k / SUB_STEPS;
-
-                    const subPrevWristX = prevWristX + tPrev * (currWristX - prevWristX);
-                    const subPrevLineX = prevGreenLineX + tPrev * (currGreenLineX - prevGreenLineX);
-                    const subPrevD = subPrevWristX - subPrevLineX;
-
-                    const subCurrWristX = prevWristX + tCurr * (currWristX - prevWristX);
-                    const subCurrLineX = prevGreenLineX + tCurr * (currGreenLineX - prevGreenLineX);
-                    const subCurrD = subCurrWristX - subCurrLineX;
-
-                    // 🎯 Check if relative distance D(t) = WristX - LineX crosses zero from Right (>0) to Left (<=0)
-                    if (subPrevD > 0 && subCurrD <= 0) {
-                        const microFrac = Math.min(1.0, Math.max(0.0, subPrevD / Math.max(0.001, subPrevD - subCurrD)));
-                        releaseFraction = (k - 1 + microFrac) / SUB_STEPS;
-                        releaseTriggered = true;
-                        break;
+                    // 🚀 1. Track Peak Angular Velocity during active arm swing
+                    const currentOmega = Math.abs(bowler.joystickAngularVelRad);
+                    if (currentOmega > bowler.maxObservedOmegaRad) {
+                        bowler.maxObservedOmegaRad = currentOmega;
                     }
-                }
 
-                if (releaseTriggered) {
-                    const f = releaseFraction;
-                    const releaseX = prevGreenLineX + f * (currGreenLineX - prevGreenLineX);
-                    const releaseY = prevWristY + f * (currWristY - prevWristY);
+                    // 🚀 2. Check Significant Deceleration Trigger (High Swing Speed + Speed Drop in Top Arc)
+                    if (bowler.maxObservedOmegaRad >= DECEL_MIN_SWING_SPEED && currentOmega <= bowler.maxObservedOmegaRad * (1.0 - DECEL_DROP_RATIO)) {
+                        // Verify arm is in the valid top release arc (10 o'clock to 1 o'clock: ~3.7 to ~5.4 rad)
+                        let normAngle = bowler.smoothJoystickAngleRad % (Math.PI * 2);
+                        if (normAngle < 0) normAngle += Math.PI * 2;
+                        if (normAngle >= 3.7 && normAngle <= 5.4) {
+                            releaseTriggered = true;
+                        }
+                    }
 
-                    // 📐 Instantaneous Tangential Velocity Component (Raw Derivative without Math.abs)
-                    const omega = bowler.joystickAngularVelRad; // Signed rad/sec (+ or -)
+                    // 🚀 3. Max Frame Boundary (Frame 66 out of 71): Force release if reached without earlier deceleration
+                    if (!releaseTriggered && currentJumpFrameIndex >= JUMP_RELEASE_FRAME_MAX) {
+                        releaseTriggered = true;
+                    }
+
+                    if (releaseTriggered) {
+                        const releaseX = currWristX;
+                        const releaseY = currWristY;
+
+                    // 📐 Peak Whip Angular Velocity for Full Release Speed (Preserves max flick effort)
+                    const sign = bowler.joystickAngularVelRad >= 0 ? 1 : -1;
+                    const peakOmega = Math.max(Math.abs(bowler.joystickAngularVelRad), bowler.maxObservedOmegaRad);
+                    const releaseOmega = peakOmega * sign;
+
                     const totalArmLen = bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
                     const minReach = Math.abs(bowler.FRONT_UPPER_ARM - bowler.FRONT_LOWER_ARM) + 5;
                     const armR = minReach + (totalArmLen - minReach - 1.0) * bowler.smoothJoystickRadiusRatio;
                     const theta = bowler.smoothJoystickAngleRad;
 
-                    // Exact 2D Circular Tangential Velocity Derivative with Wrist Motion Continuity
-                    const vArmX = -armR * Math.sin(theta) * omega;
+                    // Exact 2D Circular Tangential Velocity Derivative with Peak Whip Power
+                    const vArmX = -armR * Math.sin(theta) * releaseOmega;
                     const vWristY = (currWristY - prevWristY) / dt;
-                    const polarVArmY = armR * Math.cos(theta) * omega;
+                    const polarVArmY = armR * Math.cos(theta) * releaseOmega;
                     // Blend polar arm Y speed with actual physical wrist Y delta velocity for 100% smooth trajectory continuity
-                    const vArmY = Math.abs(omega) > 0.5 ? (polarVArmY * 0.5 + vWristY * 0.5) : vWristY;
+                    const vArmY = Math.abs(releaseOmega) > 0.5 ? (polarVArmY * 0.5 + vWristY * 0.5) : vWristY;
 
                     // 🏃 Forward Body Horizontal Velocity Component (-X direction towards pitch, natural un-amplified)
                     let vBodyX = -Math.abs(bowler.lastRunupSpeedX > 0 ? bowler.lastRunupSpeedX : 800.0);
@@ -763,9 +768,8 @@ private getProjectileStateWithBounce(
                     this.ball.vel.y = vReleaseY;
                     bowler.isBallReleased = true;
 
-                    // Update remaining fractional time physics for this frame
-                    const remainingDt = dt * (1.0 - f);
-                    this.ball.update(remainingDt);
+                    // Update initial flight physics step for this frame
+                    this.ball.update(dt * 0.5);
                 } else {
                     // Ball is still held in hand before crossing Green Line:
                     this.ball.isHeldInHand = true;
@@ -775,6 +779,15 @@ private getProjectileStateWithBounce(
                     this.ball.prevPos.x = bowler.leftWrist.x;
                     this.ball.prevPos.y = bowler.leftWrist.y;
                 }
+            } else {
+                // Ball is locked in hand before Frame 63:
+                this.ball.isHeldInHand = true;
+                this.ball.isActive = true;
+                this.ball.pos.x = bowler.leftWrist.x;
+                this.ball.pos.y = bowler.leftWrist.y;
+                this.ball.prevPos.x = bowler.leftWrist.x;
+                this.ball.prevPos.y = bowler.leftWrist.y;
+            }
             } else if (bowler.isBallReleased) {
                 // Ball has been released: update flight physics (Gravity, Friction & Pitch Bounce!)
                 this.ball.update(dt);
