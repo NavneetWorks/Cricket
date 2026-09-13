@@ -1,11 +1,14 @@
 
-// 🟢 FIXED CODE (Replace export enum with export const):
 export const PacketType = {
-    BOWLER_RELEASE: 0x01,   // 23 Bytes: Release Pos & Velocity
-    BAT_SWING_STREAM: 0x02, // 19 Bytes: 60Hz Bat pose
-    HIT_RESULT: 0x03,
-    PING:0x04,
-    PONG:0x05        
+    BOWLER_RELEASE: 0x01,        // 23 Bytes: Release Pos & Velocity (Reliable)
+    BAT_SWING_STREAM: 0x02,      // 19 Bytes: 60Hz Bat pose (Unreliable)
+    HIT_RESULT: 0x03,            // 31 Bytes: Collision outcome (Reliable)
+    PING: 0x04,
+    PONG: 0x05,
+    BOWLER_POSITION: 0x06,       // 11 Bytes: Position updates (Reliable)
+    BOWLER_START_RUN: 0x07,      // 7 Bytes: Space key runup start (Reliable)
+    BOWLER_START_GATHER: 0x08,   // 11 Bytes: Left click gathering (Reliable)
+    BOWLER_JOYSTICK_STREAM: 0x09 // 19 Bytes: 60Hz Bowler Arm Joystick (Unreliable)
 } as const;
 
 export type PacketType = typeof PacketType[keyof typeof PacketType];
@@ -32,8 +35,56 @@ export function serializeBowlerRelease(
     
     return buffer;
 }
+// 2 making bolwer postion packet 
 
-// 2. Serialize Bat Swing Packet (19 Bytes) - UNRELIABLE (60Hz UDP)
+
+
+export function serializeBowlerPosition(senderId:number,tickNumber:number,currentHipX:number):ArrayBuffer{
+    const buffer = new ArrayBuffer(11);
+    const view = new DataView(buffer);
+
+    view.setUint8(0,0x06);
+    view.setUint32(1,senderId,true);
+    view.setUint16(5,tickNumber,true);
+    view.setFloat32(7,currentHipX,true);
+
+    return buffer;
+}
+
+export function serializeBowlerStartRun(
+    senderId: number,
+    tickNumber: number
+): ArrayBuffer {
+    const buffer = new ArrayBuffer(7);
+    const view = new DataView(buffer);
+    
+    view.setUint8(0, PacketType.BOWLER_START_RUN); // Opcode 0x07
+    view.setUint32(1, senderId, true);
+    view.setUint16(5, tickNumber, true);
+    
+    return buffer;
+}
+
+export function serializeBowlerJoystickStream(
+    senderId: number,
+    tickNumber: number,
+    smoothAngleRad: number,
+    smoothRadiusRatio: number
+): ArrayBuffer {
+    const buffer = new ArrayBuffer(19);
+    const view = new DataView(buffer);
+    
+    view.setUint8(0, PacketType.BOWLER_JOYSTICK_STREAM); // Opcode 0x09
+    view.setUint32(1, senderId, true);
+    view.setUint16(5, tickNumber, true);
+    view.setFloat32(7, smoothAngleRad, true);      // Exact Physics Arm Angle
+    view.setFloat32(11, smoothRadiusRatio, true);  // Exact Arm Reach Ratio
+    
+    return buffer;
+}
+
+
+// 3. Serialize Bat Swing Packet (19 Bytes) - UNRELIABLE (60Hz UDP)
 export function serializeBatSwing(
     senderId: number,
     tickNumber: number,
@@ -55,10 +106,7 @@ export function serializeBatSwing(
 }
 
 // 3. Serialize Hit Result Packet (31 Bytes) - RELIABLE
-// 🟢 STEP 3: 2 naye Float32 (offset 23 & 27) — sound sync ke liye:
-//    impactSpeed   = v_normal (closing speed jo sound ke gain/pitch ko drive karti hai)
-//    hitPixelOffset = bat par kis point par lagi (16-region MP3 selection)
-// In dono se bowler ka fallback sound batter wali sound ke EXACT barabar bajta hai.
+
 export function serializeHitResult(
     senderId: number,
     tickNumber: number,
@@ -100,5 +148,20 @@ export function serializePong(senderId:number,sequeneceNumber:number):ArrayBuffe
     view.setUint8(0,PacketType.PONG);
     view.setUint32(1,senderId,true);
     view.setUint16(5,sequeneceNumber,true);
+    return buffer;
+}
+export function serializeBowlerStartGather(
+    senderId: number,
+    tickNumber: number,
+    clickX: number
+): ArrayBuffer {
+    const buffer = new ArrayBuffer(11);
+    const view = new DataView(buffer);
+    
+    view.setUint8(0, PacketType.BOWLER_START_GATHER); // Opcode 0x08
+    view.setUint32(1, senderId, true);
+    view.setUint16(5, tickNumber, true);
+    view.setFloat32(7, clickX, true);
+    
     return buffer;
 }

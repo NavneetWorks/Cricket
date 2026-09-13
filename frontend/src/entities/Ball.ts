@@ -18,6 +18,20 @@ export default class Ball {
 
     constructor() {}
 
+    // Ball ko exact 2D velocity vector (vx, vy) se fenkne ka function
+    public throwBallWithVelocity(startX: number, startY: number, vx: number, vy: number): void {
+        this.pos.x = startX;
+        this.pos.y = startY;
+        this.prevPos.x = startX;
+        this.prevPos.y = startY;
+        this.rotation = 0; // Reset spin
+        this.isStuck = false;
+        this.isHeldInHand = false;
+        this.vel.x = vx;
+        this.vel.y = vy;
+        this.isActive = true;
+    }
+
     // Ball ko kisi angle aur speed se fenkne ka function
     public throwBall(startX: number, startY: number, speed: number, angleDegrees: number): void {
         this.pos.x = startX;

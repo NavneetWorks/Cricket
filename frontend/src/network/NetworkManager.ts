@@ -1,10 +1,10 @@
 
-import {serializeBatSwing,serializeBowlerRelease,serializeHitResult,PacketType,serializePing,serializePong} from './NetworkProtocol';
+import {serializeBatSwing,serializeBowlerRelease,serializeHitResult,PacketType,serializePing,serializePong,serializeBowlerPosition, serializeBowlerStartRun, serializeBowlerStartGather,serializeBowlerJoystickStream} from './NetworkProtocol';
 export default class NetWorkManager{
     private ws:WebSocket | null = null;
     private pc: RTCPeerConnection | null = null;
-    private dataChannel: RTCDataChannel | null = null
-
+    private reliableChannel: RTCDataChannel | null = null;
+    private unreliableChannel: RTCDataChannel | null = null;
     public myPlayerId:number = 0;
     public opponentId:number = 0;
     public myRole: 'BATSMAN' | 'BOWLER' | 'NONE' = 'NONE';
@@ -14,9 +14,12 @@ export default class NetWorkManager{
     public onOpponentBatSwing?:(tick:number,handleX:number,handleY:number,angle:number)=>void;
     public onBowlerRelease?: (startX: number, startY: number, startVx: number, startVy: number) => void;
     public onHitResult?: (exitX: number, exitY: number, exitVx: number, exitVy: number, impactSpeed: number, hitPixelOffset: number,tick:number) => void;
+    public onOpponentBowlerPosition: ((tick: number, hipX: number) => void) | null = null;
+    public onOpponentBowlerStartRun?: (tick: number) => void;
+    public onOpponentBowlerStartGather?: (tick: number, clickX: number) => void;
+    public onOpponentBowlerJoystick?: (tick: number, angleRad: number, distanceRatio: number) => void;
 
     private heartbeatTimer: any = null;
-
     private rttSamples : number[] = [];
     private pingSequence  : number = 0;
     private pendingPings:Map<number,number> = new Map();
@@ -78,15 +81,22 @@ export default class NetWorkManager{
             ]
         };
         this.pc = new RTCPeerConnection(rtcConfig);
-        this.dataChannel = this.pc.createDataChannel("gameData");
-        this.dataChannel.binaryType = "arraybuffer";
-        this.dataChannel.onopen = () => {
-            console.log("UPDT data channel is now open and active")
+        this.reliableChannel = this.pc.createDataChannel("gameEvents", { ordered: true });
+        this.reliableChannel.binaryType = "arraybuffer";
+        this.reliableChannel.onopen = () => {
+            console.log("🟢 Reliable DataChannel (gameEvents) active");
             this.isConnected = true;
-             this.startRttHeartbeat();
+            this.startRttHeartbeat();
         };
-        this.dataChannel.onmessage = (dcEvent:MessageEvent) => {
-            if(dcEvent.data instanceof ArrayBuffer){
+        this.reliableChannel.onmessage = (dcEvent: MessageEvent) => {
+            if (dcEvent.data instanceof ArrayBuffer) {
+                this.handleBinaryUDPMessage(dcEvent.data);
+            }
+        };
+        this.unreliableChannel = this.pc.createDataChannel("gameStream", { ordered: false, maxRetransmits: 0 });
+        this.unreliableChannel.binaryType = "arraybuffer";
+        this.unreliableChannel.onmessage = (dcEvent: MessageEvent) => {
+            if (dcEvent.data instanceof ArrayBuffer) {
                 this.handleBinaryUDPMessage(dcEvent.data);
             }
         };
@@ -123,18 +133,21 @@ export default class NetWorkManager{
         }
         this.pc.ondatachannel = (event) => {
             console.log("WebRtc DataChannel Recieved from C++ Server:",event.channel.label);
-            this.dataChannel = event.channel;
-            this.dataChannel.binaryType = "arraybuffer";
-            this.dataChannel.onopen = () => {
-                console.log("UPDT data channel is now open and active")
+            const channel = event.channel;
+            channel.binaryType = "arraybuffer";
+            if (channel.label === "gameStream") {
+                this.unreliableChannel = channel;
+            } else {
+                this.reliableChannel = channel;
                 this.isConnected = true;
                 this.startRttHeartbeat();
-            };
-            this.dataChannel.onmessage = (dcEvent:MessageEvent) => {
-                if(dcEvent.data instanceof ArrayBuffer){
-                    this.handleBinaryUDPMessage(dcEvent.data);
-                }
             }
+            channel.onmessage = (dcEvent: MessageEvent) => {
+            if (dcEvent.data instanceof ArrayBuffer) {
+                this.handleBinaryUDPMessage(dcEvent.data);
+            }
+        };
+
         }
     }
 
@@ -202,8 +215,7 @@ export default class NetWorkManager{
         }else if(opcode === PacketType.PING){
             const senderId = view.getUint32(1,true);
             const seq = view.getUint16(5,true);
-            this.dataChannel!.send(serializePong(senderId,seq));
-        }else if(opcode === PacketType.PONG){
+            this.reliableChannel!.send(serializePong(senderId, seq));        }else if(opcode === PacketType.PONG){
             const seq = view.getUint16(5,true);
             const sendTime = this.pendingPings.get(seq);
             if(sendTime !== undefined){
@@ -218,32 +230,69 @@ export default class NetWorkManager{
             }
 
         }
+        else if (opcode === PacketType.BOWLER_POSITION) {
+            // 🟢 NAYA: Bowler Position Update (Opcode 0x06)
+            const senderId = view.getUint32(1, true);
+            const tick = view.getUint16(5, true);
+            const hipX = view.getFloat32(7, true);
+            if (this.onOpponentBowlerPosition) {
+                this.onOpponentBowlerPosition(tick, hipX);
+            }
+        } else if (opcode === PacketType.BOWLER_START_RUN) {
+            const senderId = view.getUint32(1, true);
+            const tick = view.getUint16(5, true);
+            if (this.onOpponentBowlerStartRun) {
+                this.onOpponentBowlerStartRun(tick);
+            }
+        } else if (opcode === PacketType.BOWLER_START_GATHER) {
+            const senderId = view.getUint32(1, true);
+            const tick = view.getUint16(5, true);
+            const clickX = view.getFloat32(7, true);
+            if (this.onOpponentBowlerStartGather) {
+                this.onOpponentBowlerStartGather(tick, clickX);
+            }
+        } else if (opcode === PacketType.BOWLER_JOYSTICK_STREAM) {
+            const senderId = view.getUint32(1, true);
+            const tick = view.getUint16(5, true);
+            const smoothAngleRad = view.getFloat32(7, true);
+            const smoothRadiusRatio = view.getFloat32(11, true);
+            if (this.onOpponentBowlerJoystick) {
+                this.onOpponentBowlerJoystick(tick, smoothAngleRad, smoothRadiusRatio);
+            }
+        }       
     }
     public sendBowlerRelease(tick: number, startX: number, startY: number, startVx: number, startVy: number) {
-        if (this.dataChannel && this.dataChannel.readyState === "open") {
+        if (this.reliableChannel && this.reliableChannel.readyState === "open") {
             const buffer = serializeBowlerRelease(this.myPlayerId, tick, startX, startY, startVx, startVy);
-            this.dataChannel.send(buffer);
+            this.reliableChannel.send(buffer);
         }
     }
 
-     public sendBatSwingUDP(tick: number, handleX: number, handleY: number, batAngle: number) {
-        if (this.dataChannel && this.dataChannel.readyState === "open") {
+
+    public sendBatSwingUDP(tick: number, handleX: number, handleY: number, batAngle: number) {
+        if (this.unreliableChannel && this.unreliableChannel.readyState === "open") {
             const buffer = serializeBatSwing(this.myPlayerId, tick, handleX, handleY, batAngle);
-            this.dataChannel.send(buffer);
+            this.unreliableChannel.send(buffer);
         }
     }
-    // 🟢 STEP 3: impactSpeed + hitPixelOffset bhi bhejo (sound sync ke liye)
+    public sendBowlerJoystickUDP(tick: number, smoothAngleRad: number, smoothRadiusRatio: number) {
+        if (this.unreliableChannel && this.unreliableChannel.readyState === "open") {
+            const buffer = serializeBowlerJoystickStream(this.myPlayerId, tick, smoothAngleRad, smoothRadiusRatio);
+            this.unreliableChannel.send(buffer);
+        }
+    }
+
     public sendHitResult(tick: number, exitX: number, exitY: number, exitVx: number, exitVy: number, impactSpeed: number, hitPixelOffset: number) {
-        if (this.dataChannel && this.dataChannel.readyState === "open") {
-            const buffer = serializeHitResult(this.myPlayerId, tick, exitX, exitY, exitVx, exitVy, impactSpeed, hitPixelOffset);
-            this.dataChannel.send(buffer);
+            if (this.reliableChannel && this.reliableChannel.readyState === "open") {
+                const buffer = serializeHitResult(this.myPlayerId, tick, exitX, exitY, exitVx, exitVy, impactSpeed, hitPixelOffset);
+                this.reliableChannel.send(buffer);
+            }
         }
-    }
 
     private startRttHeartbeat(){
         if(this.rttPingTimer) return;
         this.rttPingTimer = setInterval(()=>{
-            if(this.dataChannel && this.dataChannel.readyState === "open"){
+            if (this.reliableChannel && this.reliableChannel.readyState === "open") {
                 const now = performance.now();
                 this.pendingPings.forEach((sendTime,seq)=>{
                     if(now - sendTime > 3000){ 
@@ -253,7 +302,8 @@ export default class NetWorkManager{
                 const seq = this.pingSequence; 
                 this.pingSequence = (this.pingSequence + 1) % 65536;
                 this.pendingPings.set(seq,performance.now());
-                this.dataChannel!.send(serializePing(this.myPlayerId, seq));            }
+                 this.reliableChannel.send(serializePing(this.myPlayerId, seq));
+            }
         },500)
     }
     private stopRttHeartbeat(){
@@ -278,4 +328,23 @@ export default class NetWorkManager{
       public getRTT(): number {
         return this.lastRTT;
     }
+
+        public sendBowlerPosition(tick: number, currentHipX: number) {
+            if (this.reliableChannel && this.reliableChannel.readyState === "open") {
+                const buffer = serializeBowlerPosition(this.myPlayerId, tick, currentHipX);
+                this.reliableChannel.send(buffer);
+            }
+                }
+        public sendBowlerStartRun(tick: number) {
+            if (this.reliableChannel && this.reliableChannel.readyState === "open") {
+                const buffer = serializeBowlerStartRun(this.myPlayerId, tick);
+                this.reliableChannel.send(buffer);
+            }
+        }
+        public sendBowlerStartGather(tick: number, clickX: number) {
+            if (this.reliableChannel && this.reliableChannel.readyState === "open") {
+                const buffer = serializeBowlerStartGather(this.myPlayerId, tick, clickX);
+                this.reliableChannel.send(buffer);
+            }
+        }
 }

@@ -3,18 +3,18 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT, GROUND_HEIGHT, PLAYER_LENGTH_FACTOR, BOWLE
 // ── 🚀 DECELERATION RELEASE ENGINE CONSTANTS ─────────────────────────────
 // 1. Minimum angular speed (in rad/sec) required to register an active swing. Default: 5.0 rad/sec (~286 deg/sec)
 export const DECEL_MIN_SWING_SPEED: number = 5.0;
-export const DECEL_DROP_RATIO: number = 0.6;
+export const DECEL_DROP_RATIO: number = 0.5;
 
 // ── ⏱️ FRAME RANGE RELEASE WINDOW CONSTANTS ─────────────────────────────
 // Minimum allowed release frame in 71 total jump frame scale (Default: 63.0)
-export const JUMP_RELEASE_FRAME_MIN: number = 58.0;
+export const JUMP_RELEASE_FRAME_MIN: number = 62.0;
 
 // Maximum allowed release frame in 71 total jump frame scale (Default: 66.0)
-export const JUMP_RELEASE_FRAME_MAX: number = 71.0;
+export const JUMP_RELEASE_FRAME_MAX: number = 65.0;
 
 export interface Vec2 {
-    x: number;
-    y: number;
+    x: number;  
+    y: number;    
 }
 
 export interface KeyframePose {  
@@ -247,6 +247,8 @@ export class Bowler {
         this.setInitialRunPose();
     }
 
+    public readonly DEFAULT_START_JUMP_X: number = 750.0;
+    public readonly POST_RELEASE_DELAY_SEC: number = 0.10;
     public isCycleCompleted: boolean = false;
     public startJumpX: number = 750.0;
     public gatheringStartX: number | null = null;
@@ -255,6 +257,7 @@ export class Bowler {
     public gatheringAngleTraveledDeg: number = 0.0;
     public ballTrailPoints: Vec2[] = [];
     public isBallReleased: boolean = false;
+    public debugReleasePoint: Vec2 | null = null;
     public lastReleaseVx: number | null = null;
     public lastReleaseVy: number | null = null;
     public lastReleaseVBodyX: number | null = null;

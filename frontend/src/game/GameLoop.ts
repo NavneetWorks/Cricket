@@ -76,10 +76,15 @@ export default class GameLoop{
         if(this.isOnlineMode){
             this.network = new NetworkManager();
             this.network.connect(SERVER_CONFIG.SIGNALING_URL);
-            this.network.onMatchStart = (role) =>{
-                console.log("match started assigned role : ",role);
-                this.setGameMode(role === 'BATSMAN' ? 'BATTING' : 'BOWLING');
+            this.network.onMatchStart = (role) => {
+                console.log("match started assigned role : ", role);
+                this.setGameMode(role === 'BATSMAN' ? 'BATTING' : 'NEW_BOWLER');
                 this.networkTickNumber = 0;
+                this.hasSentReleasePacket = false;
+
+                if (role !== 'BATSMAN' && this.network && this.network.isConnected) {
+                    this.network.sendBowlerPosition(0, this.renderer.bowler.currentHipPosition.x);
+                }
                 // Naya match — purane snapshots/playhead clear karo (Step 2)
                 this.batPoseQueue = [];
                 this.batInterpTick = 0;
@@ -88,15 +93,16 @@ export default class GameLoop{
                 this.suppressNextPacketSound = false;
                 this.hasAuthoritativeResult = false;
             };
-            this.network.onBowlerRelease = (startX,startY,speed,angleDegrees) =>{
+            this.network.onBowlerRelease = (startX, startY, startVx, startVy) => {
                 this.renderer.wicket.reset();
-                this.ball.throwBall(startX,startY,speed,angleDegrees);
+                this.renderer.bowler.debugReleasePoint = { x: startX, y: startY };
+                this.renderer.bowler.ballTrailPoints = [{ x: startX, y: startY }];
+                this.ball.throwBallWithVelocity(startX, startY, startVx, startVy);
                 // 🟢 STEP 3: naya ball aaya — per-ball prediction flags reset
-                // (nayi ball par sound dobara baj sakti hai, isliye guard refresh)
                 this.localPredictedHit = false;
                 this.suppressNextPacketSound = false;
                 this.hasAuthoritativeResult = false;
-            }
+            };
         
             this.network.onOpponentBatSwing = (tick, mouseX, mouseY, angle) => {
                
@@ -154,6 +160,43 @@ export default class GameLoop{
                     hitPosY: exitY
                 };
             }
+            this.network.onOpponentBowlerPosition = (tick, hipX) => {
+                const bowler = this.renderer.bowler;
+                bowler.currentHipPosition.x = hipX;
+                bowler.preJumpStartX = hipX;
+                bowler.setInitialRunPose();
+            };
+            this.network.onOpponentBowlerStartRun = (tick) => {
+                const bowler = this.renderer.bowler;
+                
+                // 1. Reset bowler & ball to fresh runup state
+                bowler.resetToIdle();
+                const startX = bowler.preJumpStartX > 0 ? bowler.preJumpStartX : BOWLER_START_X;
+                bowler.currentHipPosition.x = startX;
+                
+                this.ball.isHeldInHand = true;
+                this.ball.isActive = true;
+                
+                // 2. Trigger local runup animation
+                bowler.startRunning();
+            };
+            this.network.onOpponentBowlerStartGather = (tick, clickX) => {
+                const bowler = this.renderer.bowler;
+                const minBoundaryX = bowler.DEFAULT_START_JUMP_X;
+                const gatheringDist = Math.max(200, (clickX - minBoundaryX) * 0.8);
+                const targetX = Math.max(minBoundaryX, clickX - gatheringDist);
+                bowler.startJumpX = targetX;
+                bowler.gatheringStartX = clickX;
+                bowler.gatheringTargetX = bowler.startJumpX;
+                bowler.isGatheringArmActive = true;
+                bowler.gatheringAngleTraveledDeg = 0.0;
+                bowler.accumulatedJoystickAngleDeg = 0.0;
+            };
+            this.network.onOpponentBowlerJoystick = (tick, smoothAngleRad, smoothRadiusRatio) => {
+                const bowler = this.renderer.bowler;
+                bowler.smoothJoystickAngleRad = smoothAngleRad;
+                bowler.smoothJoystickRadiusRatio = smoothRadiusRatio;
+            };
         }
         const startBowlerDelivery = () => {
             const bowler = this.renderer.bowler;
@@ -191,19 +234,24 @@ export default class GameLoop{
             if (!this.isOnlineMode && this.renderer.gameMode === 'BATTING') {
                 startBowlerDelivery();
             } else if (this.renderer.gameMode === 'NEW_BOWLER') {
-                // Left click sets startJumpX preJumpDistance to the left of current bowler position!
+                // Left click triggers gathering stance dynamically towards the crease boundary
                 if (bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {
                     const clickX = bowler.currentHipPosition.x;
-                    const preJumpDistance = 1000;
-                    const targetX = clickX - preJumpDistance;
-                    const minBoundaryX = 750; // Crease boundary limit
-                    bowler.startJumpX = Math.max(minBoundaryX, targetX);
+                    const minBoundaryX = bowler.DEFAULT_START_JUMP_X;
+                    const gatheringDist = Math.max(200, (clickX - minBoundaryX) * 0.8);
+                    const targetX = Math.max(minBoundaryX, clickX - gatheringDist);
+                    bowler.startJumpX = targetX;
                     bowler.gatheringStartX = clickX;
                     bowler.gatheringTargetX = bowler.startJumpX;
                     bowler.isGatheringArmActive = true;
                     bowler.gatheringAngleTraveledDeg = 0.0;
                     bowler.accumulatedJoystickAngleDeg = 0.0;
-                    bowler.ballTrailPoints = [];
+
+                    // 📡 Send Left-Click Gathering Event to Opponent!
+                    if (this.isOnlineMode && this.network && this.network.isConnected) {
+                        this.network.sendBowlerStartGather(this.networkTickNumber, clickX);
+                    }
+
                 }
             }
         });
@@ -220,6 +268,9 @@ export default class GameLoop{
                         bowler.resetToIdle();
                         bowler.currentHipPosition.x = startX;
                         bowler.startRunning();
+                        if (this.isOnlineMode && this.network && this.network.isConnected) {
+                        this.network.sendBowlerStartRun(this.networkTickNumber);
+                    }
                         this.ball.isHeldInHand = true;
                         this.ball.isActive = true;
                     }
@@ -247,6 +298,9 @@ export default class GameLoop{
 
                     if (this.renderer.joystick) {
                         this.renderer.joystick.reset();
+                    }
+                    if (this.isOnlineMode && this.network && this.network.isConnected) {
+                        this.network.sendBowlerPosition(this.networkTickNumber, bowler.currentHipPosition.x);
                     }
 
                     const initialPose = bowler.getProceduralUpperBodyPose(Math.PI);
@@ -425,6 +479,15 @@ private getProjectileStateWithBounce(
     };
 }
     private update(dt: number){
+        // ⏱️ Global 60Hz Network Tick Timer (Runs for all Modes)
+        this.networkTimer += dt;
+        let isTickAdvanced = false;
+        if (this.networkTimer >= this.NETWORK_INTERVAL) {
+            this.networkTimer -= this.NETWORK_INTERVAL;
+            this.networkTickNumber++;
+            isTickAdvanced = true;
+        }
+
         if (this.renderer.gameMode === 'BATTING') {
             const currentCommand = this.input.getHistory().peek();
             if(currentCommand === null){
@@ -466,21 +529,15 @@ private getProjectileStateWithBounce(
 
             this.ball.update(dt);
             this.renderer.wicket.update(dt);
-            
-            this.networkTimer += dt;
-            if (this.networkTimer >= this.NETWORK_INTERVAL) {
-                this.networkTimer -= this.NETWORK_INTERVAL;
-                this.networkTickNumber++;
-            }
-
-            if (this.isOnlineMode && this.network && this.network.isConnected) {
+         
+            if (isTickAdvanced && this.isOnlineMode && this.network && this.network.isConnected) {
                 this.network.sendBatSwingUDP(
                     this.networkTickNumber,
                     this.input.mouseX,
                     this.input.mouseY,
                     0
                 );
-             }
+            }
             
             // if(this.isOnlineMode && this.network && this.network.isConnected){
             //     this.networkTimer += dt;
@@ -523,6 +580,16 @@ private getProjectileStateWithBounce(
         } else if (this.renderer.gameMode === 'NEW_BOWLER') {
             const bowler = this.renderer.bowler;
 
+            if (isTickAdvanced && this.isOnlineMode && this.network && this.network.isConnected) {
+                if (!bowler.isBallReleased && (bowler.isGatheringArmActive || bowler.isExecutingJump || bowler.isRunning)) {
+                    this.network.sendBowlerJoystickUDP(
+                        this.networkTickNumber,
+                        bowler.smoothJoystickAngleRad,
+                        bowler.smoothJoystickRadiusRatio
+                    );
+                }
+            }
+
             // 🏃 A/D or Arrow keys move bowler character Left / Right when idle
             if (!bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {
                 const moveSpeed = 500; // Smooth 180 px/sec movement speed
@@ -539,6 +606,10 @@ private getProjectileStateWithBounce(
                 }
                 if (moved) {
                     bowler.setInitialRunPose();
+                     if (this.isOnlineMode && this.network && this.network.isConnected) {
+                        this.network.sendBowlerPosition(this.networkTickNumber, bowler.currentHipPosition.x);
+                    }
+
                 }
             }
 
@@ -790,7 +861,19 @@ private getProjectileStateWithBounce(
                     this.ball.vel.x = vReleaseX;
                     this.ball.vel.y = vReleaseY;
                     bowler.isBallReleased = true;
-                    bowler.postReleaseDelaySec = 0.10; // 100ms post-release delay before follow-through friction engages
+                    bowler.postReleaseDelaySec = bowler.POST_RELEASE_DELAY_SEC;
+                    bowler.debugReleasePoint = { x: releaseX, y: releaseY };
+
+                    if (this.isOnlineMode && !this.hasSentReleasePacket && this.network && this.network.isConnected) {
+                        this.network.sendBowlerRelease(
+                            this.networkTickNumber,
+                            releaseX,
+                            releaseY,
+                            vReleaseX,
+                            vReleaseY
+                        );
+                        this.hasSentReleasePacket = true;
+                    }
 
                     // Update initial flight physics step for this frame
                     this.ball.update(dt * 0.5);
@@ -913,9 +996,21 @@ private getProjectileStateWithBounce(
                 }
             }
 
-            if (this.isOnlineMode && this.renderer.bowlingArea.isBallReleased && !this.hasSentReleasePacket && this.renderer.bowlingArea.lastReleaseInfo) {
-                const info = this.renderer.bowlingArea.lastReleaseInfo;
-                if (this.network && this.network.isConnected) {
+            if (this.isOnlineMode && !this.hasSentReleasePacket && this.network && this.network.isConnected) {
+                const bowler = this.renderer.bowler;
+                if (bowler.isBallReleased && bowler.lastReleaseVx !== null && bowler.lastReleaseVy !== null) {
+                    const relX = bowler.debugReleasePoint?.x ?? bowler.leftWrist.x;
+                    const relY = bowler.debugReleasePoint?.y ?? bowler.leftWrist.y;
+                    this.network.sendBowlerRelease(
+                        this.networkTickNumber,
+                        relX,
+                        relY,
+                        bowler.lastReleaseVx,
+                        bowler.lastReleaseVy
+                    );
+                    this.hasSentReleasePacket = true;
+                } else if (this.renderer.bowlingArea.isBallReleased && this.renderer.bowlingArea.lastReleaseInfo) {
+                    const info = this.renderer.bowlingArea.lastReleaseInfo;
                     this.network.sendBowlerRelease(
                         this.networkTickNumber,
                         info.posX,
