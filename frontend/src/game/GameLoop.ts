@@ -547,10 +547,18 @@ export default class GameLoop{
         // prevPos↔pos blend ka hisaab (144Hz par ball smooth slide karegi)
         this.renderAlpha = Math.min(1, this.physicsAccumulator / this.FIXED_DT);
 
-        // STEP 2: Remote bat pose har RENDER frame par interpolate karke apply karo
-        // (60Hz snapshots ke beech ki 144fps frames smooth bharti hain)
-        this.updateRemoteBatPose(dt);
-
+        // 🎯 CCD-FIX (STEP 2 yahan se HATA diya): Remote bat pose ab RENDER frame par NAHI,
+        // PHYSICS TICK par update hota hai — call update() ke andar move kiya gaya hai.
+        // Kyun: checkHit() har physics tick me chalta hai aur uska CCD sweep
+        // prevHandleTop -> handleTop use karta hai (Bat.ts:445-446 har update() call ke
+        // start me prev set hota hai). Pehle pose har render frame (144Hz) par update hota
+        // tha, isliye ek tick ke andar 2.4 baar prev overwrite hota tha aur checkHit ke
+        // waqt sweep me sirf LAST render-frame (~7ms) ka bat arc aata tha — bat ka 60%
+        // movement tick ke beech me KABHI collision-tested nahi hota tha → ball rendered
+        // bat ke aar-paar nikal jaati thi, hit detect nahi hota (batter screen par ye
+        // problem nahi thi kyunki wahan bat.update() pehle se per-tick chalta hai).
+        // Ab pose per-tick update hota hai = batter screen jaisa hi cadence = full-tick
+        // CCD sweep = miss khatam.
         this.render();
         requestAnimationFrame(this.loop);
     }
@@ -563,7 +571,7 @@ export default class GameLoop{
 
         // Sirf 1 snapshot hai → hold karo (buffer abhi bhar raha hai)
         if (q.length === 1) {
-            this.bat.setBatPoseFromMouse(q[0].mouseX, q[0].mouseY);
+            this.bat.setBatPoseFromMouse(q[0].mouseX, q[0].mouseY, frameDt);
             return;
         }
 
@@ -617,7 +625,10 @@ export default class GameLoop{
         }
 
         // 6. Smooth pose ko poore skeleton par apply karo
-        this.bat.setBatPoseFromMouse(x, y);
+        // 🎯 CCD-FIX: asli tick dt pass karo — pehle hardcoded 0.016 tha. Ab ye per-tick
+        // chal raha hai (FIXED_DT ≈ 0.0167), par render loop se hatane ke baad bhi agar kabhi
+        // alag dt aaye to internal smoothing (laggingTarget) sahi scale ho.
+        this.bat.setBatPoseFromMouse(x, y, frameDt);
     }
 
     private startBowlerDelivery(): void {
@@ -763,6 +774,20 @@ private getProjectileStateWithBounce(
             this.networkTickNumber++;
             isTickAdvanced = true;
         }
+
+        // 🎯 CCD-FIX: Remote bat pose (bowler screen par batter ki bat) ab har PHYSICS TICK
+        // par update hota hai — pehle ye render loop me har display frame (144Hz) par chalta
+        // tha. Kyun: checkHit() ka CCD sweep prevHandleTop -> handleTop par hai, jo har
+        // update() call ke start me refresh hota hai (Bat.ts:445-446). Per-render-frame
+        // updates se ek tick ke andar prev 2.4 baar overwrite hota tha → checkHit sirf
+        // last ~7ms ka bat arc test karta tha → bat ka beech ka movement ball ke against
+        // kabhi test nahi hota → "ball bat ke aar-paar nikal gayi, hit detect nahi hua".
+        // Per-tick update se sweep batter screen jaisa FULL-TICK ho gaya (wahan
+        // bat.update() pehle se per-tick chalta hai aur detection 100% hai).
+        // NOTE: ye call checkHit se PEHLE hona chahiye — yahan top par hai, to BATTING
+        // branch ke bat.update ke saath bhi order sahi rehta hai (batter screen par
+        // batPoseQueue khali hota hai, to ye no-op hai).
+        this.updateRemoteBatPose(dt);
 
         if (this.renderer.gameMode === 'BATTING') {
             const currentCommand = this.input.getHistory().peek();

@@ -586,9 +586,13 @@ export default class Bat {
             "right"
         );
     }
-        public setBatPoseFromMouse(mouseX: number, mouseY: number) {
+        public setBatPoseFromMouse(mouseX: number, mouseY: number, dt: number = 0.016) {
             // 🚀 Built-in IK solver se Full Body Hips, Spine, Shoulders, Arms & Legs update:
-            this.update(mouseX, mouseY, 0.016);
+            // 🎯 CCD-FIX: hardcoded 0.016 hata kar asli dt use karo — pehle isko render frame
+            // par (144Hz) call kiya jaata tha, to hardcoded dt internal smoothing (laggingTarget,
+            // handleVelocity, prevHandleTop sweep) ko 2.4x fast chala raha tha. Ab GameLoop isko
+            // physics tick (FIXED_DT) se call karta hai — batter screen ke bat.update(dt) jaisa hi.
+            this.update(mouseX, mouseY, dt);
         }
     // ---------------------------------------------------------------
     // STEP 1: bat orientation + COM + wrist targets, driven by mouse
