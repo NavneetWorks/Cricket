@@ -17,7 +17,7 @@ export default class NetWorkManager{
     public onOpponentBowlerPosition: ((tick: number, hipX: number) => void) | null = null;
     public onOpponentBowlerStartRun?: (tick: number) => void;
     public onOpponentBowlerStartGather?: (tick: number, clickX: number) => void;
-    public onOpponentBowlerJoystick?: (tick: number, angleRad: number, distanceRatio: number) => void;
+    public onOpponentBowlerJoystick?: (tick: number, screenX: number, screenY: number) => void;
 
     private heartbeatTimer: any = null;
     private rttSamples : number[] = [];
@@ -226,7 +226,7 @@ export default class NetWorkManager{
                     this.rttSamples.shift();
                 }
                 this.lastRTT = this.calculateMedianRTT();
-                 console.log(`💓 RTT sample: ${sample.toFixed(1)}ms | Median RTT: ${this.lastRTT.toFixed(1)}ms`);
+                // console.log(`💓 RTT sample: ${sample.toFixed(1)}ms | Median RTT: ${this.lastRTT.toFixed(1)}ms`);
             }
 
         }
@@ -254,12 +254,14 @@ export default class NetWorkManager{
         } else if (opcode === PacketType.BOWLER_JOYSTICK_STREAM) {
             const senderId = view.getUint32(1, true);
             const tick = view.getUint16(5, true);
-            const smoothAngleRad = view.getFloat32(7, true);
-            const smoothRadiusRatio = view.getFloat32(11, true);
+            
+            const screenX = view.getFloat32(7,true)
+            const screenY = view.getFloat32(11, true);
+            
             if (this.onOpponentBowlerJoystick) {
-                this.onOpponentBowlerJoystick(tick, smoothAngleRad, smoothRadiusRatio);
+                this.onOpponentBowlerJoystick(tick, screenX, screenY);
             }
-        }       
+        }     
     }
     public sendBowlerRelease(tick: number, startX: number, startY: number, startVx: number, startVy: number) {
         if (this.reliableChannel && this.reliableChannel.readyState === "open") {
@@ -275,9 +277,9 @@ export default class NetWorkManager{
             this.unreliableChannel.send(buffer);
         }
     }
-    public sendBowlerJoystickUDP(tick: number, smoothAngleRad: number, smoothRadiusRatio: number) {
+     public sendBowlerJoystickUDP(tick: number, screenX: number, screenY: number) {
         if (this.unreliableChannel && this.unreliableChannel.readyState === "open") {
-            const buffer = serializeBowlerJoystickStream(this.myPlayerId, tick, smoothAngleRad, smoothRadiusRatio);
+            const buffer = serializeBowlerJoystickStream(this.myPlayerId, tick, screenX, screenY);
             this.unreliableChannel.send(buffer);
         }
     }

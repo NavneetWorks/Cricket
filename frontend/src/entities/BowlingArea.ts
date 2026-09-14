@@ -465,11 +465,12 @@ export default class BowlingArea {
                 this.releaseDelayTimer = this.releaseDelaySeconds; // Abhi ke RTT ko is ball ke liye FIX
                 this.ballDebugTrajectory.push({ x: this.handPos.x, y: this.handPos.y });
 
+                const angleRad = (this.savedReleaseAngleDeg * Math.PI) / 180;
                 this.lastReleaseInfo = {
                     posX: Math.round(this.handPos.x),
                     posY: Math.round(this.handPos.y),
-                    velX: Math.round(ball.vel.x),
-                    velY: Math.round(ball.vel.y),
+                    velX: Math.round(this.savedReleaseSpeed * Math.cos(angleRad)),
+                    velY: Math.round(this.savedReleaseSpeed * Math.sin(angleRad)),
                     speed: Math.round(this.savedReleaseSpeed),
                     angle: Math.round(this.savedReleaseAngleDeg),
                     timestamp: Date.now()

@@ -18,6 +18,13 @@ export interface Vec2 {
     y: number;    
 }
 
+ export interface BowlerJoystickSnapshot {
+    tick: number;
+    screenX: number;
+     screenY: number;   
+       receivedTime: number;
+ }
+
 export interface KeyframePose {  
     // 4. Spine
     spineAngleDeg: number;         // Absolute angle wrt positive X axis. (e.g. -90 = straight up, -110 = leaning left)
@@ -66,6 +73,73 @@ export interface RangeNode {
     next: RangeNode | null;
 }
 
+export interface BowlerJoystickSnapshot {
+    tick: number;
+    screenX: number;
+    screenY: number;
+    receivedTime: number;
+}
+
+export class BowlerJoystickQueue {
+    private buffer: (BowlerJoystickSnapshot | null)[];
+    private front: number = 0; // Read / Dequeue Pointer
+    private rear: number = 0;  // Write / Enqueue Pointer
+    private count: number = 0;
+    private readonly capacity: number;
+
+    constructor(capacity: number = 16) {
+        this.capacity = capacity;
+        this.buffer = new Array(capacity).fill(null);
+    }
+
+    // 📥 Enqueue (Write incoming UDP packet)
+    public enqueue(item: BowlerJoystickSnapshot): void {
+        this.buffer[this.rear] = item;
+        this.rear = (this.rear + 1) % this.capacity;
+
+        if (this.count < this.capacity) {
+            this.count++;
+        } else {
+            // Buffer full! Oldest snapshot overwrite hua -> advance front
+            this.front = (this.front + 1) % this.capacity;
+        }
+    }
+
+    // 📤 Dequeue (Read 60Hz tick packet)
+    public dequeue(): BowlerJoystickSnapshot | null {
+        if (this.count === 0) return null; // Queue khali hai (Underrun)
+
+        const item = this.buffer[this.front];
+        this.buffer[this.front] = null; // Clear slot
+        this.front = (this.front + 1) % this.capacity;
+        this.count--;
+
+        return item;
+    }
+
+    // 🔍 Peek Front Item (Bina Dequeue kiye dekhna)
+    public peek(): BowlerJoystickSnapshot | null {
+        if (this.count === 0) return null;
+        return this.buffer[this.front];
+    }
+
+    public isEmpty(): boolean {
+        return this.count === 0;
+    }
+
+    public size(): number {
+        return this.count;
+    }
+
+    // 🧹 Reset / Clear Queue
+    public clear(): void {
+        this.front = 0;
+        this.rear = 0;
+        this.count = 0;
+        this.buffer.fill(null);
+    }
+}
+
 export class RangeLinkedList {
     public head: RangeNode | null = null;
     public tail: RangeNode | null = null;
@@ -105,7 +179,7 @@ export class RangeLinkedList {
 }
 
 export class Bowler {
-
+    public visualHistory: any[] = [];
     // ── Segment lengths ────────────────────────────────────────────────────
     private readonly BOWLER_SCALE = 1.1;       
     public readonly TOTAL_RIGHT_ARM_LENGTH = 3.4 * PLAYER_LENGTH_FACTOR*this.BOWLER_SCALE;
@@ -121,6 +195,8 @@ export class Bowler {
     public readonly SHIN_LENGTH         = this.FULL_LEG_LENGTH - this.THIGH_LENGTH;
 
     public readonly NECK_TO_HIP_LENGTH  = 3.4 * PLAYER_LENGTH_FACTOR*this.BOWLER_SCALE;
+
+    public hasGatherExecuted: boolean = false;
     
     // ── World positions (computed every frame) ────────────────────────────
     public currentHipPosition:      Vec2 = { x: 0, y: 0 };
@@ -228,13 +304,14 @@ export class Bowler {
         this.preJumpTargetDistance = Math.min(40, Math.max(10, Math.round(totalAngleDiff * 0.08)));
     }
 
-    public resetToIdle(): void {
+     public resetToIdle(): void {
         this.isRunning = false;
         this.isPreJumpTransitioning = false;
         this.isPreJumpFrozen = false;
         this.isExecutingJump = false;
         this.jumpPhase = 0;
         this.hasReleasedBall = false;
+        this.hasGatherExecuted = false;
         this.targetIntensity = 0.0;
         this.runIntensity = 0.0;
         this.maxObservedOmegaRad = 0.0;
@@ -249,6 +326,7 @@ export class Bowler {
         this.isGatheringArmActive = false;
         this.gatheringAngleTraveledDeg = 0.0;
         this.ballTrailPoints = [];
+        this.authoritativeHitTrailIndex = -1;
         this.isBallReleased = false;
         this.releaseDelayTimer = 0;
         this.pendingVisualThrow = null;
@@ -258,6 +336,13 @@ export class Bowler {
         this.lastReleaseVArmX = null;
         this.lastReleaseSpeed = null;
         this.lastReleaseAngleDeg = null;
+
+        // ⏱️ Netcode One-Way Lag (RTT / 2) Frame Countdown & Queue Reset
+        this.pendingRunupDelaySec = 0.0;
+        this.pendingGatherDelaySec = 0.0;
+        this.pendingGatherClickX = null;
+        this.joystickQueue.clear();
+
         this.setInitialRunPose();
     }
 
@@ -270,6 +355,7 @@ export class Bowler {
     public isGatheringArmActive: boolean = false;
     public gatheringAngleTraveledDeg: number = 0.0;
     public ballTrailPoints: Vec2[] = [];
+    public authoritativeHitTrailIndex: number = -1; 
     public isBallReleased: boolean = false;
     public debugReleasePoint: Vec2 | null = null;
     public lastReleaseVx: number | null = null;
@@ -309,6 +395,14 @@ export class Bowler {
     public GATHERING_ANGLE_DAMPING: number = 100.0;
     public GATHERING_RADIUS_STIFFNESS: number = 100.0;
     public GATHERING_RADIUS_DAMPING: number = 100.0;  
+
+    public joystickQueue: BowlerJoystickQueue = new BowlerJoystickQueue(16);
+
+    // ⏱️ Netcode One-Way Lag (RTT / 2) Frame-Based Delay Attributes
+    public pendingRunupDelaySec: number = 0.0;      // Space key runup countdown (in seconds)
+    public pendingGatherDelaySec: number = 0.0;     // Left-click gather countdown (in seconds)
+    public pendingGatherClickX: number | null = null; // Stored target clickX for delayed gather
+
 
     public resetProceduralUpperBodyState(): void {  
         this.currentProceduralNBArmAngleDeg = 48.0;
@@ -10023,6 +10117,35 @@ export class Bowler {
     }
 
     public drawDebugSkeleton(ctx: CanvasRenderingContext2D): void {
+        const delayMs = 6*(this.playheadDelayMs || 0); // Dynamic Delay based on RTT/2
+        let snap = null;
+        if (!this.visualHistory) this.visualHistory = [];
+        
+        while (this.visualHistory.length > 1 && (performance.now() - this.visualHistory[1].time) > delayMs) {
+            snap = this.visualHistory.shift();
+        }
+        if (!snap && this.visualHistory.length > 0) {
+            snap = this.visualHistory[0];
+        }
+
+        // 1. Backup original physics state
+        const backup = {
+            currentRightHipPosition: this.currentRightHipPosition, rightKnee: this.rightKnee, rightAnkle: this.rightAnkle,
+            currentLeftHipPosition: this.currentLeftHipPosition, leftKnee: this.leftKnee, leftAnkle: this.leftAnkle,
+            headCenter: this.headCenter, shoulderMid: this.shoulderMid, currentHipPosition: this.currentHipPosition,
+            frontShoulder: this.frontShoulder, backShoulder: this.backShoulder, rightElbow: this.rightElbow,
+            rightWrist: this.rightWrist, leftElbow: this.leftElbow, leftWrist: this.leftWrist
+        };
+
+        // 2. Apply delayed snapshot for drawing
+        if (snap) {
+            this.currentRightHipPosition = snap.currentRightHipPosition; this.rightKnee = snap.rightKnee; this.rightAnkle = snap.rightAnkle;
+            this.currentLeftHipPosition = snap.currentLeftHipPosition; this.leftKnee = snap.leftKnee; this.leftAnkle = snap.leftAnkle;
+            this.headCenter = snap.headCenter; this.shoulderMid = snap.shoulderMid; this.currentHipPosition = snap.currentHipPosition;
+            this.frontShoulder = snap.frontShoulder; this.backShoulder = snap.backShoulder; this.rightElbow = snap.rightElbow;
+            this.rightWrist = snap.rightWrist; this.leftElbow = snap.leftElbow; this.leftWrist = snap.leftWrist;
+        }
+
         ctx.save();
 
         // ── Draw Muscular 3D Legs & Trousers Anatomy ────────────────────────
@@ -10106,6 +10229,15 @@ export class Bowler {
         }
 
         ctx.restore();
+
+        // 3. Restore original physics state
+        if (snap) {
+            this.currentRightHipPosition = backup.currentRightHipPosition; this.rightKnee = backup.rightKnee; this.rightAnkle = backup.rightAnkle;
+            this.currentLeftHipPosition = backup.currentLeftHipPosition; this.leftKnee = backup.leftKnee; this.leftAnkle = backup.leftAnkle;
+            this.headCenter = backup.headCenter; this.shoulderMid = backup.shoulderMid; this.currentHipPosition = backup.currentHipPosition;
+            this.frontShoulder = backup.frontShoulder; this.backShoulder = backup.backShoulder; this.rightElbow = backup.rightElbow;
+            this.rightWrist = backup.rightWrist; this.leftElbow = backup.leftElbow; this.leftWrist = backup.leftWrist;
+        }
     }
 
     public drawStaticPose(ctx: CanvasRenderingContext2D, frameIndex: number, worldX: number, customGroundY?: number, customFrames?: KeyframePose[]): void {

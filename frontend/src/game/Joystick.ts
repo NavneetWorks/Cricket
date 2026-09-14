@@ -77,6 +77,8 @@ export default class Joystick {
         if (!this.isPointerDown) return;
         this.processMove(e.clientX, e.clientY);
     }
+    public onJoystickMove?: (screenX: number, screenY: number) => void;
+
 
     private processMove(clientX: number, clientY: number): void {
         const canvas = document.querySelector('canvas');
@@ -90,7 +92,13 @@ export default class Joystick {
         const screenX = (clientX - rect.left) * scaleX;
         const screenY = (clientY - rect.top) * scaleY;
 
+
         this.updateKnobPosition(screenX, screenY);
+
+        if (this.onJoystickMove) {
+            this.onJoystickMove(screenX, screenY);
+        }
+        
     }
 
     private handlePointerUp(e: PointerEvent): void {
@@ -105,7 +113,7 @@ export default class Joystick {
         // Sticky Joystick: Preserve knob position, distanceRatio, and angleRad on release!
     }
 
-    private updateKnobPosition(screenX: number, screenY: number): void {
+    public updateKnobPosition(screenX: number, screenY: number): void {
         const dx = screenX - this.centerX;
         const dy = screenY - this.centerY;
         const dist = Math.hypot(dx, dy);

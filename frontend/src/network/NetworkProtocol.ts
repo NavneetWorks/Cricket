@@ -68,17 +68,17 @@ export function serializeBowlerStartRun(
 export function serializeBowlerJoystickStream(
     senderId: number,
     tickNumber: number,
-    smoothAngleRad: number,
-    smoothRadiusRatio: number
+    screenX: number,
+    screenY: number
 ): ArrayBuffer {
-    const buffer = new ArrayBuffer(19);
+    const buffer = new ArrayBuffer(15); // 15 Bytes (1 Opcode + 4 ID + 2 Tick + 4 X + 4 Y)
     const view = new DataView(buffer);
     
     view.setUint8(0, PacketType.BOWLER_JOYSTICK_STREAM); // Opcode 0x09
     view.setUint32(1, senderId, true);
     view.setUint16(5, tickNumber, true);
-    view.setFloat32(7, smoothAngleRad, true);      // Exact Physics Arm Angle
-    view.setFloat32(11, smoothRadiusRatio, true);  // Exact Arm Reach Ratio
+    view.setFloat32(7, screenX, true);      // Raw Mouse X
+    view.setFloat32(11, screenY, true);     // Raw Mouse Y
     
     return buffer;
 }
