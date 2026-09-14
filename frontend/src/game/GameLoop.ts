@@ -187,6 +187,10 @@ export default class GameLoop {
           this.ball.vel.x,
           this.ball.vel.y,
         );
+        
+        // 🔴 BATTER SCREEN: The batter must see the ball at 100% normal speed.
+        // Time dilation is only used on the Bowler's screen to mask latency.
+        this.ball.timeDilationFactor = 1.0;
 
         // 🟢 Per-ball prediction flags reset on new ball release
         this.localPredictedHit = false;
@@ -195,14 +199,15 @@ export default class GameLoop {
       };
 
       this.network.onOpponentBatSwing = (tick, mouseX, mouseY, angle) => {
-        const q = this.batPoseQueue;
-        // Out-of-order/duplicate packets ignore karo (UDP reorder ho sakta hai)
-        if (q.length > 0 && tick <= q[q.length - 1].tick) return;
-        q.push({ tick, mouseX, mouseY });
-        // Check condition: q.length > BAT_SNAPSHOT_QUEUE_SIZE
-        if (q.length > BAT_SNAPSHOT_QUEUE_SIZE) {
-          q.shift(); // Sabse purana snapshot phenko (queue size cap)
-        }
+        const last = this.bat.joystickQueue.peek();
+        // Out-of-order/duplicate packets ignore karo
+        if (last && tick <= last.tick) return;
+        this.bat.joystickQueue.enqueue({
+          tick,
+          mouseX,
+          mouseY,
+          receivedTime: performance.now()
+        });
       };
       this.network.onHitResult = (
         exitX,
@@ -230,36 +235,33 @@ export default class GameLoop {
           );
         }
 
-        // const { finalX, finalY, finalVx, finalVy } =
-        //   this.getProjectileStateWithBounce(
-        //     exitX,
-        //     exitY,
-        //     exitVx,
-        //     exitVy,
-        //     totalElapsedTicks,
-        //   );
+        const { finalX, finalY, finalVx, finalVy } =
+          this.getProjectileStateWithBounce(
+            exitX,
+            exitY,
+            exitVx,
+            exitVy,
+            totalElapsedTicks,
+          );
 
-        // console.log(
-        //   `%c 📥 RELIABLE HIT_RESULT RECEIVED ON BOWLER SCREEN! `,
-        //   "background: #0284c7; color: #ffffff; font-weight: bold; font-size: 12px; padding: 4px; border-radius: 4px;",
-        //   `\n - Packet Tick: ${tick} | Current Bowler Tick: ${this.networkTickNumber}`,
-        //   `\n - RTT: ${(this.network && this.isOnlineMode ? this.network.getRTT() : 40.0).toFixed(1)}ms | ElapsedTicks(one-way): ${totalElapsedTicks}`,
-        //   `\n - Raw Contact Pos (exitX, exitY): (${exitX.toFixed(1)}, ${exitY.toFixed(1)})`,
-        //   `\n - Fast-Forwarded Pos (finalX, finalY): (${finalX.toFixed(1)}, ${finalY.toFixed(1)})`,
-        //   `\n - Exit Velocity: (${exitVx.toFixed(1)}, ${exitVy.toFixed(1)}) -> Final Velocity: (${finalVx.toFixed(1)}, ${finalVy.toFixed(1)})`,
-        // );
-      
-        // const oldVisualX = this.ball.pos.x;
-        // const oldVisualY = this.ball.pos.y;
-        // this.ball.vel.x = finalVx;
-        // this.ball.vel.y = finalVy;
+        console.log(
+          `%c 📥 RELIABLE HIT_RESULT RECEIVED ON BOWLER SCREEN! `,
+          "background: #0284c7; color: #ffffff; font-weight: bold; font-size: 12px; padding: 4px; border-radius: 4px;",
+          `\n - Packet Tick: ${tick} | Current Bowler Tick: ${this.networkTickNumber}`,
+          `\n - RTT: ${(this.network && this.isOnlineMode ? this.network.getRTT() : 40.0).toFixed(1)}ms | ElapsedTicks(one-way): ${totalElapsedTicks}`,
+          `\n - Raw Contact Pos (exitX, exitY): (${exitX.toFixed(1)}, ${exitY.toFixed(1)})`,
+          `\n - Fast-Forwarded Pos (finalX, finalY): (${finalX.toFixed(1)}, ${finalY.toFixed(1)})`,
+          `\n - Exit Velocity: (${exitVx.toFixed(1)}, ${exitVy.toFixed(1)}) -> Final Velocity: (${finalVx.toFixed(1)}, ${finalVy.toFixed(1)})`,
+        );
 
-        this.ball.pos.x = exitX;
-        this.ball.pos.y = exitY;
-        this.ball.prevPos.x = exitX;
-        this.ball.prevPos.y = exitY;
-        this.ball.vel.x = exitVx;
-        this.ball.vel.y = exitVy;
+        this.ball.pos.x = finalX;
+        this.ball.pos.y = finalY;
+        this.ball.prevPos.x = finalX;
+        this.ball.prevPos.y = finalY;
+        this.ball.vel.x = finalVx;
+        this.ball.vel.y = finalVy;
+        this.ball.timeDilationFactor = 1.0; // Ensure normal speed upon authoritative hit result
+        this.hasAuthoritativeResult = true;
 
         this.reconcileOffsetX = 0;
         this.reconcileOffsetY = 0;
@@ -493,6 +495,10 @@ export default class GameLoop {
             realMomentState.finalVx,
             realMomentState.finalVy,
           );
+          
+          // 🔴 BATTER SCREEN: The batter must see the ball at 100% normal speed.
+          this.ball.timeDilationFactor = 1.0;
+          
           this.hasLocalPredictedRelease = true;
         }
       };
@@ -670,78 +676,43 @@ export default class GameLoop {
   };
 
   private updateRemoteBatPose(frameDt: number) {
-    // Check if the game is running in multiplayer online mode
     if (!this.isOnlineMode || !this.network) return;
-    const q = this.batPoseQueue;
-    // Check condition: q.length === 0
-    if (q.length === 0) return; // Batter client / match start se pehle — no-op
 
-    // Sirf 1 snapshot hai → hold karo (buffer abhi bhar raha hai)
-    if (q.length === 1) {
-      this.bat.setBatPoseFromMouse(q[0].mouseX, q[0].mouseY, frameDt);
-      return;
+    const queue = this.bat.joystickQueue;
+    if (queue.isEmpty()) return;
+
+    // Use playheadDelayMs (RTT/2) as the Jitter Buffer duration
+    // This dynamically adjusts based on network latency
+    const delayMs = this.bat.playheadDelayMs || 50.0; 
+    const now = performance.now();
+
+    // 1. Jitter Buffer Fill Phase: 
+    // Wait until the oldest packet has aged by delayMs before starting playback.
+    // This ensures we always have a few packets (2-3) queued up before starting.
+    const oldest = queue.peek();
+    if (oldest && (now - oldest.receivedTime) < delayMs) {
+        return; // Buffer is filling, hold the bat steady
     }
 
-    const latest = q[q.length - 1].tick;
-    const oldest = q[0].tick;
-
-    this.batInterpTick += frameDt * SERVER_CONFIG.TARGET_TICK_RATE;
-
-    const desired = latest - BAT_INTERP_BUFFER_TICKS;
-    const lag = desired - this.batInterpTick;
-    // Check condition: lag > 0.5
-    if (lag > 0.5) {
-      this.batInterpTick += lag * Math.min(0.5, frameDt * 3); // max ~2x speed catch-up
+    // 2. Playback Phase: Dequeue the aged packet
+    let snap = queue.dequeue();
+    
+    // If multiple packets have aged past the delay (e.g., network spike delivered a bunch at once), 
+    // fast-forward by dequeuing them to catch up to the correct present-delayed time.
+    while (!queue.isEmpty()) {
+        const next = queue.peek();
+        if (next && (now - next.receivedTime) > delayMs) {
+            snap = queue.dequeue(); // Catch up
+        } else {
+            break;
+        }
     }
 
-    // 3. Safety clamps:
-    //    (a) Playhead kabhi oldest snapshot se peeche na jaye (queue ne usse evict kar diya)
-    if (this.batInterpTick < oldest) this.batInterpTick = oldest;
-    //    (b) Kabhi latest + MAX_EXTRAP se aage na jaye — underrun par bat HOLD hogi
-    //        (freeze), slow motion NAHI. Jaise hi naye packets aayenge, resume.
-    const maxTick = latest + BAT_MAX_EXTRAPOLATION_TICKS;
-    // Check condition: this.batInterpTick > maxTick
-    if (this.batInterpTick > maxTick) this.batInterpTick = maxTick;
-
-    // 4. Playhead ko wrap karne wale do snapshots dhoondo (queue sorted hai)
-    let a = q[0];
-    let b = q[q.length - 1];
-    for (let i = 0; i < q.length - 1; i++) {
-      // Check game state condition
-      if (
-        q[i].tick <= this.batInterpTick &&
-        q[i + 1].tick >= this.batInterpTick
-      ) {
-        a = q[i];
-        b = q[i + 1];
-        break;
-      }
+    // 3. Apply the delayed, jitter-buffered pose
+    if (snap) {
+        // Apply the mouse position to the bat with exact physics dt
+        this.bat.setBatPoseFromMouse(snap.mouseX, snap.mouseY, frameDt);
     }
-
-    let x: number, y: number;
-    // Check condition: this.batInterpTick >= b.tick
-    if (this.batInterpTick >= b.tick) {
-      const prev = q[q.length - 2];
-      const tickSpan = Math.max(1, b.tick - prev.tick);
-      const vx = (b.mouseX - prev.mouseX) / tickSpan;
-      const vy = (b.mouseY - prev.mouseY) / tickSpan;
-      const over = this.batInterpTick - b.tick;
-      x = b.mouseX + vx * over;
-      y = b.mouseY + vy * over;
-    } else {
-      // 5b. INTERPOLATION: dono endpoints KNOWN hain — koi guess nahi, pure math.
-      //     alpha = playhead is tick-interval me kitna aage hai (0..1)
-      const tickSpan = Math.max(1e-6, b.tick - a.tick);
-      const alpha = (this.batInterpTick - a.tick) / tickSpan;
-      x = a.mouseX + (b.mouseX - a.mouseX) * alpha;
-      y = a.mouseY + (b.mouseY - a.mouseY) * alpha;
-    }
-
-    // 6. Smooth pose ko poore skeleton par apply karo
-    // 🎯 CCD-FIX: asli tick dt pass karo — pehle hardcoded 0.016 tha. Ab ye per-tick
-    // chal raha hai (FIXED_DT ≈ 0.0167), par render loop se hatane ke baad bhi agar kabhi
-    // alag dt aaye to internal smoothing (laggingTarget) sahi scale ho.
-    this.bat.setBatPoseFromMouse(x, y, frameDt);
   }
 
   private startBowlerDelivery(): void {
@@ -980,6 +951,7 @@ export default class GameLoop {
       const MAX_ALLOWED_DELAY_MS = 60.0;
       const MIN_ALLOWED_DELAY_MS = 15.0;
       bowler.playheadDelayMs = Math.min(MAX_ALLOWED_DELAY_MS, Math.max(MIN_ALLOWED_DELAY_MS, oneWayDelayMs));
+      this.bat.playheadDelayMs = bowler.playheadDelayMs;
 
       // 🌐 Batter Screen Input-Driven Spring-Damper Physics Replication & Dead-Reckoning Extrapolation
       if (this.isOnlineMode && bowler.targetNetworkJoystickAngleRad !== null) {
@@ -1350,6 +1322,11 @@ export default class GameLoop {
         }
       }
 
+      // 🔴 BATTER SCREEN FORCE NORMAL SPEED:
+      // Time dilation is only used on the Bowler's screen to mask latency.
+      if (this.renderer.gameMode === "BATTING") {
+          this.ball.timeDilationFactor = 1.0;
+      }
       this.ball.update(dt);
       this.renderer.wicket.update(dt);
 
@@ -2029,28 +2006,29 @@ export default class GameLoop {
             this.ticksSinceLocalPredictedHit++;
           }
 
-          // ⚡ ONLINE MODE LOCAL PREDICTIVE COLLISION CHECK ON BOWLER SCREEN (0ms Audio Feedback + Instant Local Launch)
-        //   if (
-        //     this.isOnlineMode &&
-        //     this.ball.isActive &&
-        //     !this.ball.isHeldInHand &&
-        //     !this.hasAuthoritativeResult &&
-        //     !this.localPredictedHit
-        //   ) {
-        //     const predicted = this.bat.checkHit(this.ball, dt);
-        //     if (predicted.hit && !this.ball.isStuck) {
-        //       this.localPredictedHit = true;
-        //       this.suppressNextPacketSound = true;
-        //       const si = this.bat.lastSoundImpact;
-        //       SoundManager.getInstance().playBatHit(
-        //         si?.speed ?? 1000,
-        //         si?.offset ?? 100,
-        //       );
-        //       console.log(
-        //         "⚡ Bowler Local Hit Prediction Triggered! (Instant Local Launch + 0ms Audio)",
-        //       );
-        //     }
-        //   }
+        // ⚡ ONLINE MODE LOCAL PREDICTIVE COLLISION CHECK ON BOWLER SCREEN (0ms Audio Feedback + Instant Local Launch)
+        if (
+          this.isOnlineMode &&
+          this.ball.isActive &&
+          !this.ball.isHeldInHand &&
+          !this.hasAuthoritativeResult &&
+          !this.localPredictedHit
+        ) {
+          const predicted = this.bat.checkHit(this.ball, dt);
+          if (predicted.hit && !this.ball.isStuck) {
+            this.localPredictedHit = true;
+            this.ball.timeDilationFactor = 1.0; // Immediately resume normal speed
+            this.suppressNextPacketSound = true;
+            const si = this.bat.lastSoundImpact;
+            // SoundManager.getInstance().playBatHit(
+            //   si?.speed ?? 1000,
+            //   si?.offset ?? 100,
+            // );
+            console.log(
+              "⚡ Bowler Local Hit Prediction Triggered! (Instant Local Launch)",
+            );
+          }
+        }
         }
       } else {
         this.ball.isHeldInHand = true;

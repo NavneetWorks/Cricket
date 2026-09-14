@@ -32,7 +32,77 @@ export interface BatRegion {
     count: number;
 }
 
+export interface BatJoystickSnapshot {
+    tick: number;
+    mouseX: number;
+    mouseY: number;
+    receivedTime: number;
+}
+
+export class BatJoystickQueue {
+    private buffer: (BatJoystickSnapshot | null)[];
+    private front: number = 0; // Read / Dequeue Pointer
+    private rear: number = 0;  // Write / Enqueue Pointer
+    private count: number = 0;
+    private readonly capacity: number;
+
+    constructor(capacity: number = 16) {
+        this.capacity = capacity;
+        this.buffer = new Array(capacity).fill(null);
+    }
+
+    // 📥 Enqueue (Write incoming UDP packet)
+    public enqueue(item: BatJoystickSnapshot): void {
+        this.buffer[this.rear] = item;
+        this.rear = (this.rear + 1) % this.capacity;
+
+        if (this.count < this.capacity) {
+            this.count++;
+        } else {
+            // Buffer full! Oldest snapshot overwrite hua -> advance front
+            this.front = (this.front + 1) % this.capacity;
+        }
+    }
+
+    // 📤 Dequeue (Read 60Hz tick packet)
+    public dequeue(): BatJoystickSnapshot | null {
+        if (this.count === 0) return null; // Queue khali hai (Underrun)
+
+        const item = this.buffer[this.front];
+        this.buffer[this.front] = null; // Clear slot
+        this.front = (this.front + 1) % this.capacity;
+        this.count--;
+
+        return item;
+    }
+
+    // 🔍 Peek Front Item (Bina Dequeue kiye dekhna)
+    public peek(): BatJoystickSnapshot | null {
+        if (this.count === 0) return null;
+        return this.buffer[this.front];
+    }
+
+    public isEmpty(): boolean {
+        return this.count === 0;
+    }
+
+    public size(): number {
+        return this.count;
+    }
+
+    // 🧹 Reset / Clear Queue
+    public clear(): void {
+        this.front = 0;
+        this.rear = 0;
+        this.count = 0;
+        this.buffer.fill(null);
+    }
+}
+
 export default class Bat {
+    public joystickQueue: BatJoystickQueue = new BatJoystickQueue(16);
+    public playheadDelayMs: number = 30;
+    public visualHistory: any[] = [];
 
     private readonly BAT_MASS: number = 1.0;
     private SPRING_STIFFNESS: number = 250.0;

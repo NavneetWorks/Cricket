@@ -17,6 +17,10 @@ export default class Ball {
     public hasBeenHit = false; // Flag to prevent multiple re-collision hits per delivery
     public rotation = 0; // Ball ke spin ke liye
 
+    // Change THIS value to test the visual slowdown. (e.g., 0.90 for 10% slower)
+    public baseTimeDilation: number = 0.6; // Default test value
+    public timeDilationFactor: number = 1.0; 
+
     constructor() {}
 
     // Ball ko exact 2D velocity vector (vx, vy) se fenkne ka function
@@ -29,6 +33,7 @@ export default class Ball {
         this.isStuck = false;
         this.isHeldInHand = false;
         this.hasBeenHit = false;
+        this.timeDilationFactor = this.baseTimeDilation; // Apply default custom delay
         this.vel.x = vx;
         this.vel.y = vy;
         this.isActive = true;
@@ -44,6 +49,7 @@ export default class Ball {
         this.isStuck = false;
         this.isHeldInHand = false;
         this.hasBeenHit = false;
+        this.timeDilationFactor = this.baseTimeDilation; // Apply default custom delay
         
         // Math lagakar angle ko velocity (X aur Y) mein convert karna
         const angleRad = (angleDegrees * Math.PI) / 180;
@@ -118,6 +124,10 @@ export default class Ball {
     // Har frame mein ball ki physics with 10x Sub-stepping CCD (Continuous Collision Detection)
     public update(dt: number): void {
         if (!this.isActive || this.isStuck || this.isHeldInHand) return;
+        
+        // Apply time dilation: Trajectory stays physically identical, but progresses slower/faster.
+        // This naturally preserves the true velocity 'vel' for when the bat hits it!
+        dt *= this.timeDilationFactor;
 
         this.prevPos.x = this.pos.x;
         this.prevPos.y = this.pos.y;
