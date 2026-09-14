@@ -32,6 +32,8 @@ export default class GameLoop{
     private networkTimer: number = 0;
     private readonly NETWORK_INTERVAL = 1 / 60;
     private hasSentReleasePacket: boolean = false;
+    private hitPacketCooldownTimer: number = 0;       // ⏱️ Cooldown timer (400ms) to prevent duplicate consecutive frame HIT_RESULT packets
+    private offlineResetTimer: number = 0;            // ⏱️ Auto-reset timer (1.5s) for offline batting mode deliveries
 
    
     private physicsAccumulator: number = 0;
@@ -42,6 +44,21 @@ export default class GameLoop{
     private suppressNextPacketSound: boolean = false; // 🟢 MULTI-HIT FIX (one-shot): local
   
     private hasAuthoritativeResult: boolean = false; // 🐛 DOUBLE-COLLISION FIX: HIT_RESULT
+
+    // 🎯 SMOOTH RECONCILIATION FIX (teleport-bug fix): HIT_RESULT aane par ball ko hard-teleport
+    // karne ki jagah, position ko K ticks me smoothly authoritative trajectory par glide kiya
+    // jaata hai. Offset = (current visual pos) - (authoritative final pos), har fixed tick me
+    // uska 1/K hissa khatam hota hai. Isse "ball hit-location pe wapas teleport + dobara hit"
+    // wala visual bug nahi dikhta — ball aage hi jaati dikhti hai, sirf trajectory 2-3 frames
+    // me silently correct hoti hai.
+    private reconcileBlendTicksRemaining: number = 0;
+    private reconcileOffsetX: number = 0;
+    private reconcileOffsetY: number = 0;
+    private readonly RECONCILE_BLEND_TICKS: number = 5; // ~5 ticks ≈ 83ms glide
+
+    // 🛡️ DEDUP GUARD: last received HIT_RESULT packet tick — same tick ka duplicate packet
+    // ignore karne ke liye (reliable channel duplicates nahi bhejta, par defensive safety).
+    private lastHitResultTick: number = -1;
    
     private currentDeliverySpeed: number = 3000;
     private currentDeliveryAngle: number = 180;
@@ -94,9 +111,13 @@ export default class GameLoop{
             };
             this.network.onBowlerRelease = (tick, releaseX, releaseY, vReleaseX, vReleaseY) => {
                 console.log("📩 Batter Received Authoritative Release Event! Packet Tick:", tick, "Current Tick:", this.networkTickNumber);
-                // 1. Calculate Tick Lag Delta: (Current Tick - Release Packet Tick)
-                const currentTick = this.networkTickNumber;
-                const deltaTicks = Math.max(0, currentTick - tick);
+                // 🎯 TIMING FIX: pehle deltaTicks = (currentTick - tick) use hota tha — ye
+                // BATTER ka tick minus BOWLER ka tick hai = cross-client unsynchronized clock
+                // difference (drift + slow machine par MAX_PHYSICS_STEPS ticks drop). Real
+                // catch-up = release packet ka one-way travel time = RTT/2.
+                // NOTE: ye handler neeche setGameMode() wale v2 handler se overwrite ho jaata
+                // hai — dono ko consistent rakha hai taaki agar v1 wapas use ho to bhi sahi rahe.
+                const deltaTicks = this.getOneWayTicks();
                 const authState = this.getProjectileStateWithBounce(
                     releaseX,
                     releaseY,
@@ -137,23 +158,65 @@ export default class GameLoop{
                     q.shift(); // Sabse purana snapshot phenko (queue size cap)
                 }
             };
-            this.network.onHitResult = (exitX,exitY,exitVx,exitVy,impactSpeed,hitPixelOffset,tick) =>{
-                const elapsedTicks = Math.max(0, this.networkTickNumber - tick);
+            this.network.onHitResult = (exitX, exitY, exitVx, exitVy, impactSpeed, hitPixelOffset, tick) => {
+                // 🛡️ DEDUP GUARD: same tick ka duplicate HIT_RESULT ignore karo.
+                // Kyun: agar kabhi duplicate packet aa gaya (network race/bug), to wo dobara
+                // reconcile karega aur ball ko WAPAS hit-location pe teleport kar dega —
+                // bilkul wahi "ball vapis hit hoti hai" wala bug. Ordered reliable channel
+                // me duplicates hone nahi chahiye, par defensive safety ke liye guard zaroori hai.
+                if (tick === this.lastHitResultTick) return;
+                this.lastHitResultTick = tick;
+
+                // 🎯 TIMING FIX (ROOT CAUSE): pehle yahan compute hota tha:
+                //   rawDeltaTicks = this.networkTickNumber - tick
+                // Ye GALAT tha, kyunki packet ka 'tick' BATTER ka local tick counter hai aur
+                // this.networkTickNumber BOWLER ka local counter — dono clocks UNSYNCHRONIZED
+                // hain (alag frame rates; aur slow machine par MAX_PHYSICS_STEPS spiral-guard
+                // accumulator DROP karta hai jisse us client ke ticks permanently lose ho jaate
+                // hain). Isliye ye difference kabhi real elapsed time nahi hota — aur
+                // Math.max(0, ...) clamp hone par 0 bhi ho sakta tha → fast-forward sirf 1-2
+                // ticks → ball RAW CONTACT POINT pe patak deti thi = "hit-location me teleport".
+                // CONTACT se PACKET ARRIVAL tak ka ACTUAL elapsed = packet ka one-way travel
+                // time = RTT/2, kyunki batter HIT_RESULT apne contact frame par hi bhejta hai.
+                const totalElapsedTicks = this.getOneWayTicks();
+
                 const { finalX, finalY, finalVx, finalVy } = this.getProjectileStateWithBounce(
                     exitX,
                     exitY,
                     exitVx,
                     exitVy,
-                    elapsedTicks
+                    totalElapsedTicks
+                );
+
+                console.log(
+                    `%c 📥 RELIABLE HIT_RESULT RECEIVED ON BOWLER SCREEN! `,
+                    'background: #0284c7; color: #ffffff; font-weight: bold; font-size: 12px; padding: 4px; border-radius: 4px;',
+                    `\n - Packet Tick: ${tick} | Current Bowler Tick: ${this.networkTickNumber}`,
+                    `\n - RTT: ${((this.network && this.isOnlineMode) ? this.network.getRTT() : 40.0).toFixed(1)}ms | ElapsedTicks(one-way): ${totalElapsedTicks}`,
+                    `\n - Raw Contact Pos (exitX, exitY): (${exitX.toFixed(1)}, ${exitY.toFixed(1)})`,
+                    `\n - Fast-Forwarded Pos (finalX, finalY): (${finalX.toFixed(1)}, ${finalY.toFixed(1)})`,
+                    `\n - Exit Velocity: (${exitVx.toFixed(1)}, ${exitVy.toFixed(1)}) -> Final Velocity: (${finalVx.toFixed(1)}, ${finalVy.toFixed(1)})`
                 );
                 // dikhata hai — perfect.
-                this.ball.pos.x = finalX;
-                this.ball.pos.y = finalY;
+                // 🎯 SMOOTH RECONCILIATION: pehle yahan HARD-TELEPORT tha:
+                //   pos.x = finalX; pos.y = finalY; prevPos.x = finalX; prevPos.y = finalY;
+                // local predicted trajectory aur authoritative trajectory ke beech ka jo bhi gap
+                // hota, wo EK FRAME me poora jump dikhta tha = "ball wapas hit-location me
+                // teleport + dobara hit" wala visual bug. prevPos ko bhi final pe set karna
+                // render interpolation ko kill kar deta tha (snap aur bhi abrupt dikhta tha).
+                // Ab: VELOCITY turant authoritative lagti hai (trajectory sahi ho jaati hai),
+                // lekin POSITION ko current visual position se authoritative path par
+                // RECONCILE_BLEND_TICKS ke span me smoothly GLIDE kiya jaata hai (blend loop
+                // NEW_BOWLER branch me har fixed tick par chalta hai).prevPos ko current visual
+                // pos pe hi chhoda hai taaki render interpolation pop na kare.
+                const oldVisualX = this.ball.pos.x;
+                const oldVisualY = this.ball.pos.y;
                 this.ball.vel.x = finalVx;
                 this.ball.vel.y = finalVy;
-      
-                this.ball.prevPos.x = finalX;
-                this.ball.prevPos.y = finalY;
+
+                this.reconcileOffsetX = oldVisualX - finalX; // total error jo blend me khatam karni hai
+                this.reconcileOffsetY = oldVisualY - finalY;
+                this.reconcileBlendTicksRemaining = this.RECONCILE_BLEND_TICKS;
 
                 // 🟢 Clean Trail Reconstruction: Remove local prediction noise & connect exitX,exitY -> finalX,finalY
                 const bowler = this.renderer.bowler;
@@ -247,8 +310,13 @@ export default class GameLoop{
             this.network.onBowlerRelease = (tick, releaseX, releaseY, vReleaseX, vReleaseY) => {
                 console.log("📩 Batter Received Authoritative Release Event! Packet Tick:", tick, "Current Tick:", this.networkTickNumber);
 
-                const currentTick = this.networkTickNumber;
-                const deltaTicks = Math.max(0, currentTick - tick);
+                // 🎯 TIMING FIX: pehle deltaTicks = (currentTick - tick) use hota tha — ye
+                // cross-client unsynchronized tick difference hai (batter ka clock vs bowler ka
+                // clock; drift + MAX_PHYSICS_STEPS drop). Bowler ki actually-chali ball ko real
+                // time se catch-up karana hai = release packet ka one-way delay = RTT/2 ticks.
+                // Ye bug hit reconciliation wala hi hai — release par bhi galat roll-forward se
+                // batter ki ball galat jagah se shuru hoti thi.
+                const deltaTicks = this.getOneWayTicks();
 
                 // Fast-Forward real release values by elapsed deltaTicks (including Gravity, Air Drag, Bounce & Friction)
                 const realMomentState = this.getProjectileStateWithBounce(
@@ -301,41 +369,12 @@ export default class GameLoop{
                 }
             };
         }
-        const startBowlerDelivery = () => {
-            const bowler = this.renderer.bowler;
-            bowler.resetToIdle();
-            bowler.currentHipPosition.x = 1.4*CANVAS_WIDTH;
-            bowler.startRunning();
-
-            const minSpeed = 2500;
-            const maxSpeed = 3500;
-            this.currentDeliverySpeed = minSpeed + Math.random() * (maxSpeed - minSpeed);
-
-            const minAngle = 1;
-            const maxAngle = 14;
-            const randomAngleOffset = minAngle + Math.random() * (maxAngle - minAngle);
-            this.currentDeliveryAngle = 180 - randomAngleOffset;
-
-            // Lower angle -> Release near Keyframe 38 (index 37.0)
-            // Higher angle -> Release near Keyframe 39 (index 38.0)
-            const angleRatio = (randomAngleOffset - minAngle) / (maxAngle - minAngle);
-            const releaseKeyframe = 37.0 + angleRatio * 1.0;
-            this.targetReleasePhase = releaseKeyframe / 41.0;
-
-            this.ball.isHeldInHand = true;
-            this.ball.isActive = true;
-            this.ball.pos.x = bowler.leftWrist.x;
-            this.ball.pos.y = bowler.leftWrist.y;
-            this.ball.prevPos.x = bowler.leftWrist.x;
-            this.ball.prevPos.y = bowler.leftWrist.y;
-        };
-
         // 1. Mouse Click (Left Click): Only triggers pre-jump IF bowler is ALREADY running via Space key!
         window.addEventListener("mousedown", (event) => {
             if (event.button !== 0) return; // Only Left Click
             const bowler = this.renderer.bowler;
             if (!this.isOnlineMode && this.renderer.gameMode === 'BATTING') {
-                startBowlerDelivery();
+                this.startBowlerDelivery();
             } else if (this.renderer.gameMode === 'NEW_BOWLER') {
                 // Left click sets startJumpX preJumpDistance (1000px) to the left of current bowler position!
                 if (bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {
@@ -363,7 +402,7 @@ export default class GameLoop{
             if (event.code === "Space") {
                 const bowler = this.renderer.bowler;
                 if (!this.isOnlineMode && this.renderer.gameMode === 'BATTING') {
-                    startBowlerDelivery();
+                    this.startBowlerDelivery();
                 } else if (this.renderer.gameMode === 'NEW_BOWLER') {
                     if (!bowler.isRunning && !bowler.isExecutingJump && !bowler.isPreJumpTransitioning) {
                         this.resetPerBallState();
@@ -536,14 +575,50 @@ export default class GameLoop{
         this.bat.setBatPoseFromMouse(x, y);
     }
 
+    private startBowlerDelivery(): void {
+        const bowler = this.renderer.bowler;
+        bowler.resetToIdle();
+        bowler.currentHipPosition.x = 1.4 * CANVAS_WIDTH;
+        bowler.startRunning();
+
+        const minSpeed = 2500;
+        const maxSpeed = 3500;
+        this.currentDeliverySpeed = minSpeed + Math.random() * (maxSpeed - minSpeed);
+
+        const minAngle = 1;
+        const maxAngle = 14;
+        const randomAngleOffset = minAngle + Math.random() * (maxAngle - minAngle);
+        this.currentDeliveryAngle = 180 - randomAngleOffset;
+
+        const angleRatio = (randomAngleOffset - minAngle) / (maxAngle - minAngle);
+        const releaseKeyframe = 37.0 + angleRatio * 1.0;
+        this.targetReleasePhase = releaseKeyframe / 41.0;
+
+        this.ball.isHeldInHand = true;
+        this.ball.isActive = true;
+        this.ball.pos.x = bowler.leftWrist.x;
+        this.ball.pos.y = bowler.leftWrist.y;
+        this.ball.prevPos.x = bowler.leftWrist.x;
+        this.ball.prevPos.y = bowler.leftWrist.y;
+        this.offlineResetTimer = 0;
+    }
+
     private resetPerBallState(): void {
         this.localPredictedHit = false;
         this.suppressNextPacketSound = false;
         this.hasAuthoritativeResult = false;
         this.hasSentReleasePacket = false;
+        this.hitPacketCooldownTimer = 0;
         this.hasLocalPredictedRelease = false;
         this.batPoseQueue = [];
         this.batInterpTick = 0;
+        // 🎯 Reconciliation + dedup state bhi reset karo — naya ball = clean slate.
+        // Kyun: agar purane ball ka blend-offset/lastHitTick agle ball me carry-over hua,
+        // to naya ball galat position offset se start hogi / pehla HIT_RESULT dedup ho sakta hai.
+        this.lastHitResultTick = -1;
+        this.reconcileBlendTicksRemaining = 0;
+        this.reconcileOffsetX = 0;
+        this.reconcileOffsetY = 0;
         if (this.ball) {
             this.ball.hasBeenHit = false;
         }
@@ -553,46 +628,76 @@ export default class GameLoop{
         }
     }
 
+    // 🎯 One-way delay ka reliable tick estimate.
+    // Kyun: cross-client tick difference (isTick vs packetTick) unsynchronized clocks ki
+    // wajah se unreliable hai, isliye AB HAR JAGAH (release roll-forward + hit reconcile)
+    // elapsed time ka single source of truth = RTT median ka half (one-way delay).
+    // 1 tick (16.67ms) se kam nahi — warna correction 0 ho kar ball raw contact pe snap karegi.
+    private getOneWayTicks(): number {
+        const rttMs = (this.isOnlineMode && this.network) ? this.network.getRTT() : 40.0;
+        return Math.max(1, Math.round((rttMs * 0.5) / 16.67));
+    }
+
 private getProjectileStateWithBounce(
     initialX: number, 
     initialY: number, 
     initialVx: number, 
     initialVy: number, 
-    t: number,
-    ballRadius: number = 10
+    t: number
 ) {
     let currX = initialX;
     let currY = initialY;
     let currVx = initialVx;
     let currVy = initialVy;
 
-    const groundY = CANVAS_HEIGHT - GROUND_HEIGHT - ballRadius;
-    const stepDt = 0.001; // 1ms precision step
-    let elapsedTime = 0;
-    const totalTime = t / 60;
+    // 🎯 PHYSICS PARITY FIX: pehle ye function 1ms generic steps + HARDCODED radius 10
+    // use karta tha, jabki REAL Ball.update() 60Hz ticks x 10 sub-steps + ball.radius
+    // use karta hai (Ball.ts). Is mismatch ki wajah se fast-forwarded position actual
+    // simulated trajectory se hat jaati thi (especially bounce ke baad) → reconciliation
+    // correction galat jagah pahunchti thi → visible snap. Ab integration order, sub-step
+    // count, drag/gravity application aur ground-bounce logic — sab EXACTLY Ball.ts jaisa.
+    const targetY = (CANVAS_HEIGHT - GROUND_HEIGHT) - this.ball.radius;
 
-    while (elapsedTime < totalTime) {
-        const dt = Math.min(stepDt, totalTime - elapsedTime);
+    const totalTicks = Math.max(0, t); // t = kitne 60Hz ticks aage fast-forward karna hai
+    const SUB_STEPS = 10;
+    const subDt = (1 / 60) / SUB_STEPS;
 
-        // 🟢 Exact Air Drag + Gravity Physics (100% same as Ball.ts)
-        const speed = Math.hypot(currVx, currVy);
-        const dragForceX = -AIR_DRAG_COEFF * speed * currVx;
-        const dragForceY = -AIR_DRAG_COEFF * speed * currVy;
+    for (let tick = 0; tick < totalTicks; tick++) {
+        for (let step = 0; step < SUB_STEPS; step++) {
+            const stepPrevX = currX;
+            const stepPrevY = currY;
 
-        currVx += dragForceX * dt;
-        currVy += (GRAVITY + dragForceY) * dt;
+            // Aerodynamic Quadratic Air Drag (same as Ball.ts)
+            const speed = Math.hypot(currVx, currVy);
+            const dragForceX = -AIR_DRAG_COEFF * speed * currVx;
+            const dragForceY = -AIR_DRAG_COEFF * speed * currVy;
 
-        currX += currVx * dt;
-        currY += currVy * dt;
+            currVx += dragForceX * subDt;
+            currVy += (GRAVITY + dragForceY) * subDt;
 
-        // Ground Bounce check (Only when ball is moving downward into the pitch!)
-        if (currY >= groundY && currVy > 0) {
-            currY = groundY;
-            currVy = -currVy * RESTITUTION_GROUND;
-            currVx *= FRICTION_GROUND;
+            const nextX = currX + currVx * subDt;
+            const nextY = currY + currVy * subDt;
+
+            // Continuous Collision Check against ground (exact fractional intersection, same as Ball.ts)
+            if (stepPrevY < targetY && nextY >= targetY) {
+                const f = Math.min(1.0, Math.max(0.0, (targetY - stepPrevY) / Math.max(0.001, nextY - stepPrevY)));
+                currX = stepPrevX + f * (nextX - stepPrevX);
+                currY = targetY;
+                currVy = -Math.abs(currVy) * RESTITUTION_GROUND;
+                currVx *= FRICTION_GROUND;
+                if (Math.abs(currVy) < 20) currVy = 0;
+                const remainingSubDt = subDt * (1.0 - f);
+                currX += currVx * remainingSubDt;
+                currY += currVy * remainingSubDt;
+            } else {
+                currX = nextX;
+                currY = nextY;
+                if (currY >= targetY) {
+                    currY = targetY;
+                    if (currVy > 0) currVy = -currVy * RESTITUTION_GROUND;
+                }
+            }
         }
-
-        elapsedTime += dt;
     }
 
     return { 
@@ -903,10 +1008,14 @@ private getProjectileStateWithBounce(
                 
             //     }
             // }
+            if (this.hitPacketCooldownTimer > 0) {
+                this.hitPacketCooldownTimer -= dt;
+            }
+
             const batHitResult = this.bat.checkHit(this.ball, dt);
            
-            if (batHitResult.hit && !this.ball.isStuck && this.isOnlineMode && this.network && this.network.isConnected) {
-           
+            if (batHitResult.hit && !this.ball.isStuck && this.hitPacketCooldownTimer <= 0 && this.isOnlineMode && this.network && this.network.isConnected) {
+                this.hitPacketCooldownTimer = 0.4; // ⏱️ 400ms Cooldown: Prevents duplicate consecutive frame packets on the same hit!
                 const si = this.bat.lastSoundImpact;
                 this.network.sendHitResult(
                     this.networkTickNumber,
@@ -917,8 +1026,20 @@ private getProjectileStateWithBounce(
                     si?.speed ?? 1000,      // fallback: threshold-ke-paas default
                     si?.offset ?? 100       // fallback: mid-blade
                 );
+                console.log("🚀 Batter Sent HIT_RESULT Packet (400ms Cooldown) at Tick:", this.networkTickNumber);
             }
             this.renderer.wicket.checkHit(this.ball, batHitResult.hit, batHitResult.hitSubStep);
+
+            // 🔄 Auto-Reset for Next Delivery in Offline BATTING Mode
+            if (!this.isOnlineMode && !this.ball.isHeldInHand && bowler.hasReleasedBall) {
+                const ballOut = (this.ball.pos.x < -100 || this.ball.pos.x > CANVAS_WIDTH + 200 || this.ball.pos.y > CANVAS_HEIGHT + 100);
+                if (ballOut || bowler.isCycleCompleted) {
+                    this.offlineResetTimer += dt;
+                    if (this.offlineResetTimer >= 1.5) {
+                        this.startBowlerDelivery();
+                    }
+                }
+            }
         } else if (this.renderer.gameMode === 'NEW_BOWLER') {
             const bowler = this.renderer.bowler;
 
@@ -1288,6 +1409,27 @@ private getProjectileStateWithBounce(
                     // Ball has been released: update flight physics (Gravity, Air Drag, Friction & Pitch Bounce!)
                     this.ball.update(dt);
 
+                    // 🎯 SMOOTH RECONCILIATION BLEND LOOP: onHitResult se set hua position-offset
+                    // har fixed tick me thoda-thoda khatam karo. Kyun: ball ko authoritative
+                    // trajectory par HARD-teleport karne se "hit-location pe wapas jump" dikhta
+                    // tha. Ab har tick pos ko 1/K hissa target ki taraf glide karta hai —
+                    // K ticks (~83ms) ke baad ball EXACTLY authoritative path par aa jaati hai,
+                    // aur velocity pehle se hi authoritative hai, to trajectory sahi rehti hai.
+                    if (this.reconcileBlendTicksRemaining > 0) {
+                        const blendStepX = this.reconcileOffsetX / this.reconcileBlendTicksRemaining;
+                        const blendStepY = this.reconcileOffsetY / this.reconcileBlendTicksRemaining;
+                        this.ball.pos.x -= blendStepX;
+                        this.ball.pos.y -= blendStepY;
+                        this.reconcileOffsetX -= blendStepX;
+                        this.reconcileOffsetY -= blendStepY;
+                        this.reconcileBlendTicksRemaining--;
+                        if (this.reconcileBlendTicksRemaining === 0) {
+                            // Blend complete — offsets zero karo (next ball ke liye clean state)
+                            this.reconcileOffsetX = 0;
+                            this.reconcileOffsetY = 0;
+                        }
+                    }
+
                     // ⚡ ONLINE MODE LOCAL PREDICTIVE COLLISION CHECK ON BOWLER SCREEN (0ms Audio Feedback + Instant Local Launch)
                     if (this.isOnlineMode && this.ball.isActive && !this.ball.isHeldInHand && !this.hasAuthoritativeResult && !this.localPredictedHit) {
                         const predicted = this.bat.checkHit(this.ball, dt);
@@ -1432,7 +1574,9 @@ private getProjectileStateWithBounce(
 
     public setGameMode(mode: 'BATTING' | 'BOWLING' | 'NEW_BOWLER' | 'DEBUG_13_FRAMES' | 'ANIMATION_PLAY') {
         this.renderer.gameMode = mode;
-        if (mode === 'NEW_BOWLER') {
+        if (mode === 'BATTING' && !this.isOnlineMode) {
+            this.startBowlerDelivery();
+        } else if (mode === 'NEW_BOWLER') {
             const bowler = this.renderer.bowler;
             bowler.resetToIdle();
             bowler.currentHipPosition.x = BOWLER_START_X;
