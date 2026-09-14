@@ -59,7 +59,19 @@ export default class GameLoop{
     // 🛡️ DEDUP GUARD: last received HIT_RESULT packet tick — same tick ka duplicate packet
     // ignore karne ke liye (reliable channel duplicates nahi bhejta, par defensive safety).
     private lastHitResultTick: number = -1;
-   
+
+    // 🎯 RACE-CONDITION FIX (asli "ball wapas hit-location me teleport + dobara hit" bug):
+    // local predicted hit se ab tak kitne physics ticks beet chuke hain. Kyun zaroori hai:
+    // bowler screen par ball LOCAL PREDICTED hit (interpolated/delayed bat se) ke moment se
+    // hi udna shuru ho jaati hai — jo AUTHORITATIVE contact + RTT/2 se PEHLE ho sakta hai
+    // (remote bat extrapolation BAT_MAX_EXTRAPOLATION_TICKS + network jitter ki wajah se).
+    // Us case me HIT_RESULT aane par sirf oneWayTicks (= RTT/2) fast-forward karne se target
+    // position ball ke CURRENT position se PEECHE ban jaata hai, aur reconcile ball ko
+    // WAPAS hit-location tak khinchta hai → phir authoritative velocity se aage = "dobara
+    // hit" dikh-ta hai. Isliye fast-forward ko kam se kam LOCAL FLIGHT ticks tak clamp karte
+    // hain (Math.max) — ball ko target KABHI PEECHE nahi milega.
+    private ticksSinceLocalPredictedHit: number = 0;
+ 
     private currentDeliverySpeed: number = 3000;
     private currentDeliveryAngle: number = 180;
     private targetReleasePhase: number = 37.5 / 41.0;
@@ -178,7 +190,18 @@ export default class GameLoop{
                 // ticks → ball RAW CONTACT POINT pe patak deti thi = "hit-location me teleport".
                 // CONTACT se PACKET ARRIVAL tak ka ACTUAL elapsed = packet ka one-way travel
                 // time = RTT/2, kyunki batter HIT_RESULT apne contact frame par hi bhejta hai.
-                const totalElapsedTicks = this.getOneWayTicks();
+                // LEKIN race-condition: local predicted hit (delayed bat se) packet se PEHLE
+                // fire ho sakta hai — us case me ball RTT/2 se ZYADA ticks se ud rahi hai.
+                // Sirf oneWayTicks fast-forward karne par target ball ke PEECHE ban jaata hai
+                // aur blend ball ko wapas hit-location tak khinch leta hai ("teleport back +
+                // dobara hit" bug). Isliye fast-forward >= local-flight-ticks guarantee karo —
+                // target ball ke current position se kabhi PEECHE nahi hoga.
+                const oneWayTicks = this.getOneWayTicks();
+                const totalElapsedTicks = Math.max(oneWayTicks, this.ticksSinceLocalPredictedHit);
+                if (this.ticksSinceLocalPredictedHit > oneWayTicks) {
+                    console.log(`🏁 RACE-FIX: local predicted hit ${this.ticksSinceLocalPredictedHit} ticks pehle fire hua (oneWay=${oneWayTicks}) — fast-forward clamp applied`);
+                }
+
 
                 const { finalX, finalY, finalVx, finalVy } = this.getProjectileStateWithBounce(
                     exitX,
@@ -214,9 +237,28 @@ export default class GameLoop{
                 this.ball.vel.x = finalVx;
                 this.ball.vel.y = finalVy;
 
-                this.reconcileOffsetX = oldVisualX - finalX; // total error jo blend me khatam karni hai
-                this.reconcileOffsetY = oldVisualY - finalY;
-                this.reconcileBlendTicksRemaining = this.RECONCILE_BLEND_TICKS;
+                // 🛡️ BACKWARD-GUARD (race-condition ki second safety layer): agar fast-forward
+                // target ball ke current position se PEECHE hai (exit-velocity direction me
+                // measure karte hain), to blend ball ko PEECHE khinchega = "wapas hit-location
+                // me teleport + dobara hit" wahi bug. Isliye us case me blend SKIP karte hain —
+                // ball apni current (aage wali) position se hi authoritative velocity ke saath
+                // aage udegi. Sirf FORWARD corrections (ball abhi bat ke paas hai, target aage
+                // hai) ko smooth-blend karte hain. Threshold 4px — nanhi noise ignore.
+                const exitSpeed = Math.hypot(finalVx, finalVy);
+                const alongVel = exitSpeed > 1
+                    ? ((oldVisualX - finalX) * finalVx + (oldVisualY - finalY) * finalVy) / exitSpeed
+                    : 0;
+                if (alongVel > 4.0) {
+                    // Ball target se AAGE hai — pull-back SKIP (ball ko kabhi peeche nahi khinchte)
+                    this.reconcileOffsetX = 0;
+                    this.reconcileOffsetY = 0;
+                    this.reconcileBlendTicksRemaining = 0;
+                    console.log(`⏭️ BACKWARD-GUARD: ball target se ${alongVel.toFixed(1)}px aage already hai — pull-back skipped (no teleport-back)`);
+                } else {
+                    this.reconcileOffsetX = oldVisualX - finalX; // total error jo blend me khatam karni hai
+                    this.reconcileOffsetY = oldVisualY - finalY;
+                    this.reconcileBlendTicksRemaining = this.RECONCILE_BLEND_TICKS;
+                }
 
                 // 🟢 Clean Trail Reconstruction: Remove local prediction noise & connect exitX,exitY -> finalX,finalY
                 const bowler = this.renderer.bowler;
@@ -235,6 +277,9 @@ export default class GameLoop{
       
                 this.hasAuthoritativeResult = true;
                 this.localPredictedHit = false;
+                // 🎯 RACE-FIX: authoritative result aa gaya — local-flight counter ab zaroori
+                // nahi (use ho chuka fast-forward clamp me), isko zero kar do.
+                this.ticksSinceLocalPredictedHit = 0;
 
                 if (this.suppressNextPacketSound) {
                     this.suppressNextPacketSound = false; // Echo consume — one-shot
@@ -619,6 +664,8 @@ export default class GameLoop{
         this.reconcileBlendTicksRemaining = 0;
         this.reconcileOffsetX = 0;
         this.reconcileOffsetY = 0;
+        // 🎯 RACE-FIX: local-flight tick counter bhi naye ball par zero karo
+        this.ticksSinceLocalPredictedHit = 0;
         if (this.ball) {
             this.ball.hasBeenHit = false;
         }
@@ -799,7 +846,10 @@ private getProjectileStateWithBounce(
                 bowler.update(dt);
             }
             if (bowler.isExecutingJump || bowler.isPreJumpTransitioning) {
-    const totalJumpFrames = Bowler.PRE_DELIVERY_JUMP.length;
+                if (!this.isOnlineMode) {
+                    bowler.accumulatedJoystickAngleDeg += (370.6 / 1.18) * dt;
+                }
+                const totalJumpFrames = Bowler.PRE_DELIVERY_JUMP.length;
     const totalArmPathDeg = 370.6;
     const progressRatio = Math.min(1.0, Math.max(0.0, bowler.accumulatedJoystickAngleDeg / totalArmPathDeg));
     const decimalFrameIndex = progressRatio * (totalJumpFrames - 1);
@@ -931,25 +981,34 @@ private getProjectileStateWithBounce(
                         }
                     }
 
-                // Auto pre-jump trigger near crease (x <= 750)
-               if(!this.isOnlineMode){ 
-                if (bowler.isRunning && bowler.currentHipPosition.x <= 1.2*CANVAS_WIDTH && !bowler.isPreJumpTransitioning && !bowler.isExecutingJump) {
-                    bowler.triggerPreJump();
+                // Exact ff7a366 Offline Batting Mode Behavior
+                if (!this.isOnlineMode) { 
+                    // 1. Auto pre-jump trigger as bowler enters screen at 1.2 * CANVAS_WIDTH (1920px)
+                    if (bowler.isRunning && bowler.currentHipPosition.x <= 1.05 * CANVAS_WIDTH && !bowler.isPreJumpTransitioning && !bowler.isExecutingJump) {
+                        bowler.triggerPreJump();
+                    }
+
+                    // 2. Release ball dynamically at targetReleasePhase (Keyframe 37-38)
+                    if ((bowler.isExecutingJump || bowler.isPreJumpTransitioning) && !bowler.hasReleasedBall) {
+                        const progressRatio = Math.min(1.0, Math.max(0.0, bowler.accumulatedJoystickAngleDeg / 370.6));
+                        bowler.jumpPhase = progressRatio;
+
+                        if (bowler.jumpPhase >= (this.targetReleasePhase || 0.53)) {
+                            bowler.hasReleasedBall = true;
+                            bowler.isBallReleased = true;
+                            this.ball.isHeldInHand = false;
+
+                            this.renderer.wicket.reset();
+                            this.ball.throwBall(
+                                bowler.leftWrist.x,
+                                bowler.leftWrist.y,
+                                this.currentDeliverySpeed,
+                                this.currentDeliveryAngle
+                            );
+                            console.log("🚀 Offline Bowler Released Ball at targetReleasePhase!");
+                        }
+                    }
                 }
-
-                // Release ball dynamically synchronized between Keyframe 38 and 39 based on delivery angle!
-                if (bowler.isExecutingJump && bowler.jumpPhase >= this.targetReleasePhase && !bowler.hasReleasedBall) {
-                    bowler.hasReleasedBall = true;
-                    this.ball.isHeldInHand = false;
-
-                    this.renderer.wicket.reset();
-                    this.ball.throwBall(
-                        bowler.leftWrist.x,
-                        bowler.leftWrist.y,
-                        this.currentDeliverySpeed,
-                        this.currentDeliveryAngle
-                    );
-                }}
             }
 
             this.ball.update(dt);
@@ -1029,17 +1088,6 @@ private getProjectileStateWithBounce(
                 console.log("🚀 Batter Sent HIT_RESULT Packet (400ms Cooldown) at Tick:", this.networkTickNumber);
             }
             this.renderer.wicket.checkHit(this.ball, batHitResult.hit, batHitResult.hitSubStep);
-
-            // 🔄 Auto-Reset for Next Delivery in Offline BATTING Mode
-            if (!this.isOnlineMode && !this.ball.isHeldInHand && bowler.hasReleasedBall) {
-                const ballOut = (this.ball.pos.x < -100 || this.ball.pos.x > CANVAS_WIDTH + 200 || this.ball.pos.y > CANVAS_HEIGHT + 100);
-                if (ballOut || bowler.isCycleCompleted) {
-                    this.offlineResetTimer += dt;
-                    if (this.offlineResetTimer >= 1.5) {
-                        this.startBowlerDelivery();
-                    }
-                }
-            }
         } else if (this.renderer.gameMode === 'NEW_BOWLER') {
             const bowler = this.renderer.bowler;
 
@@ -1430,6 +1478,15 @@ private getProjectileStateWithBounce(
                         }
                     }
 
+                    // 🎯 RACE-FIX COUNTER: local predicted hit fire hone ke baad har physics
+                    // tick gin-te hain (jab tak authoritative result nahi aata). Kyun: HIT_RESULT
+                    // aane par fast-forward is counter se CLAMP hota hai — taaki fast-forwarded
+                    // target ball ke current position se KABHI PEECHE na ho (warna ball wapas
+                    // hit-location me khinchti = "teleport back + dobara hit" bug).
+                    if (this.localPredictedHit && !this.hasAuthoritativeResult) {
+                        this.ticksSinceLocalPredictedHit++;
+                    }
+
                     // ⚡ ONLINE MODE LOCAL PREDICTIVE COLLISION CHECK ON BOWLER SCREEN (0ms Audio Feedback + Instant Local Launch)
                     if (this.isOnlineMode && this.ball.isActive && !this.ball.isHeldInHand && !this.hasAuthoritativeResult && !this.localPredictedHit) {
                         const predicted = this.bat.checkHit(this.ball, dt);
@@ -1538,6 +1595,13 @@ private getProjectileStateWithBounce(
                     this.localPredictedHit = true;
                     this.suppressNextPacketSound = true;
                 }
+            }
+
+            // 🎯 RACE-FIX COUNTER (BOWLING mode branch): NEW_BOWLER branch jaisa hi —
+            // local predicted hit ke baad flight ticks gino taaki HIT_RESULT fast-forward
+            // ball ke current position se peeche na ho (backward pull / teleport-back bug).
+            if (this.localPredictedHit && !this.hasAuthoritativeResult) {
+                this.ticksSinceLocalPredictedHit++;
             }
 
             if (this.isOnlineMode && !this.hasSentReleasePacket && this.network && this.network.isConnected) {
