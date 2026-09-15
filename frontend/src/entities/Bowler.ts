@@ -358,6 +358,7 @@ export class Bowler {
     public localHitTrailIndex: number = -1;
     public isBallReleased: boolean = false;
     public debugReleasePoint: Vec2 | null = null;
+    public gatheringAngleTraveledDeg: number = 0.0;
     public lastReleaseVx: number | null = null;
     public lastReleaseVy: number | null = null;
     public lastReleaseVBodyX: number | null = null;
