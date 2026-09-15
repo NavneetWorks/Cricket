@@ -137,7 +137,7 @@ export default class Bat {
     // --- BAT BREAKDOWN ---
     private readonly HANDLE_LENGTH = 1.5 * PLAYER_LENGTH_FACTOR; // 1.5x of player length factor
     private readonly BLADE_LENGTH = 3*PLAYER_LENGTH_FACTOR;
-    private readonly TOTAL_BAT_LENGTH = 4.7*PLAYER_LENGTH_FACTOR;
+    private readonly TOTAL_BAT_LENGTH = 4.9*PLAYER_LENGTH_FACTOR;
     private readonly TOTAL_RIGHT_ARM_LENGTH  =  3.4*PLAYER_LENGTH_FACTOR;
     private readonly TOTAL_LEFT_ARM_LENGTH = 3.5*PLAYER_LENGTH_FACTOR;
     // --- WIDTHS ---

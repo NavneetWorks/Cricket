@@ -353,9 +353,9 @@ export class Bowler {
     public gatheringStartX: number | null = null;
     public gatheringTargetX: number | null = null;
     public isGatheringArmActive: boolean = false;
-    public gatheringAngleTraveledDeg: number = 0.0;
     public ballTrailPoints: Vec2[] = [];
-    public authoritativeHitTrailIndex: number = -1; 
+    public authoritativeHitTrailIndex: number = -1;
+    public localHitTrailIndex: number = -1;
     public isBallReleased: boolean = false;
     public debugReleasePoint: Vec2 | null = null;
     public lastReleaseVx: number | null = null;

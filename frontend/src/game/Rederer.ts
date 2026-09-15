@@ -682,33 +682,48 @@ export default class Renderer{
         const points = this.bowler.ballTrailPoints;
         if (points.length < 2) return;
 
+        const authIdx = this.bowler.authoritativeHitTrailIndex !== undefined && this.bowler.authoritativeHitTrailIndex !== null ? this.bowler.authoritativeHitTrailIndex : -1;
+        const splitIndex = (authIdx > 0 && authIdx < points.length) ? authIdx : points.length;
+
         this.ctx.save();
-        this.ctx.strokeStyle = "#ef4444"; // Vibrant Red
         this.ctx.lineWidth = 3.5;
         this.ctx.lineCap = "round";
         this.ctx.lineJoin = "round";
 
-        this.ctx.beginPath();
-        this.ctx.moveTo(points[0].x, points[0].y);
-
-        if (points.length === 2) {
-            this.ctx.lineTo(points[1].x, points[1].y);
-        } else {
-            // Quadratic Bezier Curve Smoothing across consecutive points
-            for (let i = 1; i < points.length - 1; i++) {
-                const xc = (points[i].x + points[i + 1].x) / 2;
-                const yc = (points[i].y + points[i + 1].y) / 2;
-                this.ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+        const drawSegment = (startIdx: number, endIdx: number) => {
+            if (endIdx - startIdx < 1) return;
+            this.ctx.beginPath();
+            this.ctx.moveTo(points[startIdx].x, points[startIdx].y);
+            if (endIdx - startIdx === 1) {
+                this.ctx.lineTo(points[startIdx + 1].x, points[startIdx + 1].y);
+            } else {
+                for (let i = startIdx + 1; i < endIdx; i++) {
+                    const xc = (points[i].x + points[i + 1].x) / 2;
+                    const yc = (points[i].y + points[i + 1].y) / 2;
+                    this.ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+                }
+                const last = points[endIdx];
+                const prev = points[endIdx - 1];
+                this.ctx.quadraticCurveTo(prev.x, prev.y, last.x, last.y);
             }
-            const last = points[points.length - 1];
-            const prev = points[points.length - 2];
-            this.ctx.quadraticCurveTo(prev.x, prev.y, last.x, last.y);
-        }
-        this.ctx.stroke();
+            this.ctx.stroke();
+        };
 
-        // Draw small red dot at the latest ball point
+        // Draw First Segment (Red)
+        if (splitIndex > 0) {
+            this.ctx.strokeStyle = "#ef4444"; // Vibrant Red
+            drawSegment(0, splitIndex - 1);
+        }
+
+        // Draw Second Segment (Dark Blue)
+        if (splitIndex < points.length) {
+            this.ctx.strokeStyle = "#1e3a8a"; // Dark Blue
+            drawSegment(splitIndex - 1, points.length - 1);
+        }
+
+        // Draw small dot at the latest ball point
         const last = points[points.length - 1];
-        this.ctx.fillStyle = "#ef4444";
+        this.ctx.fillStyle = (splitIndex < points.length) ? "#1e3a8a" : "#ef4444";
         this.ctx.beginPath();
         this.ctx.arc(last.x, last.y, 4, 0, Math.PI * 2);
         this.ctx.fill();

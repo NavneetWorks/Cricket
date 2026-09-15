@@ -18,7 +18,7 @@ export default class Ball {
     public rotation = 0; // Ball ke spin ke liye
 
     // Change THIS value to test the visual slowdown. (e.g., 0.90 for 10% slower)
-    public baseTimeDilation: number = 0.6; // Default test value
+    public baseTimeDilation: number = 0.7; // Default test value
     public timeDilationFactor: number = 1.0; 
 
     constructor() {}

@@ -262,6 +262,11 @@ export default class GameLoop {
         this.ball.vel.y = finalVy;
         this.ball.timeDilationFactor = 1.0; // Ensure normal speed upon authoritative hit result
         this.hasAuthoritativeResult = true;
+        
+        // 🔵 Color the trail from this point onwards as dark blue
+        if (this.renderer.bowler) {
+            this.renderer.bowler.authoritativeHitTrailIndex = this.renderer.bowler.ballTrailPoints.length;
+        }
 
         this.reconcileOffsetX = 0;
         this.reconcileOffsetY = 0;
@@ -290,18 +295,17 @@ export default class GameLoop {
 
         // 🟢 Clean Trail Reconstruction: Remove local prediction noise & connect exitX,exitY -> finalX,finalY
         const bowler = this.renderer.bowler;
-        // Check condition: bowler && bowler.ballTrailPoints
         if (bowler && bowler.ballTrailPoints) {
-          const releaseIdx = bowler.localReleaseTrailIndex || 0;
-          // Check condition: releaseIdx > 0 && releaseIdx < bowler...
-          if (releaseIdx > 0 && releaseIdx < bowler.ballTrailPoints.length) {
+          const splitIdx = bowler.localHitTrailIndex > 0 ? bowler.localHitTrailIndex : (bowler.localReleaseTrailIndex || 0);
+          if (splitIdx > 0 && splitIdx < bowler.ballTrailPoints.length) {
             bowler.ballTrailPoints = bowler.ballTrailPoints.slice(
               0,
-              releaseIdx,
+              splitIdx,
             );
           }
+          // The line below ensures we have the actual hit point on the trail
           bowler.ballTrailPoints.push({ x: exitX, y: exitY });
-       //   bowler.ballTrailPoints.push({ x: finalX, y: finalY });
+          // And now teleporting forward, the next points will just be the ball's finalX, finalY
         }
 
         this.bat.clearStuckState();
@@ -590,8 +594,12 @@ export default class GameLoop {
           bowler.isExecutingJump = false;
           bowler.isPreJumpTransitioning = false;
           bowler.isPreJumpFrozen = false;
+          bowler.isBallReleased = false;
           bowler.isRunning = false;
           bowler.isCycleCompleted = false;
+          bowler.ballTrailPoints = [];
+          bowler.authoritativeHitTrailIndex = -1;
+          bowler.localHitTrailIndex = -1;
 
           this.currentArmAngleRad = Math.PI;
           this.isHandTargetInitialized = false;
@@ -722,12 +730,12 @@ export default class GameLoop {
     bowler.startRunning();
 
     const minSpeed = 2500;
-    const maxSpeed = 3500;
+    const maxSpeed = 4000;
     this.currentDeliverySpeed =
       minSpeed + Math.random() * (maxSpeed - minSpeed);
 
-    const minAngle = 1;
-    const maxAngle = 14;
+    const minAngle = 8;
+    const maxAngle = 25;
     const randomAngleOffset = minAngle + Math.random() * (maxAngle - minAngle);
     this.currentDeliveryAngle = 180 - randomAngleOffset;
 
@@ -2018,6 +2026,9 @@ export default class GameLoop {
           if (predicted.hit && !this.ball.isStuck) {
             this.localPredictedHit = true;
             this.ball.timeDilationFactor = 1.0; // Immediately resume normal speed
+            if (this.renderer.bowler) {
+                this.renderer.bowler.localHitTrailIndex = this.renderer.bowler.ballTrailPoints.length;
+            }
             this.suppressNextPacketSound = true;
             const si = this.bat.lastSoundImpact;
             // SoundManager.getInstance().playBatHit(
@@ -2164,9 +2175,11 @@ export default class GameLoop {
         !this.hasAuthoritativeResult
       ) {
         const predicted = this.bat.checkHit(this.ball, dt);
-        // Check condition: predicted.hit && !this.ball.isStuck
         if (predicted.hit && !this.ball.isStuck) {
           this.localPredictedHit = true;
+          if (this.renderer.bowler) {
+              this.renderer.bowler.localHitTrailIndex = this.renderer.bowler.ballTrailPoints.length;
+          }
           this.suppressNextPacketSound = true;
         }
       }

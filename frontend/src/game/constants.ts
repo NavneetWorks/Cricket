@@ -10,7 +10,7 @@ export const PITCH_WIDTH = 180;
 export const QUEUE_SIZE = 3;
 export const NORMAL_DIRECTION_ASSIST = 90; // 0 to 100 scale. E.g. 10 = bends 10% towards Normal
 
-export const GLOBAL_RESTITUTION_SCALE = 2;
+export const GLOBAL_RESTITUTION_SCALE = .8;
 export const REGION1 = 1;
 export const REGION2 = REGION1;
 export const REGION3 = REGION1;
@@ -74,9 +74,9 @@ export const BOWLER_START_X = 4600; // Master tuning variable for Bowler startin
 
 export const BAT_CENTER_OF_MASS_RATIO = 0.75;
 
-export const GRAVITY = 3266;
+export const GRAVITY = 2400;
 
-export const RESTITUTION_GROUND = .72; // Zameen aur Ball ki takkar ka bounce (72% pitch bounce)
+export const RESTITUTION_GROUND = .6; // Zameen aur Ball ki takkar ka bounce (72% pitch bounce)
 export const FRICTION_GROUND = 0.96;   // Zameen aur Ball ki ragad (4% speed loss per bounce/step)
 export const AIR_DRAG_COEFF = 0.00018; // Quadratic Aerodynamic Air Drag Constant
 
