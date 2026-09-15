@@ -740,8 +740,9 @@ export default class GameLoop {
     this.currentDeliveryAngle = 180 - randomAngleOffset;
 
     const angleRatio = (randomAngleOffset - minAngle) / (maxAngle - minAngle);
-    const releaseKeyframe = 37.0 + angleRatio * 1.0;
-    this.targetReleasePhase = releaseKeyframe / 41.0;
+    const releaseKeyframe = 690.0 + angleRatio * 20.0;
+    this.targetReleasePhase = releaseKeyframe / Bowler.PRE_DELIVERY_JUMP.length;
+
 
     this.ball.isHeldInHand = true;
     this.ball.isActive = true;
