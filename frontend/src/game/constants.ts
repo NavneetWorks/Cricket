@@ -89,7 +89,7 @@ export const TARGET_ANGLE_THRESHOLD = 0.02;
 
 export const TARGET_ANGULAR_VELOCITY_THRESHOLD = 0.02;
 
-//neck to hip 
+//neck to hip   
 
 export const NECT_TO_HIP_RATIO = 100
 
