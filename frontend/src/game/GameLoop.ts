@@ -1161,9 +1161,8 @@ export default class GameLoop {
       // Check game state condition
       if (
         this.ball.isHeldInHand &&
-        (bowler.isRunning ||
-          bowler.isPreJumpTransitioning ||
-          bowler.isExecutingJump)
+        bowler &&
+        !bowler.isBallReleased
       ) {
         const prevWristY =
           bowler.prevLeftWristY > 0
@@ -2125,9 +2124,8 @@ export default class GameLoop {
       // Check game state condition
       if (
         this.ball.isHeldInHand &&
-        (bowler.isRunning ||
-          bowler.isPreJumpTransitioning ||
-          bowler.isExecutingJump)
+        bowler &&
+        !bowler.isBallReleased
       ) {
         this.ball.pos.x = bowler.leftWrist.x;
         this.ball.pos.y = bowler.leftWrist.y;
@@ -2235,30 +2233,6 @@ export default class GameLoop {
     }
   }
   private render() {
-    // SNAPSHOT SAVE: For Decoupled Visual Delay (Run just before render)
-    if (this.gameMode === "NEW_BOWLER" && this.renderer.bowler) {
-      const b = this.renderer.bowler;
-      if (!b.visualHistory) b.visualHistory = [];
-      b.visualHistory.push({
-          time: performance.now(),
-          currentRightHipPosition: { x: b.currentRightHipPosition.x, y: b.currentRightHipPosition.y },
-          rightKnee: { x: b.rightKnee.x, y: b.rightKnee.y },
-          rightAnkle: { x: b.rightAnkle.x, y: b.rightAnkle.y },
-          currentLeftHipPosition: { x: b.currentLeftHipPosition.x, y: b.currentLeftHipPosition.y },
-          leftKnee: { x: b.leftKnee.x, y: b.leftKnee.y },
-          leftAnkle: { x: b.leftAnkle.x, y: b.leftAnkle.y },
-          headCenter: { x: b.headCenter.x, y: b.headCenter.y },
-          shoulderMid: { x: b.shoulderMid.x, y: b.shoulderMid.y },
-          currentHipPosition: { x: b.currentHipPosition.x, y: b.currentHipPosition.y },
-          frontShoulder: { x: b.frontShoulder.x, y: b.frontShoulder.y },
-          backShoulder: { x: b.backShoulder.x, y: b.backShoulder.y },
-          rightElbow: { x: b.rightElbow.x, y: b.rightElbow.y },
-          rightWrist: { x: b.rightWrist.x, y: b.rightWrist.y },
-          leftElbow: { x: b.leftElbow.x, y: b.leftElbow.y },
-          leftWrist: { x: b.leftWrist.x, y: b.leftWrist.y }
-      });
-    }
-
     this.renderer.render(this.renderAlpha);
   }
 

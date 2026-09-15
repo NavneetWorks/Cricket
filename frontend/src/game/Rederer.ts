@@ -118,7 +118,7 @@ export default class Renderer{
 
         // 🏃 Bowler Skeleton draw in NEW_BOWLER, BOWLING, BATTING, and ANIMATION_PLAY modes:
         if (this.gameMode === 'NEW_BOWLER' || this.gameMode === 'BOWLING' || this.gameMode === 'BATTING' || this.gameMode === 'ANIMATION_PLAY') {
-            this.bowler.drawDebugSkeleton(this.ctx);
+            this.bowler.drawDebugSkeleton(this.ctx, this.ball);
         }
 
         // 📍 Draw Red Jump Indicator Line on Ground in NEW_BOWLER mode

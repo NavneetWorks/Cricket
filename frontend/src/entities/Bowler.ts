@@ -10117,34 +10117,12 @@ export class Bowler {
         ctx.restore();
     }
 
-    public drawDebugSkeleton(ctx: CanvasRenderingContext2D): void {
-        const delayMs = 6*(this.playheadDelayMs || 0); // Dynamic Delay based on RTT/2
-        let snap = null;
-        if (!this.visualHistory) this.visualHistory = [];
-        
-        while (this.visualHistory.length > 1 && (performance.now() - this.visualHistory[1].time) > delayMs) {
-            snap = this.visualHistory.shift();
-        }
-        if (!snap && this.visualHistory.length > 0) {
-            snap = this.visualHistory[0];
-        }
-
-        // 1. Backup original physics state
-        const backup = {
-            currentRightHipPosition: this.currentRightHipPosition, rightKnee: this.rightKnee, rightAnkle: this.rightAnkle,
-            currentLeftHipPosition: this.currentLeftHipPosition, leftKnee: this.leftKnee, leftAnkle: this.leftAnkle,
-            headCenter: this.headCenter, shoulderMid: this.shoulderMid, currentHipPosition: this.currentHipPosition,
-            frontShoulder: this.frontShoulder, backShoulder: this.backShoulder, rightElbow: this.rightElbow,
-            rightWrist: this.rightWrist, leftElbow: this.leftElbow, leftWrist: this.leftWrist
-        };
-
-        // 2. Apply delayed snapshot for drawing
-        if (snap) {
-            this.currentRightHipPosition = snap.currentRightHipPosition; this.rightKnee = snap.rightKnee; this.rightAnkle = snap.rightAnkle;
-            this.currentLeftHipPosition = snap.currentLeftHipPosition; this.leftKnee = snap.leftKnee; this.leftAnkle = snap.leftAnkle;
-            this.headCenter = snap.headCenter; this.shoulderMid = snap.shoulderMid; this.currentHipPosition = snap.currentHipPosition;
-            this.frontShoulder = snap.frontShoulder; this.backShoulder = snap.backShoulder; this.rightElbow = snap.rightElbow;
-            this.rightWrist = snap.rightWrist; this.leftElbow = snap.leftElbow; this.leftWrist = snap.leftWrist;
+    public drawDebugSkeleton(ctx: CanvasRenderingContext2D, ball?: any): void {
+        if (ball && ball.isHeldInHand && !this.isBallReleased) {
+            ball.pos.x = this.leftWrist.x;
+            ball.pos.y = this.leftWrist.y;
+            ball.prevPos.x = this.leftWrist.x;
+            ball.prevPos.y = this.leftWrist.y;
         }
 
         ctx.save();
@@ -10230,15 +10208,6 @@ export class Bowler {
         }
 
         ctx.restore();
-
-        // 3. Restore original physics state
-        if (snap) {
-            this.currentRightHipPosition = backup.currentRightHipPosition; this.rightKnee = backup.rightKnee; this.rightAnkle = backup.rightAnkle;
-            this.currentLeftHipPosition = backup.currentLeftHipPosition; this.leftKnee = backup.leftKnee; this.leftAnkle = backup.leftAnkle;
-            this.headCenter = backup.headCenter; this.shoulderMid = backup.shoulderMid; this.currentHipPosition = backup.currentHipPosition;
-            this.frontShoulder = backup.frontShoulder; this.backShoulder = backup.backShoulder; this.rightElbow = backup.rightElbow;
-            this.rightWrist = backup.rightWrist; this.leftElbow = backup.leftElbow; this.leftWrist = backup.leftWrist;
-        }
     }
 
     public drawStaticPose(ctx: CanvasRenderingContext2D, frameIndex: number, worldX: number, customGroundY?: number, customFrames?: KeyframePose[]): void {
