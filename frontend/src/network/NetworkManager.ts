@@ -1,4 +1,5 @@
 
+import { SERVER_CONFIG } from "../game/constants";
 import {serializeBatSwing,serializeBowlerRelease,serializeHitResult,PacketType,serializePing,serializePong,serializeBowlerPosition, serializeBowlerStartRun, serializeBowlerStartGather,serializeBowlerJoystickStream} from './NetworkProtocol';
 export default class NetWorkManager{
     private ws:WebSocket | null = null;
@@ -28,7 +29,7 @@ export default class NetWorkManager{
     private readonly RTT_CLAMP_MIN = 20;
     private readonly RTT_WINDOW_SIZE = 10;
 
-    public connect(serverUrl:string = "ws://localhost:9001"){
+    public connect(serverUrl:string = SERVER_CONFIG.SIGNALING_URL){
         this.ws = new WebSocket(serverUrl);
         this.ws.binaryType = "arraybuffer";
         this.ws.onopen = () => {
@@ -81,6 +82,7 @@ export default class NetWorkManager{
             ]
         };
         this.pc = new RTCPeerConnection(rtcConfig);
+         
         this.reliableChannel = this.pc.createDataChannel("gameEvents", { ordered: true });
         this.reliableChannel.binaryType = "arraybuffer";
         this.reliableChannel.onopen = () => {

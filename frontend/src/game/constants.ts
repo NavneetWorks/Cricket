@@ -215,13 +215,14 @@ export const BAT_THICKNESS_PROFILE: number[] = [
 //     // Vite .env se URL read karega, agar nahi mila to localhost default fallback rahega:
 //     SIGNALING_URL: import.meta.env.VITE_SIGNALING_URL || `ws://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:9001`,
 //     TARGET_TICK_RATE: 60,
-//     NETWORK_INTERVAL_MS: 16.66
+//     NETWORK_INTERVAL_MS: 16.66 https://z4h6j16q-9001.inc1.devtunnels.ms/
 // };
-
+ 
 export const SERVER_CONFIG = {
-    SIGNALING_URL: "https://z4h6j16q-9001.inc1.devtunnels.ms/",
-    TARGET_TICK_RATE: 60,
-    NETWORK_INTERVAL_MS: 16.66
+
+  SIGNALING_URL: 'ws://172.198.56.113:9001',
+  RECONNECT_INTERVAL: 3000,
+  MAX_RECONNECT_ATTEMPTS: 5,
 };
 
 export const PLAYER_LENGTH_FACTOR = 28;

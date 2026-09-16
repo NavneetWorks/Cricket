@@ -44,10 +44,16 @@ class RTCManager{
                 } else {
                     reliableChannel = dc;
                 }            
+                static uint32_t udpPacketCount = 0;
+
                 // Jab UDP se message aayega
                  dc->onMessage([this](std::variant<rtc::binary, rtc::string> data) {
                     if (std::holds_alternative<rtc::binary>(data)) {
                         auto binaryData = std::get<rtc::binary>(data);
+                        udpPacketCount++;
+                        if (udpPacketCount % 60 == 0) {
+                            std::cout << "🌊 [UDP Stream] Player " << id << " se 60 UDP Packets Receive Hue! Total: " << udpPacketCount << "\n";
+                        }
                         if(binaryData.size() >= sizeof(PacketHeader)){
                             if(onPacketForward){
                                 onPacketForward(binaryData);
@@ -59,7 +65,12 @@ class RTCManager{
             });
 
             peerConnection->onStateChange([this](rtc::PeerConnection::State state) {
-                std::cout << "WebRTC State: " << state << "\n";
+                std::cout << "🌐 [WebRTC State Player " << id << "]: " << state << "\n";
+                if (state == rtc::PeerConnection::State::Connected) {
+                    std::cout << "✅✅ [SUCCESS] WebRTC Peer Connection CONNECTED for Player " << id << "!\n";
+                } else if (state == rtc::PeerConnection::State::Failed) {
+                    std::cout << "❌❌ [FAILED] WebRTC Peer Connection FAILED for Player " << id << "! (UDP Blocked by ISP/NAT)\n";
+                }
             });
         }
 
