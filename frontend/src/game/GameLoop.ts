@@ -726,7 +726,7 @@ export default class GameLoop {
   private startBowlerDelivery(): void {
     const bowler = this.renderer.bowler;
     bowler.resetToIdle();
-    bowler.currentHipPosition.x = 1.4 * CANVAS_WIDTH;
+    bowler.currentHipPosition.x = BOWLER_WICKET_X+150;
     bowler.startRunning();
 
     const minSpeed = 2500;

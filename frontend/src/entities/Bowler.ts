@@ -8,10 +8,10 @@ export const DECEL_DROP_RATIO: number = 0.5;
 
 // ── ⏱️ FRAME RANGE RELEASE WINDOW CONSTANTS ─────────────────────────────
 // Minimum allowed release frame in 71 total jump frame scale (Default: 63.0)
-export const JUMP_RELEASE_FRAME_MIN: number = 690.0;
+export const JUMP_RELEASE_FRAME_MIN: number = 680.0;
 
 // Maximum allowed release frame in 71 total jump frame scale (Default: 66.0)
-export const JUMP_RELEASE_FRAME_MAX: number = 710.0;
+export const JUMP_RELEASE_FRAME_MAX: number = 720.0;
 
 export interface Vec2 {
     x: number;  
