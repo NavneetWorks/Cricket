@@ -218,9 +218,15 @@ export const BAT_THICKNESS_PROFILE: number[] = [
 //     NETWORK_INTERVAL_MS: 16.66 https://z4h6j16q-9001.inc1.devtunnels.ms/
 // };
  
+// export const SERVER_CONFIG = {
+
+//   SIGNALING_URL: 'ws://172.198.56.113:9001',
+//   RECONNECT_INTERVAL: 3000,
+//   MAX_RECONNECT_ATTEMPTS: 5,
+// };
 export const SERVER_CONFIG = {
 
-  SIGNALING_URL: 'ws://172.198.56.113:9001',
+  SIGNALING_URL: 'wss://try-cricket.duckdns.org',
   RECONNECT_INTERVAL: 3000,
   MAX_RECONNECT_ATTEMPTS: 5,
 };

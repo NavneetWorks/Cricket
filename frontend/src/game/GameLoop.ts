@@ -2016,11 +2016,7 @@ export default class GameLoop {
 
         // ⚡ ONLINE MODE LOCAL PREDICTIVE COLLISION CHECK ON BOWLER SCREEN (0ms Audio Feedback + Instant Local Launch)
         if (
-          this.isOnlineMode &&
-          this.ball.isActive &&
-          !this.ball.isHeldInHand &&
-          !this.hasAuthoritativeResult &&
-          !this.localPredictedHit
+          this.ball.isActive
         ) {
           const predicted = this.bat.checkHit(this.ball, dt);
           if (predicted.hit && !this.ball.isStuck) {
