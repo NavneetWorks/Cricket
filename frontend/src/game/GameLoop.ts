@@ -81,6 +81,7 @@ export default class GameLoop {
   private ticksSinceLocalPredictedHit: number = 0;
 
   private currentDeliverySpeed: number = 3000;
+  private currentAnimationSpeed: number = 600.0;
   private currentDeliveryAngle: number = 180;
   private targetReleasePhase: number = 37.5 / 41.0;
 
@@ -734,13 +735,24 @@ export default class GameLoop {
     this.currentDeliverySpeed =
       minSpeed + Math.random() * (maxSpeed - minSpeed);
 
+    const minAnimSpeed = 450;
+    const maxAnimSpeed = 750;
+    const speedRatio = (this.currentDeliverySpeed - minSpeed) / (maxSpeed - minSpeed);
+    this.currentAnimationSpeed = minAnimSpeed + speedRatio * (maxAnimSpeed - minAnimSpeed);
+
     const minAngle = 8;
     const maxAngle = 25;
-    const randomAngleOffset = minAngle + Math.random() * (maxAngle - minAngle);
+    
+    // Slow ball (ratio 0) -> More offset (lofted). Fast ball (ratio 1) -> Less offset (flat).
+    const calculatedAngleOffset = maxAngle - speedRatio * (maxAngle - minAngle);
+    // Add small random noise for variety
+    const noise = (Math.random() - 0.5) * 4.0; 
+    const randomAngleOffset = Math.max(minAngle, Math.min(maxAngle, calculatedAngleOffset + noise));
+    
     this.currentDeliveryAngle = 180 - randomAngleOffset;
 
     const angleRatio = (randomAngleOffset - minAngle) / (maxAngle - minAngle);
-    const releaseKeyframe = 690.0 + angleRatio * 20.0;
+    const releaseKeyframe = 540.0 + angleRatio * 20.0;
     this.targetReleasePhase = releaseKeyframe / Bowler.PRE_DELIVERY_JUMP.length;
 
 
@@ -1050,15 +1062,13 @@ export default class GameLoop {
       if (bowler.isExecutingJump || bowler.isPreJumpTransitioning) {
         // Check if the game is running in multiplayer online mode
         if (!this.isOnlineMode) {
-          bowler.accumulatedJoystickAngleDeg += (370.6 / 1.18) * dt;
+          bowler.accumulatedJoystickAngleDeg += this.currentAnimationSpeed * dt;
         }
         const totalJumpFrames = Bowler.PRE_DELIVERY_JUMP.length;
-        const totalArmPathDeg = 370.6;
-        const progressRatio = Math.min(
-          1.0,
-          Math.max(0.0, bowler.accumulatedJoystickAngleDeg / totalArmPathDeg),
+        const decimalFrameIndex = Math.min(
+          totalJumpFrames - 1,
+          Math.max(0.0, bowler.accumulatedJoystickAngleDeg)
         );
-        const decimalFrameIndex = progressRatio * (totalJumpFrames - 1);
         const interpolatedPose =
           bowler.interpolatePoseAtDecimalFrame(decimalFrameIndex);
 
@@ -1086,17 +1096,13 @@ export default class GameLoop {
         bowler.currentHipPosition.x = effectiveHipX;
         bowler.applyKeyframePose(interpolatedPose, effectiveHipX);
 
-         if (this.isOnlineMode) {
-          const totalArmLen = bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
-          const minReach = Math.abs(bowler.FRONT_UPPER_ARM - bowler.FRONT_LOWER_ARM) + 5;
-          const armReach = minReach + (totalArmLen - minReach - 1.0) * bowler.smoothJoystickRadiusRatio;
-          bowler.overrideLeftArmWithIK(bowler.smoothJoystickAngleRad, armReach);
-        }
+        // IK override removed as per user request to let arm follow frames
+        // if (this.isOnlineMode) { ... overrideLeftArmWithIK ... }
 
         const isFollowThroughFinished =
           bowler.isBallReleased && bowler.postReleaseDelaySec <= 0;
-        // Check condition: progressRatio >= 0.99 || isFollowThro...
-        if (progressRatio >= 0.99 || isFollowThroughFinished) {
+        // Check condition: decimalFrameIndex >= totalJumpFrames - 1 || isFollowThro...
+        if (decimalFrameIndex >= totalJumpFrames - 1 || isFollowThroughFinished) {
           bowler.isCycleCompleted = true;
         }
       }
@@ -1115,14 +1121,7 @@ export default class GameLoop {
       }
       // Check if bowler's arm gathering phase is active
       else if (bowler.isGatheringArmActive) {
-        // 🟢 Runup legs natural chalte rahenge, sirf Bowling Arm Joystick Angle se rotate hoga:
-        const totalArmLen = bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
-        const minReach =
-          Math.abs(bowler.FRONT_UPPER_ARM - bowler.FRONT_LOWER_ARM) + 5;
-        const armReach =
-          minReach +
-          (totalArmLen - minReach - 1.0) * bowler.smoothJoystickRadiusRatio;
-        bowler.overrideLeftArmWithIK(bowler.smoothJoystickAngleRad, armReach);
+        // 🟢 IK override removed to let arm follow natural animation frames
       }
       // 🎯 Batter Screen par Red Line (startJumpX) reach hote hi Jump Stance Physics me switch karo!
           if (
@@ -1144,16 +1143,18 @@ export default class GameLoop {
         bowler.isExecutingJump = true;
         bowler.triggerPreJump();
 
-        // 🎯 Calculate static initial offset so pose ALWAYS starts at Frame 1 (40.6°)
-        const frame1ArmAngleDeg =
-          Bowler.PRE_DELIVERY_JUMP[0].rightUpperArmAngleDeg; // 40.6°
         const joystickRad = this.renderer.joystick
           ? this.renderer.joystick.angleRad
           : Math.PI;
-        const currentJoystickDeg = (joystickRad * 180) / Math.PI;
+        
+        let currentJoystickDeg = (joystickRad * 180) / Math.PI;
+        currentJoystickDeg = (currentJoystickDeg + 360) % 360; // Normalize 0-360
+        
+        // 6 o'clock (90 deg) should map to 0 (Frame 0)
+        let mappedAngle = currentJoystickDeg - 90.0;
+        if (mappedAngle < 0) mappedAngle += 360.0;
 
-        bowler.initialStaticOffsetDeg = frame1ArmAngleDeg - currentJoystickDeg;
-        bowler.accumulatedJoystickAngleDeg = 0.0;
+        bowler.accumulatedJoystickAngleDeg = mappedAngle;
         bowler.smoothJoystickAngleRad = joystickRad;
         bowler.joystickAngularVelRad = 0.0;
         bowler.lastJoystickAngleRad = joystickRad;
@@ -1185,12 +1186,10 @@ export default class GameLoop {
           bowler.isExecutingJump
         ) {
           const totalJumpFrames = Bowler.PRE_DELIVERY_JUMP.length;
-          const totalArmPathDeg = 370.6;
-          const progressRatio = Math.min(
-            1.0,
-            Math.max(0.0, bowler.accumulatedJoystickAngleDeg / totalArmPathDeg),
+          const currentFrame = Math.min(
+            totalJumpFrames - 1,
+            Math.max(0.0, bowler.accumulatedJoystickAngleDeg)
           );
-          const currentFrame = progressRatio * (totalJumpFrames - 1);
 
           // Frame 63 to 66: Top release arc par local prediction launch (Identical Trigger Condition as Bowler)
           if (currentFrame >= JUMP_RELEASE_FRAME_MIN) {
@@ -1305,7 +1304,7 @@ export default class GameLoop {
           ) {
             const progressRatio = Math.min(
               1.0,
-              Math.max(0.0, bowler.accumulatedJoystickAngleDeg / 370.6),
+              Math.max(0.0, bowler.accumulatedJoystickAngleDeg / (Bowler.PRE_DELIVERY_JUMP.length - 1)),
             );
             bowler.jumpPhase = progressRatio;
 
@@ -1323,8 +1322,10 @@ export default class GameLoop {
                 this.currentDeliveryAngle,
               );
               console.log(
-                "🚀 Offline Bowler Released Ball at targetReleasePhase!",
+                `🚀 Offline Bowler Released Ball! Speed: ${this.currentDeliverySpeed.toFixed(0)} px/s, Angle: ${this.currentDeliveryAngle.toFixed(1)}°`
               );
+              bowler.lastReleaseSpeed = this.currentDeliverySpeed;
+              bowler.lastReleaseAngleDeg = this.currentDeliveryAngle;
             }
           }
         }
@@ -1563,15 +1564,7 @@ export default class GameLoop {
 
           this.currentArmAngleRad = bowler.smoothJoystickAngleRad;
 
-          const totalArmLen = bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
-          const minReach =
-            Math.abs(bowler.FRONT_UPPER_ARM - bowler.FRONT_LOWER_ARM) + 5;
-          const armReach =
-            minReach +
-            (totalArmLen - minReach - 1.0) * bowler.smoothJoystickRadiusRatio;
-
-          // Override Left Arm IK with heavy-drag angle & radius
-          bowler.overrideLeftArmWithIK(this.currentArmAngleRad, armReach);
+          // IK override removed as per user request to let arm follow frames
           bowler.lastJoystickAngleRad = bowler.smoothJoystickAngleRad;
         }
       }
@@ -1644,7 +1637,6 @@ export default class GameLoop {
 
         // 📐 Option 2 Formula: progressRatio = accumulatedAngle / 370.6
         const totalJumpFrames = Bowler.PRE_DELIVERY_JUMP.length;
-        const totalArmPathDeg = 370.6;
 
         // 🛑 Clamp at Last Frame (Frame 71): Stop follow-through rotation at end of jump animation
         // 🛑 Clamp at Last Frame OR Finish when Ball Released and Follow-Through Slows Down:
@@ -1655,22 +1647,21 @@ export default class GameLoop {
 
         // Check game state condition
         if (
-          bowler.accumulatedJoystickAngleDeg >= totalArmPathDeg ||
+          bowler.accumulatedJoystickAngleDeg >= totalJumpFrames - 1 ||
           isFollowThroughFinished
         ) {
           bowler.accumulatedJoystickAngleDeg = Math.min(
-            totalArmPathDeg,
+            totalJumpFrames - 1,
             bowler.accumulatedJoystickAngleDeg,
           );
           bowler.joystickAngularVelRad = 0.0;
           bowler.isCycleCompleted = true;
         }
 
-        const progressRatio = Math.min(
-          1.0,
-          Math.max(0.0, bowler.accumulatedJoystickAngleDeg / totalArmPathDeg),
+        const decimalFrameIndex = Math.min(
+          totalJumpFrames - 1,
+          Math.max(0.0, bowler.accumulatedJoystickAngleDeg)
         );
-        const decimalFrameIndex = progressRatio * (totalJumpFrames - 1);
 
         // 60 FPS Sub-frame interpolation for body joints & displacementX
         const interpolatedPose =
@@ -1717,8 +1708,8 @@ export default class GameLoop {
           bowler.currentHipPosition.x = effectiveHipX;
           bowler.applyKeyframePose(interpolatedPose, effectiveHipX);
 
-          // Check condition: progressRatio >= 0.99
-          if (progressRatio >= 0.99) {
+          // Check condition: decimalFrameIndex >= totalJumpFrames - 1
+          if (decimalFrameIndex >= totalJumpFrames - 1) {
             bowler.isCycleCompleted = true;
           }
         }
@@ -1740,17 +1731,7 @@ export default class GameLoop {
           );
         }
 
-        // 🛑 Apply IK override ONLY while cycle is active before reaching Frame 71
-        if (!bowler.isCycleCompleted && progressRatio < 1.0) {
-          const totalArmLen = bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
-          const minReach =
-            Math.abs(bowler.FRONT_UPPER_ARM - bowler.FRONT_LOWER_ARM) + 5;
-          const armReach =
-            minReach +
-            (totalArmLen - minReach - 1.0) * bowler.smoothJoystickRadiusRatio;
-
-          bowler.overrideLeftArmWithIK(this.currentArmAngleRad, armReach);
-        }
+        // IK override removed as per user request to let arm follow frames
       }
 
       // 🟢 FRAME RANGE WINDOW (63 to 66) & DECELERATION SNAP BALL RELEASE ENGINE
@@ -1762,12 +1743,10 @@ export default class GameLoop {
       ) {
         // ⏱️ Compute current jump animation frame index (0 to 70 out of 71 total frames)
         const totalJumpFrames = Bowler.PRE_DELIVERY_JUMP.length;
-        const totalArmPathDeg = 370.6;
-        const progressRatio = Math.min(
-          1.0,
-          Math.max(0.0, bowler.accumulatedJoystickAngleDeg / totalArmPathDeg),
+        const currentJumpFrameIndex = Math.min(
+          totalJumpFrames - 1,
+          Math.max(0.0, bowler.accumulatedJoystickAngleDeg)
         );
-        const currentJumpFrameIndex = progressRatio * (totalJumpFrames - 1);
 
         // 🛑 Block release if current frame is before Frame 63 (out of 71 total frames)
         if (currentJumpFrameIndex >= JUMP_RELEASE_FRAME_MIN) {
@@ -1793,12 +1772,8 @@ export default class GameLoop {
             currentOmega <=
               bowler.maxObservedOmegaRad * (1.0 - DECEL_DROP_RATIO)
           ) {
-            // Verify arm is in the valid top release arc (10 o'clock to 1 o'clock: ~3.7 to ~5.4 rad)
-            let normAngle = bowler.smoothJoystickAngleRad % (Math.PI * 2);
-            // Check condition: normAngle < 0
-            if (normAngle < 0) normAngle += Math.PI * 2;
-            // Check condition: normAngle >= 3.7 && normAngle <= 5.4
-            if (normAngle >= 3.7 && normAngle <= 5.4) {
+            // Verify arm is in the valid top release arc by checking if the frame is in the release window
+            if (currentJumpFrameIndex >= JUMP_RELEASE_FRAME_MIN && currentJumpFrameIndex <= JUMP_RELEASE_FRAME_MAX) {
               releaseTriggered = true;
             }
           }
@@ -2096,16 +2071,17 @@ export default class GameLoop {
         bowler.isExecutingJump = true;
         bowler.triggerPreJump();
 
-        // 🎯 Calculate static initial offset so pose ALWAYS starts at Frame 1 (40.6°)
-        const frame1ArmAngleDeg =
-          Bowler.PRE_DELIVERY_JUMP[0].rightUpperArmAngleDeg; // 40.6°
         const joystickRad = this.renderer.joystick
           ? this.renderer.joystick.angleRad
           : Math.PI;
-        const currentJoystickDeg = (joystickRad * 180) / Math.PI;
+          
+        let currentJoystickDeg = (joystickRad * 180) / Math.PI;
+        currentJoystickDeg = (currentJoystickDeg + 360) % 360; // Normalize 0-360
+        
+        let mappedAngle = currentJoystickDeg - 90.0;
+        if (mappedAngle < 0) mappedAngle += 360.0;
 
-        bowler.initialStaticOffsetDeg = frame1ArmAngleDeg - currentJoystickDeg;
-        bowler.accumulatedJoystickAngleDeg = 0.0;
+        bowler.accumulatedJoystickAngleDeg = mappedAngle;
         bowler.smoothJoystickAngleRad = joystickRad;
         bowler.joystickAngularVelRad = 0.0;
         bowler.lastJoystickAngleRad = joystickRad;

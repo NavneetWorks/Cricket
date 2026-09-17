@@ -192,18 +192,47 @@ export default class Renderer{
             } else if (bowler.isExecutingJump || bowler.isPreJumpTransitioning || bowler.isPreJumpFrozen) {
                 statusText = `🚀 JUMP INITIATED | Swing Angle: ${jumpAngleDeg}° / 370.6° | Offset: ${offsetDeg}°`;
             } else if (bowler.isCycleCompleted) {
-                statusText = `🏁 DELIVERY COMPLETE | Final Swing Angle: ${jumpAngleDeg}°`;
+                const spd = bowler.lastReleaseSpeed?.toFixed(0) ?? "0";
+                const ang = bowler.lastReleaseAngleDeg?.toFixed(1) ?? "0";
+                statusText = `🏁 DELIVERY COMPLETE | Speed: ${spd} px/s | Angle: ${ang}° | Final Swing: ${jumpAngleDeg}°`;
             }
 
             this.ctx.fillText(statusText, badgeX + badgeW / 2, badgeY + badgeH / 2);
             this.ctx.restore();
 
-            // 🚀 Release Speed Debug HUD Pill (Positioned right below at Y = 110)
+            // 📊 Angle Travelled and Current Frame HUD Pill
+            const frameBadgeW = 540;
+            const frameBadgeH = 38;
+            const frameBadgeX = CANVAS_WIDTH - frameBadgeW - 20;
+            const frameBadgeY = 110;
+            
+            this.ctx.save();
+            this.ctx.fillStyle = "rgba(15, 23, 42, 0.90)";
+            this.ctx.beginPath();
+            this.ctx.roundRect(frameBadgeX, frameBadgeY, frameBadgeW, frameBadgeH, 8);
+            this.ctx.fill();
+
+            this.ctx.strokeStyle = "#f59e0b"; // Amber border
+            this.ctx.lineWidth = 1.5;
+            this.ctx.stroke();
+
+            this.ctx.font = "bold 13px Inter, Arial, sans-serif";
+            this.ctx.fillStyle = "#ffffff";
+            this.ctx.textAlign = "center";
+            this.ctx.textBaseline = "middle";
+
+            const currentFrameNum = Math.floor(Math.min(645, Math.max(0.0, bowler.accumulatedJoystickAngleDeg)));
+            const angleText = `📊 Angle Travelled: ${jumpAngleDeg}°  |  Current Frame: ${currentFrameNum}`;
+
+            this.ctx.fillText(angleText, frameBadgeX + frameBadgeW / 2, frameBadgeY + frameBadgeH / 2);
+            this.ctx.restore();
+
+            // 🚀 Release Speed Debug HUD Pill (Positioned right below at Y = 155)
             if (bowler.lastReleaseSpeed !== null) {
                 const relBadgeW = 680;
                 const relBadgeH = 38;
                 const relBadgeX = CANVAS_WIDTH - relBadgeW - 20;
-                const relBadgeY = 110;
+                const relBadgeY = 155;
 
                 this.ctx.save();
                 this.ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
