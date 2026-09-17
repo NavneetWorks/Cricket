@@ -11,6 +11,14 @@ export default class NetWorkManager{
     public myRole: 'BATSMAN' | 'BOWLER' | 'NONE' = 'NONE';
     public isConnected:boolean = false;
 
+    private remoteDescSet:boolean = false;
+    private pendingCandidates : RTCIceCandidateInit[] = [];
+    private signalingQueue: Promise<void> = Promise.resolve();
+    private outgoingCandidateQueue: any[] = [];
+
+
+
+
     public onMatchStart?:(role:'BATSMAN' | 'BOWLER' | 'NONE' , myId:number,oppId:number)=>void;
     public onOpponentBatSwing?:(tick:number,handleX:number,handleY:number,angle:number)=>void;
     public onBowlerRelease?: (tick:number,startX: number, startY: number, startVx: number, startVy: number) => void;
@@ -29,12 +37,26 @@ export default class NetWorkManager{
     private readonly RTT_CLAMP_MIN = 20;
     private readonly RTT_WINDOW_SIZE = 10;
 
+    private sendSignalingMsg(msg: any) {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        const encoder = new TextEncoder();
+        const jsonBytes = encoder.encode(JSON.stringify(msg));
+        const payload = new Uint8Array(1 + jsonBytes.length);
+        payload[0] = 0x63;
+        payload.set(jsonBytes, 1);
+        this.ws.send(payload.buffer);
+    }
+
+
     public connect(serverUrl:string = SERVER_CONFIG.SIGNALING_URL){
         this.ws = new WebSocket(serverUrl);
         this.ws.binaryType = "arraybuffer";
         this.ws.onopen = () => {
             console.log("🟢 WebSocket Connected! Initializing WebRTC Engine...");
             this.setupWebRTC();
+
+            this.outgoingCandidateQueue.forEach(msg => this.sendSignalingMsg(msg));
+            this.outgoingCandidateQueue = [];
 
             // 💓 5-Second Keep-Alive Heartbeat to prevent idle disconnect
             if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
@@ -58,8 +80,15 @@ export default class NetWorkManager{
                 if(firstByte == 0x63){
                     const textDecoder = new TextDecoder();
                     const jsonStr = textDecoder.decode(event.data.slice(1));
-                    const signalingMsg = JSON.parse(jsonStr);
-                    this.handleSignalingJSON(signalingMsg);
+                    try {
+                        const signalingMsg = JSON.parse(jsonStr);
+                        // Queue sequential processing to prevent race conditions
+                        this.signalingQueue = this.signalingQueue.then(async () => {
+                            await this.handleSignalingJSON(signalingMsg);
+                        });
+                    } catch (e) {
+                        console.error("Signaling message handling error:", e);
+                    }
                 }
             }
         }
@@ -75,6 +104,9 @@ export default class NetWorkManager{
     }
 
     private async setupWebRTC(){
+        this.remoteDescSet = false;
+        this.pendingCandidates = [];
+
         const rtcConfig:RTCConfiguration = {
             iceServers:[
                 { urls: "stun:stun.l.google.com:19302" },
@@ -103,18 +135,16 @@ export default class NetWorkManager{
             }
         };
         this.pc.onicecandidate = (event) => {
-            if(event.candidate && this.ws && this.ws.readyState === WebSocket.OPEN){
-                const candidateMsg = {
-                    type: "candidate",
-                    candidate:event.candidate.candidate,
-                    mid:event.candidate.sdpMid,
-                };
-                const encoder = new TextEncoder();
-                const jsonBytes = encoder.encode(JSON.stringify(candidateMsg));
-                const payload = new Uint8Array(1+jsonBytes.length);
-                payload[0] = 0x63;
-                payload.set(jsonBytes,1);
-                this.ws.send(payload.buffer);
+            if (!event.candidate) return;
+            const candidateMsg = {
+                type: "candidate",
+                candidate: event.candidate.candidate,
+                mid: event.candidate.sdpMid,
+            };
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.sendSignalingMsg(candidateMsg);
+            } else {
+                this.outgoingCandidateQueue.push(candidateMsg);
             }
         };
         try{
@@ -165,14 +195,35 @@ export default class NetWorkManager{
                 this.onMatchStart(this.myRole, this.myPlayerId, this.opponentId);
             }
         }
-        else if (msg.type === "answer" && this.pc) {
+              else if (msg.type === "answer" && this.pc) {
             // C++ Backend Server se aaye SDP Answer ko accept karna:
             console.log("🌐 [Signaling] SDP Answer received from C++ Server!");
             await this.pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: msg.sdp }));
+            
+            // 🟢 BAS YEH EK LINE ADD KARNI HAI YAHAN:
+            this.remoteDescSet = true;
+
+            // Pending candidates process karo
+            for (const cand of this.pendingCandidates) {
+                try {
+                    await this.pc.addIceCandidate(new RTCIceCandidate(cand));
+                } catch (e) {
+                    console.error("Error adding queued ICE candidate:", e);
+                }
+            }
+            this.pendingCandidates = [];
         }
         else if (msg.type === "candidate" && this.pc) {
-            // ICE Candidate (Network Address) ko WebRTC me add karna:
-            await this.pc.addIceCandidate(new RTCIceCandidate({ candidate: msg.candidate, sdpMid: msg.mid }));
+            const candInit: RTCIceCandidateInit = { candidate: msg.candidate, sdpMid: msg.mid };
+            if (this.remoteDescSet) {
+                try {
+                    await this.pc.addIceCandidate(new RTCIceCandidate(candInit));
+                } catch (e) {
+                    console.error("Error adding ICE candidate:", e);
+                }
+            } else {
+                this.pendingCandidates.push(candInit);
+            }
         }
     }
 
@@ -200,7 +251,7 @@ export default class NetWorkManager{
             const batAngle = view.getFloat32(15, true);
             if (this.onOpponentBatSwing) {
                 this.onOpponentBatSwing(tick, handleX, handleY, batAngle);
-            }
+            } 
         }else if (opcode === PacketType.HIT_RESULT) {
             const senderId = view.getUint32(1, true);
             const tick = view.getUint16(5, true);
