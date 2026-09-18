@@ -244,6 +244,14 @@ export class Bowler {
     public initialTransitionStartPose: KeyframePose | null = null;
     private preJumpJointVelocities: Record<string, number> = {};
     public lastPoseSnapshot: KeyframePose | null = null;
+    
+    // Custom Phase 2 target variables
+    public phase1MaxAngleDeg: number = 0;
+    public isPhase2CatchupActive: boolean = false;
+    public phase2TargetAngleDeg: number = 0;
+    public hasTriggeredPhase2: boolean = false;
+    public currentBowlingPhase: number = 1;
+    public lastRawJoystickAngleRad: number | null = null;
 
     public maxObservedOmegaRad: number = 0.0;
     public prevLeftWristY: number = 0.0;
@@ -20208,7 +20216,6 @@ export class Bowler {
         }
     ];
 
-// Ensure all 42 frames of PRE_DELIVERY_JUMP explicitly have normalizedDisplacementRatio assigned
     static {
         Bowler.PRE_DELIVERY_JUMP.forEach((pose, idx) => {
             if (pose.normalizedDisplacementRatio === undefined) {

@@ -1158,6 +1158,13 @@ export default class GameLoop {
         bowler.accumulatedJoystickAngleDeg = 0.0;
         bowler.isInitialAngleTransitioning = true;
         
+        // Reset Phase 2 logic state
+        bowler.hasTriggeredPhase2 = false;
+        bowler.isPhase2CatchupActive = false;
+        bowler.phase1MaxAngleDeg = 0;
+        bowler.currentBowlingPhase = 1;
+        bowler.lastRawJoystickAngleRad = null;
+        
         // Capture the running pose right before we jump, so we don't teleport the legs!
         bowler.initialTransitionStartPose = bowler.lastPoseSnapshot 
             ? { ...bowler.lastPoseSnapshot } 
@@ -1668,7 +1675,61 @@ export default class GameLoop {
             while (deltaRad < -Math.PI) deltaRad += Math.PI * 2;
   
             let deltaDeg = (deltaRad * 180) / Math.PI;
-            bowler.accumulatedJoystickAngleDeg += Math.abs(deltaDeg);
+
+            // Calculate RAW delta deg to prevent false positives from spring damper bounce
+            let rawDeltaDeg = 0;
+            if (bowler.lastRawJoystickAngleRad !== null) {
+                let rRad = rawJoystickRad - bowler.lastRawJoystickAngleRad;
+                while (rRad > Math.PI) rRad -= Math.PI * 2;
+                while (rRad < -Math.PI) rRad += Math.PI * 2;
+                rawDeltaDeg = (rRad * 180) / Math.PI;
+            }
+            bowler.lastRawJoystickAngleRad = rawJoystickRad;
+
+            // Phase 2 Detection Logic
+            if (!bowler.hasTriggeredPhase2) {
+                // Keep track of the highest angle reached in Phase 1
+                bowler.phase1MaxAngleDeg = Math.max(bowler.phase1MaxAngleDeg, bowler.accumulatedJoystickAngleDeg);
+
+                // Only trigger if RAW input shows deliberate anti-clockwise movement
+                if (rawDeltaDeg < -0.5) { // Anti-clockwise movement started!
+                    bowler.hasTriggeredPhase2 = true;
+                    bowler.isPhase2CatchupActive = true;
+                    bowler.currentBowlingPhase = 2;
+                    
+                    // Formula: Gap = 2 * (180 - stopAngle), Target = currentAccumulated + Gap
+                    const stopAngle = bowler.phase1MaxAngleDeg; // Highest angle reached in Phase 1
+                    const remainingTo180 = Math.max(0.0, 180.0 - stopAngle);
+                    const doubleAngle = remainingTo180 * 2.0;
+                    
+                    bowler.phase2TargetAngleDeg = bowler.accumulatedJoystickAngleDeg + doubleAngle;
+                    console.log(`🔥 Phase 2 Triggered! Stopped at: ${stopAngle}°, Gap added: ${doubleAngle}°, Target: ${bowler.phase2TargetAngleDeg}°`);
+                }
+            }
+
+            if (bowler.isPhase2CatchupActive) {
+                // Smooth transition to add the calculated gap angle
+                const catchUpSpeed = 180.0; // degrees per second
+                const step = catchUpSpeed * dt;
+                const diff = bowler.phase2TargetAngleDeg - bowler.accumulatedJoystickAngleDeg;
+                
+                if (diff <= step) {
+                    bowler.accumulatedJoystickAngleDeg = bowler.phase2TargetAngleDeg;
+                    bowler.isPhase2CatchupActive = false; // Gap transition completed, continue Phase 2!
+                    console.log("🏁 Phase 2 Gap Transition Finished!");
+                } else {
+                    bowler.accumulatedJoystickAngleDeg += step;
+                }
+            } else {
+                // Normal frame advancement based on joystick movement distance
+                bowler.accumulatedJoystickAngleDeg += Math.abs(deltaDeg);
+            }
+
+            // Phase 3 Detection Logic: Triggers when Phase 2 reaches 360° (6 o'clock anti-clockwise)
+            if (bowler.hasTriggeredPhase2 && bowler.currentBowlingPhase === 2 && bowler.accumulatedJoystickAngleDeg >= 360.0) {
+                bowler.currentBowlingPhase = 3;
+                console.log("🏁 Phase 3 Triggered at 360° (6 o'clock reached anti-clockwise)!");
+            }
           }
         }
         
@@ -2150,6 +2211,13 @@ export default class GameLoop {
         bowler.targetInitialAngleDeg = mappedAngle;
         bowler.accumulatedJoystickAngleDeg = 0.0;
         bowler.isInitialAngleTransitioning = true;
+        
+        // Reset Phase 2 logic state
+        bowler.hasTriggeredPhase2 = false;
+        bowler.isPhase2CatchupActive = false;
+        bowler.phase1MaxAngleDeg = 0;
+        bowler.currentBowlingPhase = 1;
+        bowler.lastRawJoystickAngleRad = null;
         
         // Capture the running pose right before we jump, so we don't teleport the legs!
         bowler.initialTransitionStartPose = bowler.lastPoseSnapshot 

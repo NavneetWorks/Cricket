@@ -190,7 +190,8 @@ export default class Renderer{
             if (bowler.isGatheringArmActive) {
                 statusText = `🎯 GATHERING PHASE | Jump Swing Angle: 0.0° (Waiting for Red Mark)`;
             } else if (bowler.isExecutingJump || bowler.isPreJumpTransitioning || bowler.isPreJumpFrozen) {
-                statusText = `🚀 JUMP INITIATED | Swing Angle: ${jumpAngleDeg}° / 370.6° | Offset: ${offsetDeg}°`;
+                const phaseStr = bowler.currentBowlingPhase ? `[PHASE ${bowler.currentBowlingPhase}]` : ``;
+                statusText = `🚀 JUMP ${phaseStr} | Swing Angle: ${jumpAngleDeg}° | Offset: ${offsetDeg}°`;
             } else if (bowler.isCycleCompleted) {
                 const spd = bowler.lastReleaseSpeed?.toFixed(0) ?? "0";
                 const ang = bowler.lastReleaseAngleDeg?.toFixed(1) ?? "0";
