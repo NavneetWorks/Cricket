@@ -367,6 +367,10 @@ export class Bowler {
     public lastReleaseSpeed: number | null = null;
     public lastReleaseAngleDeg: number | null = null;
     public runupGatheringEndSpeedFactor: number = 0.5; // 0.5 = 50% end momentum at jump takeoff
+    
+    // 🏃‍♂️ Momentum & Physics Tracking
+    public lastHipPositionX: number | null = null;
+    public currentBodyVelocityX: number = 0;
 
     // 🏃‍♂️ Running Animation Settings
     public runupAcceleration: number = 1; // Acceleration factor for run intensity

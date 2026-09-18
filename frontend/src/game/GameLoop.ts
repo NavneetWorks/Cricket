@@ -730,8 +730,8 @@ export default class GameLoop {
     bowler.currentHipPosition.x = BOWLER_WICKET_X+150;
     bowler.startRunning();
 
-    const minSpeed = 2500;
-    const maxSpeed = 4000;
+    const minSpeed = 3000;
+    const maxSpeed = 3500;
     this.currentDeliverySpeed =
       minSpeed + Math.random() * (maxSpeed - minSpeed);
 
@@ -1705,6 +1705,13 @@ export default class GameLoop {
 
           const effectiveHipX =
             bowler.preJumpStartX - bowler.accumulatedDisplacementX;
+            
+          // Track physical linear momentum
+          if (bowler.lastHipPositionX !== null) {
+            bowler.currentBodyVelocityX = (effectiveHipX - bowler.lastHipPositionX) / dt;
+          }
+          bowler.lastHipPositionX = effectiveHipX;
+            
           bowler.currentHipPosition.x = effectiveHipX;
           bowler.applyKeyframePose(interpolatedPose, effectiveHipX);
 
@@ -1793,10 +1800,20 @@ export default class GameLoop {
 
             // 📐 Peak Whip Angular Velocity for Full Release Speed (Preserves max flick effort)
             const sign = bowler.joystickAngularVelRad >= 0 ? 1 : -1;
-            const peakOmega = Math.max(
+            let peakOmega = Math.max(
               Math.abs(bowler.joystickAngularVelRad),
               bowler.maxObservedOmegaRad,
             );
+
+            // 🏋️ Diminishing Returns (Soft Cap) for Extreme Speeds
+            // Normal 1:1 scaling up to ~2000 px/s (approx 8.5 rad/s)
+            const SOFT_CAP_THRESHOLD = 8.5; 
+            if (peakOmega > SOFT_CAP_THRESHOLD) {
+              const excessSpeed = peakOmega - SOFT_CAP_THRESHOLD;
+              // Very slow growth after 2000 px/s (multiplier reduced to 2.0)
+              peakOmega = SOFT_CAP_THRESHOLD + Math.sqrt(excessSpeed) * 2.0;
+            }
+
             const releaseOmega = peakOmega * sign;
 
             const totalArmLen = bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
@@ -1809,23 +1826,23 @@ export default class GameLoop {
 
             // Exact 2D Circular Tangential Velocity Derivative with Peak Whip Power
             const vArmX = -armR * Math.sin(theta) * releaseOmega;
-            const vWristY = (currWristY - prevWristY) / dt;
-            const polarVArmY = armR * Math.cos(theta) * releaseOmega;
-            // Blend polar arm Y speed with actual physical wrist Y delta velocity for 100% smooth trajectory continuity
-            const vArmY =
-              Math.abs(releaseOmega) > 0.5
-                ? polarVArmY * 0.5 + vWristY * 0.5
-                : vWristY;
+            const vArmY = armR * Math.cos(theta) * releaseOmega;
 
-            // 🏃 Forward Body Horizontal Velocity Component (-X direction towards pitch, natural un-amplified)
-            let vBodyX = -Math.abs(
-              bowler.lastRunupSpeedX > 0 ? bowler.lastRunupSpeedX : 800.0,
-            );
-            const scaleLinear = 1.5;
-            vBodyX = -Math.abs(vBodyX * scaleLinear);
+            // 🏃 Forward Body Horizontal Velocity Component (True physical linear momentum from frame displacement)
+            // Fallback to lastRunupSpeedX if currentBodyVelocityX is near 0 for some reason
+            let vBodyX = Math.abs(bowler.currentBodyVelocityX) > 10 ? 
+                bowler.currentBodyVelocityX : 
+                -Math.abs(bowler.lastRunupSpeedX > 0 ? bowler.lastRunupSpeedX : 800.0);
+                
+            // Ensure vBodyX is negative (towards pitch)
+            vBodyX = -Math.abs(vBodyX);
+
             // 🚀 Combined Natural Launch Velocity Vector (Guaranteed Forward -X Flight)
+            // vReleaseX = Linear Runup Momentum + Tangential Arm Momentum
             const vReleaseX = -Math.abs(vBodyX + vArmX);
+            // vReleaseY = Tangential Arm Momentum (pure physics, no blending)
             const vReleaseY = vArmY;
+            
             const totalSpeed = Math.hypot(vReleaseX, vReleaseY);
             const launchAngleDeg =
               (Math.atan2(vReleaseY, vReleaseX) * 180) / Math.PI;

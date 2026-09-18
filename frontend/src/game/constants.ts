@@ -231,7 +231,7 @@ export const SERVER_CONFIG = {
   MAX_RECONNECT_ATTEMPTS: 5,
 };
 
-export const PLAYER_LENGTH_FACTOR = 28;
+export const PLAYER_LENGTH_FACTOR = 26;
 
 // 🏏 STEP 2: Bat pose snapshot interpolation (bowler screen par smooth remote bat)
 // Batter 60Hz snapshots bhejta hai (tickNumber ke saath); bowler unhe playhead se
