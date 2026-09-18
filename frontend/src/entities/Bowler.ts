@@ -241,8 +241,9 @@ export class Bowler {
     public preJumpStartX: number = 0;
     private preJumpTargetDistance: number = 40; // Max ceiling 40px
     private preJumpStartPose: KeyframePose | null = null;
+    public initialTransitionStartPose: KeyframePose | null = null;
     private preJumpJointVelocities: Record<string, number> = {};
-    private lastPoseSnapshot: KeyframePose | null = null;
+    public lastPoseSnapshot: KeyframePose | null = null;
 
     public maxObservedOmegaRad: number = 0.0;
     public prevLeftWristY: number = 0.0;
@@ -375,6 +376,11 @@ export class Bowler {
     // 🏃‍♂️ Running Animation Settings
     public runupAcceleration: number = 1; // Acceleration factor for run intensity
     public totalJumpStrideDistance: number = 400.0;
+    
+    // Smooth Initial Pose Transition
+    public isInitialAngleTransitioning: boolean = false;
+    public targetInitialAngleDeg: number = 0;
+
     public totalJumpDurationSec: number = 1.2;
     public elapsedJumpTime: number = 0.0;
     public initialStaticOffsetDeg: number = 0.0;

@@ -1154,7 +1154,15 @@ export default class GameLoop {
         let mappedAngle = currentJoystickDeg - 90.0;
         if (mappedAngle < 0) mappedAngle += 360.0;
 
-        bowler.accumulatedJoystickAngleDeg = mappedAngle;
+        bowler.targetInitialAngleDeg = mappedAngle;
+        bowler.accumulatedJoystickAngleDeg = 0.0;
+        bowler.isInitialAngleTransitioning = true;
+        
+        // Capture the running pose right before we jump, so we don't teleport the legs!
+        bowler.initialTransitionStartPose = bowler.lastPoseSnapshot 
+            ? { ...bowler.lastPoseSnapshot } 
+            : { ...Bowler.STATIC_FRAMES[0] };
+        
         bowler.smoothJoystickAngleRad = joystickRad;
         bowler.joystickAngularVelRad = 0.0;
         bowler.lastJoystickAngleRad = joystickRad;
@@ -1623,16 +1631,47 @@ export default class GameLoop {
 
         this.currentArmAngleRad = bowler.smoothJoystickAngleRad;
 
-        // Track accumulated angle movement using the physically smooth simulated angle
-        if (bowler.lastJoystickAngleRad !== null) {
-          let deltaRad =
-            bowler.smoothJoystickAngleRad - bowler.lastJoystickAngleRad;
-          while (deltaRad > Math.PI) deltaRad -= Math.PI * 2;
-          while (deltaRad < -Math.PI) deltaRad += Math.PI * 2;
+        // 🎯 Smooth Catch-Up Interpolation OR Normal Forward Tracking
+        let currentJoystickDeg = (bowler.smoothJoystickAngleRad * 180) / Math.PI;
+        currentJoystickDeg = (currentJoystickDeg + 360) % 360;
+        let currentMappedAngle = currentJoystickDeg - 90.0;
+        if (currentMappedAngle < 0) currentMappedAngle += 360.0;
+        bowler.targetInitialAngleDeg = currentMappedAngle;
 
-          let deltaDeg = (deltaRad * 180) / Math.PI;
-          bowler.accumulatedJoystickAngleDeg += Math.abs(deltaDeg);
+        if (bowler.isInitialAngleTransitioning) {
+          const diff = bowler.targetInitialAngleDeg - bowler.accumulatedJoystickAngleDeg;
+          
+          if (Math.abs(diff) > 1.0) {
+            // Constant speed approach (slower and visibly smooth)
+            const catchUpSpeed = 360.0; // degrees per second (increased speed)
+            const step = catchUpSpeed * dt;
+            
+            if (Math.abs(diff) <= step) {
+                console.log("🏁 Transition Finished! Diff small:", diff);
+                bowler.accumulatedJoystickAngleDeg = bowler.targetInitialAngleDeg;
+                bowler.isInitialAngleTransitioning = false;
+            } else {
+                bowler.accumulatedJoystickAngleDeg += Math.sign(diff) * step;
+                if (Math.random() < 0.05) console.log("⏳ Transitioning... target:", bowler.targetInitialAngleDeg, "accum:", bowler.accumulatedJoystickAngleDeg, "diff:", diff);
+            }
+          } else {
+            console.log("🏁 Transition Finished! Diff <= 1.0:", diff);
+            bowler.accumulatedJoystickAngleDeg = bowler.targetInitialAngleDeg;
+            bowler.isInitialAngleTransitioning = false;
+          }
+        } else {
+          // Track accumulated angle movement using the physically smooth simulated angle
+          if (bowler.lastJoystickAngleRad !== null) {
+            let deltaRad =
+              bowler.smoothJoystickAngleRad - bowler.lastJoystickAngleRad;
+            while (deltaRad > Math.PI) deltaRad -= Math.PI * 2;
+            while (deltaRad < -Math.PI) deltaRad += Math.PI * 2;
+  
+            let deltaDeg = (deltaRad * 180) / Math.PI;
+            bowler.accumulatedJoystickAngleDeg += Math.abs(deltaDeg);
+          }
         }
+        
         bowler.lastJoystickAngleRad = bowler.smoothJoystickAngleRad;
 
         // 📐 Option 2 Formula: progressRatio = accumulatedAngle / 370.6
@@ -1664,8 +1703,18 @@ export default class GameLoop {
         );
 
         // 60 FPS Sub-frame interpolation for body joints & displacementX
-        const interpolatedPose =
+        let interpolatedPose =
           bowler.interpolatePoseAtDecimalFrame(decimalFrameIndex);
+
+        // 🎯 Smoothly blend the entire body from the running pose into the jump pose!
+        if (bowler.isInitialAngleTransitioning && bowler.initialTransitionStartPose) {
+            let ratio = 1.0;
+            if (bowler.targetInitialAngleDeg > 0) {
+                ratio = bowler.accumulatedJoystickAngleDeg / bowler.targetInitialAngleDeg;
+            }
+            ratio = Math.max(0.0, Math.min(1.0, ratio)); // clamp 0 to 1
+            interpolatedPose = Bowler.interpolatePose(bowler.initialTransitionStartPose, interpolatedPose, ratio);
+        }
 
         // Check game state condition
         if (
@@ -2098,7 +2147,15 @@ export default class GameLoop {
         let mappedAngle = currentJoystickDeg - 90.0;
         if (mappedAngle < 0) mappedAngle += 360.0;
 
-        bowler.accumulatedJoystickAngleDeg = mappedAngle;
+        bowler.targetInitialAngleDeg = mappedAngle;
+        bowler.accumulatedJoystickAngleDeg = 0.0;
+        bowler.isInitialAngleTransitioning = true;
+        
+        // Capture the running pose right before we jump, so we don't teleport the legs!
+        bowler.initialTransitionStartPose = bowler.lastPoseSnapshot 
+            ? { ...bowler.lastPoseSnapshot } 
+            : { ...Bowler.STATIC_FRAMES[0] };
+
         bowler.smoothJoystickAngleRad = joystickRad;
         bowler.joystickAngularVelRad = 0.0;
         bowler.lastJoystickAngleRad = joystickRad;
