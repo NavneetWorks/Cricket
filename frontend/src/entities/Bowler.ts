@@ -11,7 +11,7 @@ export const DECEL_DROP_RATIO: number = 0.2;
 export const JUMP_RELEASE_FRAME_MIN: number = 500.0;
 
 // Maximum allowed release frame in 71 total jump frame scale (Default: 66.0)
-export const JUMP_RELEASE_FRAME_MAX: number = 570.0;
+export const JUMP_RELEASE_FRAME_MAX: number = 590.0;
 
 export interface Vec2 {
     x: number;  
@@ -252,6 +252,11 @@ export class Bowler {
     public hasTriggeredPhase2: boolean = false;
     public currentBowlingPhase: number = 1;
     public lastRawJoystickAngleRad: number | null = null;
+    public transformationFramesCount: number = 0;
+    public transformationCurrentFrame: number = 0;
+    public phase2Multiplier: number = 1.0;
+    public transformationStartPose: KeyframePose | null = null;
+    public transformationEndPose: KeyframePose | null = null;
 
     public maxObservedOmegaRad: number = 0.0;
     public prevLeftWristY: number = 0.0;

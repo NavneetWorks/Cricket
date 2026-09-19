@@ -1,4 +1,5 @@
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "./constants";
+import { JUMP_RELEASE_FRAME_MIN, JUMP_RELEASE_FRAME_MAX } from "../entities/Bowler";
 
 export default class Joystick {
     public centerX: number = CANVAS_WIDTH - 220;
@@ -137,6 +138,78 @@ export default class Joystick {
         ctx.lineWidth = 2;
         ctx.strokeStyle = this.isActive ? "rgba(56, 189, 248, 0.65)" : "rgba(255, 255, 255, 0.22)";
         ctx.stroke();
+
+        // 🎯 RELEASE ZONE Arc Sector Rendering (Calculated from JUMP_RELEASE_FRAME_MIN and MAX)
+        const radius = this.baseRadius;
+        const minDegFromSix = JUMP_RELEASE_FRAME_MIN - 360.0; // e.g. 500 - 360 = 140°
+        const maxDegFromSix = JUMP_RELEASE_FRAME_MAX - 360.0; // e.g. 590 - 360 = 230°
+
+        // Canvas angles relative to 6 o'clock (90°) rotating anti-clockwise (subtracting degrees)
+        const startCanvasAngleRad = ((90.0 - minDegFromSix) * Math.PI) / 180.0; // e.g. -50° (top-right)
+        const endCanvasAngleRad = ((90.0 - maxDegFromSix) * Math.PI) / 180.0;   // e.g. -140° (top-left)
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(this.centerX, this.centerY);
+        ctx.arc(this.centerX, this.centerY, radius, startCanvasAngleRad, endCanvasAngleRad, true);
+        ctx.closePath();
+
+        // Light Green Translucent Fill
+        ctx.fillStyle = "rgba(34, 197, 94, 0.28)"; // Soft emerald green
+        ctx.fill();
+
+        // Emerald Green Border Line
+        ctx.strokeStyle = "#22c55e";
+        ctx.lineWidth = 2.0;
+        ctx.stroke();
+
+        // RELEASE ZONE Text Label inside arc sector
+        const midCanvasAngleRad = (startCanvasAngleRad + endCanvasAngleRad) / 2.0;
+        const labelR = radius * 0.65;
+        const labelX = this.centerX + Math.cos(midCanvasAngleRad) * labelR;
+        const labelY = this.centerY + Math.sin(midCanvasAngleRad) * labelR;
+
+        ctx.font = "bold 11px system-ui, sans-serif";
+        ctx.fillStyle = "rgba(134, 239, 172, 0.95)";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("RELEASE ZONE", labelX, labelY);
+        ctx.restore();
+
+        // 🕒 4-Clock Position Dashed Crosshair Lines (Clean, no text)
+        ctx.save();
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([4, 4]);
+
+        // 6 o'clock (Bottom)
+        ctx.strokeStyle = "rgba(34, 197, 94, 0.5)"; // Green
+        ctx.beginPath();
+        ctx.moveTo(this.centerX, this.centerY);
+        ctx.lineTo(this.centerX, this.centerY + radius);
+        ctx.stroke();
+
+        // 9 o'clock (Left)
+        ctx.strokeStyle = "rgba(234, 179, 8, 0.5)"; // Yellow
+        ctx.beginPath();
+        ctx.moveTo(this.centerX, this.centerY);
+        ctx.lineTo(this.centerX - radius, this.centerY);
+        ctx.stroke();
+
+        // 12 o'clock (Top)
+        ctx.strokeStyle = "rgba(239, 68, 68, 0.5)"; // Red
+        ctx.beginPath();
+        ctx.moveTo(this.centerX, this.centerY);
+        ctx.lineTo(this.centerX, this.centerY - radius);
+        ctx.stroke();
+
+        // 3 o'clock (Right)
+        ctx.strokeStyle = "rgba(6, 182, 212, 0.5)"; // Cyan
+        ctx.beginPath();
+        ctx.moveTo(this.centerX, this.centerY);
+        ctx.lineTo(this.centerX + radius, this.centerY);
+        ctx.stroke();
+
+        ctx.restore();
 
         // Direction Indicator Line from center to knob
         if (this.isActive && this.distanceRatio > 0.05) {

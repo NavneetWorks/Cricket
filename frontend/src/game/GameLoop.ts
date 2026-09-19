@@ -1028,9 +1028,10 @@ export default class GameLoop {
         }
 
         const currentOmega = Math.abs(bowler.joystickAngularVelRad);
-        // Check condition: currentOmega > bowler.maxObservedOmeg...
-        if (currentOmega > bowler.maxObservedOmegaRad) {
-          bowler.maxObservedOmegaRad = currentOmega;
+        if (bowler.currentBowlingPhase === 4 || bowler.accumulatedJoystickAngleDeg >= 450.0) {
+          if (currentOmega > bowler.maxObservedOmegaRad) {
+            bowler.maxObservedOmegaRad = currentOmega;
+          }
         }
 
         // 🎯 CRITICAL BUGFIX: Only accumulate jump progress angle during JUMP phase!
@@ -1164,6 +1165,11 @@ export default class GameLoop {
         bowler.phase1MaxAngleDeg = 0;
         bowler.currentBowlingPhase = 1;
         bowler.lastRawJoystickAngleRad = null;
+        bowler.transformationFramesCount = 0;
+        bowler.transformationCurrentFrame = 0;
+        bowler.phase2Multiplier = 1.0;
+        bowler.transformationStartPose = null;
+        bowler.transformationEndPose = null;
         
         // Capture the running pose right before we jump, so we don't teleport the legs!
         bowler.initialTransitionStartPose = bowler.lastPoseSnapshot 
@@ -1210,11 +1216,12 @@ export default class GameLoop {
           if (currentFrame >= JUMP_RELEASE_FRAME_MIN) {
             let releaseTriggered = false;
 
-            // 🚀 1. Track Peak Angular Velocity during active arm swing
+            // 🚀 1. Track Peak Angular Velocity ONLY during Phase 4
             const currentOmega = Math.abs(bowler.joystickAngularVelRad);
-            // Check condition: currentOmega > bowler.maxObservedOmeg...
-            if (currentOmega > bowler.maxObservedOmegaRad) {
-              bowler.maxObservedOmegaRad = currentOmega;
+            if (bowler.currentBowlingPhase === 4 || bowler.accumulatedJoystickAngleDeg >= 450.0) {
+              if (currentOmega > bowler.maxObservedOmegaRad) {
+                bowler.maxObservedOmegaRad = currentOmega;
+              }
             }
 
             // 🚀 2. Check Significant Deceleration Trigger (High Swing Speed + Speed Drop in Top Arc)
@@ -1697,38 +1704,70 @@ export default class GameLoop {
                     bowler.isPhase2CatchupActive = true;
                     bowler.currentBowlingPhase = 2;
                     
-                    // Formula: Gap = 2 * (180 - stopAngle), Target = currentAccumulated + Gap
-                    const stopAngle = bowler.phase1MaxAngleDeg; // Highest angle reached in Phase 1
-                    const remainingTo180 = Math.max(0.0, 180.0 - stopAngle);
-                    const doubleAngle = remainingTo180 * 2.0;
+                    // 1. Capture stop angle in Phase 1
+                    const stopAngle = Math.floor(bowler.phase1MaxAngleDeg);
+                    const remainingAngle = Math.max(0.0, 180.0 - stopAngle);
+                    const gapAngle = remainingAngle * 2.0;
                     
-                    bowler.phase2TargetAngleDeg = bowler.accumulatedJoystickAngleDeg + doubleAngle;
-                    console.log(`🔥 Phase 2 Triggered! Stopped at: ${stopAngle}°, Gap added: ${doubleAngle}°, Target: ${bowler.phase2TargetAngleDeg}°`);
+                    // 2. Phase 2 Start Target Angle
+                    bowler.phase2TargetAngleDeg = stopAngle + gapAngle;
+                    
+                    // 3. Transformation Frames = gapAngle / 4
+                    bowler.transformationFramesCount = gapAngle / 4.0;
+                    bowler.transformationCurrentFrame = 0.0;
+                    
+                    // 4. Remaining physical degrees to 6 o'clock anti-clockwise = stopAngle
+                    const remainingPhysicalDegrees = Math.max(1.0, stopAngle);
+                    
+                    // 5. Phase 2 Multiplier: total frames / remaining physical degrees
+                    const totalPhase2Frames = bowler.transformationFramesCount + remainingPhysicalDegrees;
+                    bowler.phase2Multiplier = totalPhase2Frames / remainingPhysicalDegrees;
+
+                    // 6. Capture transformation poses for sub-frame pose interpolation
+                    const startIdx = Math.min(Bowler.PRE_DELIVERY_JUMP.length - 1, Math.max(0, stopAngle));
+                    const endIdx = Math.min(Bowler.PRE_DELIVERY_JUMP.length - 1, Math.max(0, Math.floor(bowler.phase2TargetAngleDeg)));
+                    bowler.transformationStartPose = { ...Bowler.PRE_DELIVERY_JUMP[startIdx] };
+                    bowler.transformationEndPose = { ...Bowler.PRE_DELIVERY_JUMP[endIdx] };
+                    
+                    console.log(`🔥 Phase 2 Triggered! Stop: ${stopAngle}°, Gap: ${gapAngle}°, TransFrames: ${bowler.transformationFramesCount}, Multiplier: ${bowler.phase2Multiplier.toFixed(2)}`);
                 }
             }
 
             if (bowler.isPhase2CatchupActive) {
-                // Smooth transition to add the calculated gap angle
-                const catchUpSpeed = 180.0; // degrees per second
-                const step = catchUpSpeed * dt;
-                const diff = bowler.phase2TargetAngleDeg - bowler.accumulatedJoystickAngleDeg;
-                
-                if (diff <= step) {
+                // Advance transformation frames based on physical joystick movement
+                const step = Math.abs(deltaDeg) * bowler.phase2Multiplier;
+                bowler.transformationCurrentFrame += step;
+                bowler.accumulatedJoystickAngleDeg += step;
+
+                if (bowler.transformationCurrentFrame >= bowler.transformationFramesCount) {
+                    bowler.isPhase2CatchupActive = false; // Transformation complete!
                     bowler.accumulatedJoystickAngleDeg = bowler.phase2TargetAngleDeg;
-                    bowler.isPhase2CatchupActive = false; // Gap transition completed, continue Phase 2!
-                    console.log("🏁 Phase 2 Gap Transition Finished!");
-                } else {
-                    bowler.accumulatedJoystickAngleDeg += step;
+                    bowler.phase2Multiplier = 1.0; // Reset to 1:1 for remaining downswing to 360°
+                    console.log(`🏁 Transformation Phase Complete! Resuming Phase 2 from ${bowler.phase2TargetAngleDeg}° (1:1 speed)`);
                 }
             } else {
-                // Normal frame advancement based on joystick movement distance
-                bowler.accumulatedJoystickAngleDeg += Math.abs(deltaDeg);
+                // Normal frame advancement based on joystick movement distance & multiplier
+                bowler.accumulatedJoystickAngleDeg += Math.abs(deltaDeg) * bowler.phase2Multiplier;
             }
 
-            // Phase 3 Detection Logic: Triggers when Phase 2 reaches 360° (6 o'clock anti-clockwise)
-            if (bowler.hasTriggeredPhase2 && bowler.currentBowlingPhase === 2 && bowler.accumulatedJoystickAngleDeg >= 360.0) {
-                bowler.currentBowlingPhase = 3;
-                console.log("🏁 Phase 3 Triggered at 360° (6 o'clock reached anti-clockwise)!");
+            // Phase 3 Detection & Safety Override Logic:
+            // When joystick knob reaches 6 o'clock anti-clockwise (currentMappedAngle >= 350° or accumulatedJoystickAngleDeg >= 360°),
+            // override total angle to 360° and switch to Phase 3!
+            const isKnobAtSixOClock = currentMappedAngle >= 350.0 && currentMappedAngle <= 360.0;
+            if (bowler.hasTriggeredPhase2 && bowler.currentBowlingPhase === 2) {
+                if (isKnobAtSixOClock || bowler.accumulatedJoystickAngleDeg >= 360.0) {
+                    bowler.accumulatedJoystickAngleDeg = Math.max(360.0, bowler.accumulatedJoystickAngleDeg);
+                    bowler.currentBowlingPhase = 3;
+                    console.log(`🏁 Phase 3 Triggered! Knob at 6 o'clock (${currentMappedAngle.toFixed(1)}°). Angle overridden to 360°`);
+                }
+            }
+
+            // Phase 4 Detection Logic:
+            // Triggers when Phase 3 crosses 450° (3 o'clock anti-clockwise cross)! Peak speed tracking starts here.
+            if (bowler.hasTriggeredPhase2 && bowler.currentBowlingPhase === 3 && bowler.accumulatedJoystickAngleDeg >= 450.0) {
+                bowler.currentBowlingPhase = 4;
+                bowler.maxObservedOmegaRad = 0.0; // Reset peak speed tracker so ONLY Phase 4 speed is captured!
+                console.log(`🏁 Phase 4 Triggered at 450° (3 o'clock crossed anti-clockwise)! Peak max speed tracking started.`);
             }
           }
         }
@@ -1766,6 +1805,12 @@ export default class GameLoop {
         // 60 FPS Sub-frame interpolation for body joints & displacementX
         let interpolatedPose =
           bowler.interpolatePoseAtDecimalFrame(decimalFrameIndex);
+
+        // 🎯 Sub-frame Pose Interpolation for Transformation Frames during Phase 1 -> Phase 2 Transition!
+        if (bowler.isPhase2CatchupActive && bowler.transformationStartPose && bowler.transformationEndPose && bowler.transformationFramesCount > 0) {
+            const transRatio = Math.max(0.0, Math.min(1.0, bowler.transformationCurrentFrame / bowler.transformationFramesCount));
+            interpolatedPose = Bowler.interpolatePose(bowler.transformationStartPose, bowler.transformationEndPose, transRatio);
+        }
 
         // 🎯 Smoothly blend the entire body from the running pose into the jump pose!
         if (bowler.isInitialAngleTransitioning && bowler.initialTransitionStartPose) {
@@ -1876,11 +1921,12 @@ export default class GameLoop {
 
           let releaseTriggered = false;
 
-          // 🚀 1. Track Peak Angular Velocity during active arm swing
+          // 🚀 1. Track Peak Angular Velocity ONLY during Phase 4 (After 450° / Phase 4 Entry)
           const currentOmega = Math.abs(bowler.joystickAngularVelRad);
-          // Check condition: currentOmega > bowler.maxObservedOmeg...
-          if (currentOmega > bowler.maxObservedOmegaRad) {
-            bowler.maxObservedOmegaRad = currentOmega;
+          if (bowler.currentBowlingPhase === 4 || bowler.accumulatedJoystickAngleDeg >= 450.0) {
+            if (currentOmega > bowler.maxObservedOmegaRad) {
+              bowler.maxObservedOmegaRad = currentOmega;
+            }
           }
 
           // 🚀 2. Check Significant Deceleration Trigger (High Swing Speed + Speed Drop in Top Arc)
@@ -1915,13 +1961,13 @@ export default class GameLoop {
               bowler.maxObservedOmegaRad,
             );
 
-            // 🏋️ Diminishing Returns (Soft Cap) for Extreme Speeds
+            // 🏋️ Logarithmic Diminishing Returns (Alternative 2: Smooth Natural Log Curve)
             // Normal 1:1 scaling up to ~2000 px/s (approx 8.5 rad/s)
             const SOFT_CAP_THRESHOLD = 8.5; 
             if (peakOmega > SOFT_CAP_THRESHOLD) {
               const excessSpeed = peakOmega - SOFT_CAP_THRESHOLD;
-              // Very slow growth after 2000 px/s (multiplier reduced to 2.0)
-              peakOmega = SOFT_CAP_THRESHOLD + Math.sqrt(excessSpeed) * 2.0;
+              // Natural log compression for smooth, progressive speed reward without sudden drops
+              peakOmega = SOFT_CAP_THRESHOLD + Math.log(1.0 + excessSpeed) * 4.0;
             }
 
             const releaseOmega = peakOmega * sign;
@@ -1949,7 +1995,7 @@ export default class GameLoop {
 
             // 🚀 Combined Natural Launch Velocity Vector (Guaranteed Forward -X Flight)
             // vReleaseX = Linear Runup Momentum + Tangential Arm Momentum
-            const vReleaseX = -Math.abs(vBodyX + vArmX);
+            const vReleaseX = (-Math.abs(vBodyX + vArmX)*1.2)
             // vReleaseY = Tangential Arm Momentum (pure physics, no blending)
             const vReleaseY = vArmY;
             
