@@ -15,6 +15,11 @@ export default class Joystick {
     public distanceRatio: number = 0; // 0 to 1
 
     public isPointerDown: boolean = false;
+    public releaseIndicatorAngleRad: number | null = null;
+
+    public setReleaseIndicator(angleRad: number): void {
+        this.releaseIndicatorAngleRad = angleRad;
+    }
 
     constructor() {
         // Event listeners for global mouse/touch pointer dragging
@@ -211,6 +216,34 @@ export default class Joystick {
 
         ctx.restore();
 
+        // 🎯 Ball Release Indicator Line & Marker inside Green RELEASE ZONE
+        if (this.releaseIndicatorAngleRad !== null) {
+            ctx.save();
+            const relX = this.centerX + Math.cos(this.releaseIndicatorAngleRad) * radius;
+            const relY = this.centerY + Math.sin(this.releaseIndicatorAngleRad) * radius;
+
+            // Bright Amber/Gold Indicator Line from center through green arc
+            ctx.beginPath();
+            ctx.moveTo(this.centerX, this.centerY);
+            ctx.lineTo(relX, relY);
+            ctx.strokeStyle = "#fbbf24"; // Bright amber/gold
+            ctx.lineWidth = 3.0;
+            ctx.shadowColor = "#f59e0b";
+            ctx.shadowBlur = 8;
+            ctx.stroke();
+
+            // Glowing release point dot marker at the edge
+            ctx.beginPath();
+            ctx.arc(relX, relY, 6, 0, Math.PI * 2);
+            ctx.fillStyle = "#ef4444"; // Bright red center
+            ctx.fill();
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 2.0;
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
         // Direction Indicator Line from center to knob
         if (this.isActive && this.distanceRatio > 0.05) {
             ctx.beginPath();
@@ -257,5 +290,6 @@ export default class Joystick {
         this.distanceRatio = 0;
         this.knobX = this.centerX;
         this.knobY = this.centerY;
+        this.releaseIndicatorAngleRad = null;
     }
 }

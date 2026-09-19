@@ -1961,13 +1961,13 @@ export default class GameLoop {
               bowler.maxObservedOmegaRad,
             );
 
-            // 🏋️ Logarithmic Diminishing Returns (Alternative 2: Smooth Natural Log Curve)
+            // 🏋️ Power-Law Curve (Option 1: Punchy x^0.75 Speed Boost for Fast Flicks)
             // Normal 1:1 scaling up to ~2000 px/s (approx 8.5 rad/s)
             const SOFT_CAP_THRESHOLD = 8.5; 
             if (peakOmega > SOFT_CAP_THRESHOLD) {
               const excessSpeed = peakOmega - SOFT_CAP_THRESHOLD;
-              // Natural log compression for smooth, progressive speed reward without sudden drops
-              peakOmega = SOFT_CAP_THRESHOLD + Math.log(1.0 + excessSpeed) * 4.0;
+              // Power law x^0.75 for strong, punchy speed growth without flattening too early
+              peakOmega = SOFT_CAP_THRESHOLD + Math.pow(excessSpeed, 0.75) * 1.5;
             }
 
             const releaseOmega = peakOmega * sign;
@@ -2015,6 +2015,7 @@ export default class GameLoop {
             bowler.isBallReleased = true;
             bowler.postReleaseDelaySec = bowler.POST_RELEASE_DELAY_SEC;
             bowler.debugReleasePoint = { x: releaseX, y: releaseY };
+            this.renderer.joystick.setReleaseIndicator(bowler.smoothJoystickAngleRad);
 
             // 1. Send network release packet immediately to Batter over DataChannel!
             if (

@@ -4,7 +4,7 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT, GROUND_HEIGHT, PLAYER_LENGTH_FACTOR, BOWLE
 // ── 🚀 DECELERATION RELEASE ENGINE CONSTANTS ─────────────────────────────
 // 1. Minimum angular speed (in rad/sec) required to register an active swing. Default: 2.0 rad/sec
 export const DECEL_MIN_SWING_SPEED: number = 2.0;
-export const DECEL_DROP_RATIO: number = 0.2;
+export const DECEL_DROP_RATIO: number = 0.7;
 
 // ── ⏱️ FRAME RANGE RELEASE WINDOW CONSTANTS ─────────────────────────────
 // Minimum allowed release frame in 71 total jump frame scale (Default: 63.0)
@@ -20,7 +20,7 @@ export interface Vec2 {
 
  export interface BowlerJoystickSnapshot {
     tick: number;
-    screenX: number;
+    screenX: number;  
      screenY: number;   
        receivedTime: number;
  }
