@@ -981,43 +981,33 @@ export default class GameLoop {
             bowler.smoothJoystickAngleRad += bowler.joystickAngularVelRad * dt;
           }
         } else {
-          // 🏋️ PRE-RELEASE USER CONTROLLED PHASE: Input-Driven Spring-Damper Physics
-          const now = performance.now();
-          const timeSinceLastUDP = now - bowler.lastReceivedPacketTime;
+          // 🏋️ PRE-RELEASE USER CONTROLLED PHASE: Pure Network-Driven Spring-Damper Physics (Zero Auto-Prediction)
+          bowler.isExtrapolating = false;
+          const rawTargetRad = bowler.targetNetworkJoystickAngleRad;
+          const targetRadiusRatio = bowler.targetNetworkJoystickRadiusRatio;
 
-          // 🛡️ Dead-Reckoning Extrapolation if UDP packet is delayed > 22ms
-          if (bowler.lastReceivedPacketTime > 0 && timeSinceLastUDP > 22.0) {
-            bowler.isExtrapolating = true;
-            bowler.smoothJoystickAngleRad += bowler.joystickAngularVelRad * dt;
-            bowler.joystickAngularVelRad *= Math.pow(0.98, dt * 60);
-          } else {
-            bowler.isExtrapolating = false;
-            const rawTargetRad = bowler.targetNetworkJoystickAngleRad;
-            const targetRadiusRatio = bowler.targetNetworkJoystickRadiusRatio;
+          let angleDiffRad = rawTargetRad - bowler.smoothJoystickAngleRad;
+          while (angleDiffRad > Math.PI) angleDiffRad -= Math.PI * 2;
+          while (angleDiffRad < -Math.PI) angleDiffRad += Math.PI * 2;
 
-            let angleDiffRad = rawTargetRad - bowler.smoothJoystickAngleRad;
-            while (angleDiffRad > Math.PI) angleDiffRad -= Math.PI * 2;
-            while (angleDiffRad < -Math.PI) angleDiffRad += Math.PI * 2;
+          const springForceAngle =
+            angleDiffRad * bowler.JOYSTICK_ANGLE_STIFFNESS;
+          const dampingForceAngle =
+            -bowler.joystickAngularVelRad * bowler.JOYSTICK_ANGLE_DAMPING;
+          bowler.joystickAngularVelRad +=
+            (springForceAngle + dampingForceAngle) * dt;
+          bowler.smoothJoystickAngleRad += bowler.joystickAngularVelRad * dt;
 
-            const springForceAngle =
-              angleDiffRad * bowler.JOYSTICK_ANGLE_STIFFNESS;
-            const dampingForceAngle =
-              -bowler.joystickAngularVelRad * bowler.JOYSTICK_ANGLE_DAMPING;
-            bowler.joystickAngularVelRad +=
-              (springForceAngle + dampingForceAngle) * dt;
-            bowler.smoothJoystickAngleRad += bowler.joystickAngularVelRad * dt;
-
-            const radiusDiff =
-              targetRadiusRatio - bowler.smoothJoystickRadiusRatio;
-            const springForceRadius =
-              radiusDiff * bowler.JOYSTICK_RADIUS_STIFFNESS;
-            const dampingForceRadius =
-              -bowler.joystickRadiusVelRatio * bowler.JOYSTICK_RADIUS_DAMPING;
-            bowler.joystickRadiusVelRatio +=
-              (springForceRadius + dampingForceRadius) * dt;
-            bowler.smoothJoystickRadiusRatio +=
-              bowler.joystickRadiusVelRatio * dt;
-          }
+          const radiusDiff =
+            targetRadiusRatio - bowler.smoothJoystickRadiusRatio;
+          const springForceRadius =
+            radiusDiff * bowler.JOYSTICK_RADIUS_STIFFNESS;
+          const dampingForceRadius =
+            -bowler.joystickRadiusVelRatio * bowler.JOYSTICK_RADIUS_DAMPING;
+          bowler.joystickRadiusVelRatio +=
+            (springForceRadius + dampingForceRadius) * dt;
+          bowler.smoothJoystickRadiusRatio +=
+            bowler.joystickRadiusVelRatio * dt;
         }
 
         const currentOmega = Math.abs(bowler.joystickAngularVelRad);
@@ -1027,19 +1017,48 @@ export default class GameLoop {
           }
         }
 
-        // 🎯 CRITICAL BUGFIX: Only accumulate jump progress angle during JUMP phase!
+        // 🎯 4-PHASE GESTURE ENGINE INTEGRATION ON BATTER SCREEN
         if (bowler.isExecutingJump || bowler.isPreJumpTransitioning) {
-          // Check condition: bowler.lastJoystickAngleRad !== null
           if (bowler.lastJoystickAngleRad !== null) {
-            let deltaRad =
-              bowler.smoothJoystickAngleRad - bowler.lastJoystickAngleRad;
+            let deltaRad = bowler.smoothJoystickAngleRad - bowler.lastJoystickAngleRad;
             while (deltaRad > Math.PI) deltaRad -= Math.PI * 2;
             while (deltaRad < -Math.PI) deltaRad += Math.PI * 2;
             let deltaDeg = (deltaRad * 180) / Math.PI;
-            bowler.accumulatedJoystickAngleDeg += Math.abs(deltaDeg);
+
+            let rawJoystickRad = bowler.targetNetworkJoystickAngleRad;
+            let rawDeltaDeg = 0;
+            if (bowler.lastRawJoystickAngleRad !== null) {
+              let rRad = rawJoystickRad - bowler.lastRawJoystickAngleRad;
+              while (rRad > Math.PI) rRad -= Math.PI * 2;
+              while (rRad < -Math.PI) rRad += Math.PI * 2;
+              rawDeltaDeg = (rRad * 180) / Math.PI;
+            }
+            bowler.lastRawJoystickAngleRad = rawJoystickRad;
+
+            let currentJoystickDeg = (bowler.smoothJoystickAngleRad * 180) / Math.PI;
+            currentJoystickDeg = (currentJoystickDeg + 360) % 360;
+            let currentMappedAngle = currentJoystickDeg - 90.0;
+            if (currentMappedAngle < 0) currentMappedAngle += 360.0;
+
+            bowler.update4PhaseEngine(deltaDeg, rawDeltaDeg, currentMappedAngle);
           }
         }
         bowler.lastJoystickAngleRad = bowler.smoothJoystickAngleRad;
+
+        // 📡 CONTINUOUS 60Hz RAW MOUSE UDP STREAMING TO BATTER SCREEN
+        if (this.isOnlineMode && (this.renderer.gameMode as any) === "NEW_BOWLER" && this.network && this.network.isConnected) {
+          const now = performance.now();
+          if (now - this.lastJoystickSendTime >= 16.6) {
+            this.lastJoystickSendTime = now;
+            if (!bowler.isBallReleased && (bowler.isGatheringArmActive || bowler.isExecutingJump || bowler.isRunning)) {
+              this.network.sendBowlerJoystickUDP(
+                this.networkTickNumber,
+                this.renderer.joystick.lastRawMouseScreenX,
+                this.renderer.joystick.lastRawMouseScreenY
+              );
+            }
+          }
+        }
       }
 
       // Check game state condition

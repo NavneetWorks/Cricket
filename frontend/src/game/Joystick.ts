@@ -86,6 +86,9 @@ export default class Joystick {
     public onJoystickMove?: (screenX: number, screenY: number) => void;
 
 
+    public lastRawMouseScreenX: number = 0;
+    public lastRawMouseScreenY: number = 0;
+
     private processMove(clientX: number, clientY: number): void {
         const canvas = document.querySelector('canvas');
         if (!canvas) return;
@@ -98,6 +101,8 @@ export default class Joystick {
         const screenX = (clientX - rect.left) * scaleX;
         const screenY = (clientY - rect.top) * scaleY;
 
+        this.lastRawMouseScreenX = screenX;
+        this.lastRawMouseScreenY = screenY;
 
         this.updateKnobPosition(screenX, screenY);
 
