@@ -526,14 +526,7 @@ export default class GameLoop {
           !bowler.isPreJumpTransitioning
         ) {
           const clickX = bowler.currentHipPosition.x;
-          const targetX = clickX - this.preJumpDistance;
-          bowler.startJumpX = Math.max(BOWLER_WICKET_X, targetX);
-          bowler.gatheringStartX = clickX;
-          bowler.gatheringTargetX = bowler.startJumpX;
-          bowler.isGatheringArmActive = true;
-          bowler.gatheringAngleTraveledDeg = 0.0;
-          bowler.accumulatedJoystickAngleDeg = 0.0;
-          bowler.ballTrailPoints = [];
+          bowler.setGatheringMarker(clickX, this.preJumpDistance);
 
           // 📡 Send Left-Click Gathering Event to Opponent!
           if (this.isOnlineMode && this.network && this.network.isConnected) {
@@ -1125,59 +1118,17 @@ export default class GameLoop {
         // 🟢 IK override removed to let arm follow natural animation frames
       }
       // 🎯 Batter Screen par Red Line (startJumpX) reach hote hi Jump Stance Physics me switch karo!
-          if (
+      if (
         bowler.isRunning &&
         bowler.startJumpX &&
         bowler.currentHipPosition.x <= bowler.startJumpX &&
         !bowler.isPreJumpTransitioning &&
         !bowler.isExecutingJump
       ) {
-        bowler.isGatheringArmActive = false;
-        bowler.preJumpStartX = bowler.currentHipPosition.x;
-        bowler.initialRunupSpeedX =
-          bowler.lastRunupSpeedX > 0 ? bowler.lastRunupSpeedX : 800.0;
-        bowler.lastInterpolatedDisplacementX =
-          Bowler.PRE_DELIVERY_JUMP[0].displacementX ?? -20.0;
-        bowler.accumulatedDisplacementX = Math.abs(
-          bowler.lastInterpolatedDisplacementX,
-        );
-        bowler.isExecutingJump = true;
-        bowler.triggerPreJump();
-
         const joystickRad = this.renderer.joystick
           ? this.renderer.joystick.angleRad
           : Math.PI;
-        
-        let currentJoystickDeg = (joystickRad * 180) / Math.PI;
-        currentJoystickDeg = (currentJoystickDeg + 360) % 360; // Normalize 0-360
-        
-        // 6 o'clock (90 deg) should map to 0 (Frame 0)
-        let mappedAngle = currentJoystickDeg - 90.0;
-        if (mappedAngle < 0) mappedAngle += 360.0;
-
-        bowler.targetInitialAngleDeg = mappedAngle;
-        bowler.accumulatedJoystickAngleDeg = 0.0;
-        bowler.isInitialAngleTransitioning = true;
-        
-        // Reset Phase 2 logic state
-        bowler.hasTriggeredPhase2 = false;
-        bowler.isPhase2CatchupActive = false;
-        bowler.phase1MaxAngleDeg = 0;
-        bowler.currentBowlingPhase = 1;
-        bowler.lastRawJoystickAngleRad = null;
-        bowler.transformationFramesCount = 0;
-        bowler.transformationCurrentFrame = 0;
-        bowler.phase2Multiplier = 1.0;
-        bowler.transformationStartPose = null;
-        bowler.transformationEndPose = null;
-        
-        // Capture the running pose right before we jump, so we don't teleport the legs!
-        bowler.initialTransitionStartPose = bowler.lastPoseSnapshot 
-            ? { ...bowler.lastPoseSnapshot } 
-            : { ...Bowler.STATIC_FRAMES[0] };
-        
-        bowler.smoothJoystickAngleRad = joystickRad;
-        bowler.joystickAngularVelRad = 0.0;
+        bowler.launchJumpStance(joystickRad);
         bowler.lastJoystickAngleRad = joystickRad;
       }
 
@@ -1249,40 +1200,7 @@ export default class GameLoop {
               const releaseX = bowler.leftWrist.x;
               const releaseY = bowler.leftWrist.y;
 
-              // 📐 Exact 100% Bowler Screen Release Velocity Math
-              const sign = bowler.joystickAngularVelRad >= 0 ? 1 : -1;
-              const peakOmega = Math.max(
-                Math.abs(bowler.joystickAngularVelRad),
-                bowler.maxObservedOmegaRad,
-              );
-              const releaseOmega = peakOmega * sign;
-
-              const totalArmLen =
-                bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
-              const minReach =
-                Math.abs(bowler.FRONT_UPPER_ARM - bowler.FRONT_LOWER_ARM) + 5;
-              const armR =
-                minReach +
-                (totalArmLen - minReach - 1.0) *
-                  bowler.smoothJoystickRadiusRatio;
-              const theta = bowler.smoothJoystickAngleRad;
-
-              const vArmX = -armR * Math.sin(theta) * releaseOmega;
-              const dt = 1 / 60;
-              const vWristY = (releaseY - prevWristY) / dt;
-              const polarVArmY = armR * Math.cos(theta) * releaseOmega;
-              const vArmY =
-                Math.abs(releaseOmega) > 0.5
-                  ? polarVArmY * 0.5 + vWristY * 0.5
-                  : vWristY;
-
-              let vBodyX = -Math.abs(
-                bowler.lastRunupSpeedX > 0 ? bowler.lastRunupSpeedX : 800.0,
-              );
-              vBodyX = -Math.abs(vBodyX * 1.5);
-
-              const vReleaseX = -Math.abs(vBodyX + vArmX);
-              const vReleaseY = vArmY;
+              const { vReleaseX, vReleaseY } = bowler.calculateReleaseVelocity(prevWristY);
 
               this.ball.throwBallWithVelocity(
                 releaseX,
@@ -1693,82 +1611,7 @@ export default class GameLoop {
             }
             bowler.lastRawJoystickAngleRad = rawJoystickRad;
 
-            // Phase 2 Detection Logic
-            if (!bowler.hasTriggeredPhase2) {
-                // Keep track of the highest angle reached in Phase 1
-                bowler.phase1MaxAngleDeg = Math.max(bowler.phase1MaxAngleDeg, bowler.accumulatedJoystickAngleDeg);
-
-                // Only trigger if RAW input shows deliberate anti-clockwise movement
-                if (rawDeltaDeg < -0.5) { // Anti-clockwise movement started!
-                    bowler.hasTriggeredPhase2 = true;
-                    bowler.isPhase2CatchupActive = true;
-                    bowler.currentBowlingPhase = 2;
-                    
-                    // 1. Capture stop angle in Phase 1
-                    const stopAngle = Math.floor(bowler.phase1MaxAngleDeg);
-                    const remainingAngle = Math.max(0.0, 180.0 - stopAngle);
-                    const gapAngle = remainingAngle * 2.0;
-                    
-                    // 2. Phase 2 Start Target Angle
-                    bowler.phase2TargetAngleDeg = stopAngle + gapAngle;
-                    
-                    // 3. Transformation Frames = gapAngle / 4
-                    bowler.transformationFramesCount = gapAngle / 4.0;
-                    bowler.transformationCurrentFrame = 0.0;
-                    
-                    // 4. Remaining physical degrees to 6 o'clock anti-clockwise = stopAngle
-                    const remainingPhysicalDegrees = Math.max(1.0, stopAngle);
-                    
-                    // 5. Phase 2 Multiplier: total frames / remaining physical degrees
-                    const totalPhase2Frames = bowler.transformationFramesCount + remainingPhysicalDegrees;
-                    bowler.phase2Multiplier = totalPhase2Frames / remainingPhysicalDegrees;
-
-                    // 6. Capture transformation poses for sub-frame pose interpolation
-                    const startIdx = Math.min(Bowler.PRE_DELIVERY_JUMP.length - 1, Math.max(0, stopAngle));
-                    const endIdx = Math.min(Bowler.PRE_DELIVERY_JUMP.length - 1, Math.max(0, Math.floor(bowler.phase2TargetAngleDeg)));
-                    bowler.transformationStartPose = { ...Bowler.PRE_DELIVERY_JUMP[startIdx] };
-                    bowler.transformationEndPose = { ...Bowler.PRE_DELIVERY_JUMP[endIdx] };
-                    
-                    console.log(`🔥 Phase 2 Triggered! Stop: ${stopAngle}°, Gap: ${gapAngle}°, TransFrames: ${bowler.transformationFramesCount}, Multiplier: ${bowler.phase2Multiplier.toFixed(2)}`);
-                }
-            }
-
-            if (bowler.isPhase2CatchupActive) {
-                // Advance transformation frames based on physical joystick movement
-                const step = Math.abs(deltaDeg) * bowler.phase2Multiplier;
-                bowler.transformationCurrentFrame += step;
-                bowler.accumulatedJoystickAngleDeg += step;
-
-                if (bowler.transformationCurrentFrame >= bowler.transformationFramesCount) {
-                    bowler.isPhase2CatchupActive = false; // Transformation complete!
-                    bowler.accumulatedJoystickAngleDeg = bowler.phase2TargetAngleDeg;
-                    bowler.phase2Multiplier = 1.0; // Reset to 1:1 for remaining downswing to 360°
-                    console.log(`🏁 Transformation Phase Complete! Resuming Phase 2 from ${bowler.phase2TargetAngleDeg}° (1:1 speed)`);
-                }
-            } else {
-                // Normal frame advancement based on joystick movement distance & multiplier
-                bowler.accumulatedJoystickAngleDeg += Math.abs(deltaDeg) * bowler.phase2Multiplier;
-            }
-
-            // Phase 3 Detection & Safety Override Logic:
-            // When joystick knob reaches 6 o'clock anti-clockwise (currentMappedAngle >= 350° or accumulatedJoystickAngleDeg >= 360°),
-            // override total angle to 360° and switch to Phase 3!
-            const isKnobAtSixOClock = currentMappedAngle >= 350.0 && currentMappedAngle <= 360.0;
-            if (bowler.hasTriggeredPhase2 && bowler.currentBowlingPhase === 2) {
-                if (isKnobAtSixOClock || bowler.accumulatedJoystickAngleDeg >= 360.0) {
-                    bowler.accumulatedJoystickAngleDeg = Math.max(360.0, bowler.accumulatedJoystickAngleDeg);
-                    bowler.currentBowlingPhase = 3;
-                    console.log(`🏁 Phase 3 Triggered! Knob at 6 o'clock (${currentMappedAngle.toFixed(1)}°). Angle overridden to 360°`);
-                }
-            }
-
-            // Phase 4 Detection Logic:
-            // Triggers when Phase 3 crosses 450° (3 o'clock anti-clockwise cross)! Peak speed tracking starts here.
-            if (bowler.hasTriggeredPhase2 && bowler.currentBowlingPhase === 3 && bowler.accumulatedJoystickAngleDeg >= 450.0) {
-                bowler.currentBowlingPhase = 4;
-                bowler.maxObservedOmegaRad = 0.0; // Reset peak speed tracker so ONLY Phase 4 speed is captured!
-                console.log(`🏁 Phase 4 Triggered at 450° (3 o'clock crossed anti-clockwise)! Peak max speed tracking started.`);
-            }
+            bowler.update4PhaseEngine(deltaDeg, rawDeltaDeg, currentMappedAngle);
           }
         }
         
@@ -2233,46 +2076,10 @@ export default class GameLoop {
         !bowler.isPreJumpTransitioning &&
         !bowler.isExecutingJump
       ) {
-        bowler.isGatheringArmActive = false;
-        bowler.preJumpStartX = bowler.currentHipPosition.x;
-        bowler.initialRunupSpeedX =
-          bowler.lastRunupSpeedX > 0 ? bowler.lastRunupSpeedX : 800.0;
-        bowler.lastInterpolatedDisplacementX =
-          Bowler.PRE_DELIVERY_JUMP[0].displacementX ?? -20.0;
-        bowler.accumulatedDisplacementX = Math.abs(
-          bowler.lastInterpolatedDisplacementX,
-        );
-        bowler.isExecutingJump = true;
-        bowler.triggerPreJump();
-
         const joystickRad = this.renderer.joystick
           ? this.renderer.joystick.angleRad
           : Math.PI;
-          
-        let currentJoystickDeg = (joystickRad * 180) / Math.PI;
-        currentJoystickDeg = (currentJoystickDeg + 360) % 360; // Normalize 0-360
-        
-        let mappedAngle = currentJoystickDeg - 90.0;
-        if (mappedAngle < 0) mappedAngle += 360.0;
-
-        bowler.targetInitialAngleDeg = mappedAngle;
-        bowler.accumulatedJoystickAngleDeg = 0.0;
-        bowler.isInitialAngleTransitioning = true;
-        
-        // Reset Phase 2 logic state
-        bowler.hasTriggeredPhase2 = false;
-        bowler.isPhase2CatchupActive = false;
-        bowler.phase1MaxAngleDeg = 0;
-        bowler.currentBowlingPhase = 1;
-        bowler.lastRawJoystickAngleRad = null;
-        
-        // Capture the running pose right before we jump, so we don't teleport the legs!
-        bowler.initialTransitionStartPose = bowler.lastPoseSnapshot 
-            ? { ...bowler.lastPoseSnapshot } 
-            : { ...Bowler.STATIC_FRAMES[0] };
-
-        bowler.smoothJoystickAngleRad = joystickRad;
-        bowler.joystickAngularVelRad = 0.0;
+        bowler.launchJumpStance(joystickRad);
         bowler.lastJoystickAngleRad = joystickRad;
       }
       this.ball.update(dt);

@@ -361,6 +361,152 @@ export class Bowler {
         this.setInitialRunPose();
     }
 
+    public setGatheringMarker(clickX: number, preJumpDistance: number): void {
+        const targetX = clickX - preJumpDistance;
+        this.startJumpX = Math.max(BOWLER_WICKET_X, targetX);
+        this.gatheringStartX = clickX;
+        this.gatheringTargetX = this.startJumpX;
+        this.isGatheringArmActive = true;
+        this.gatheringAngleTraveledDeg = 0.0;
+        this.accumulatedJoystickAngleDeg = 0.0;
+        this.maxObservedOmegaRad = 0.0;
+        this.prevLeftWristY = 0.0;
+        this.lastReceivedJoystickTick = -1;
+        this.targetNetworkJoystickAngleRad = null;
+        this.targetNetworkJoystickRadiusRatio = 1.0;
+        this.debugReconciliationPoint = null;
+        this.localReleaseTrailIndex = 0;
+        this.ballTrailPoints = [];
+    }
+
+    public launchJumpStance(joystickRad: number): void {
+        this.isGatheringArmActive = false;
+        this.preJumpStartX = this.currentHipPosition.x;
+        this.initialRunupSpeedX = this.lastRunupSpeedX > 0 ? this.lastRunupSpeedX : 800.0;
+        this.lastInterpolatedDisplacementX = Bowler.PRE_DELIVERY_JUMP[0].displacementX ?? -20.0;
+        this.accumulatedDisplacementX = Math.abs(this.lastInterpolatedDisplacementX);
+        
+        // Execute preJump trigger BEFORE setting isExecutingJump = true for proper pose capture
+        this.triggerPreJump();
+        this.isExecutingJump = true;
+
+        let currentJoystickDeg = (joystickRad * 180) / Math.PI;
+        currentJoystickDeg = (currentJoystickDeg + 360) % 360;
+        
+        let mappedAngle = currentJoystickDeg - 90.0;
+        if (mappedAngle < 0) mappedAngle += 360.0;
+
+        this.targetInitialAngleDeg = mappedAngle;
+        this.accumulatedJoystickAngleDeg = 0.0;
+        this.isInitialAngleTransitioning = true;
+        
+        // Reset 4-Phase Gesture Engine state
+        this.hasTriggeredPhase2 = false;
+        this.isPhase2CatchupActive = false;
+        this.phase1MaxAngleDeg = 0;
+        this.currentBowlingPhase = 1;
+        this.lastRawJoystickAngleRad = null;
+        this.transformationFramesCount = 0;
+        this.transformationCurrentFrame = 0;
+        this.phase2Multiplier = 1.0;
+
+        this.initialTransitionStartPose = this.lastPoseSnapshot 
+            ? { ...this.lastPoseSnapshot } 
+            : { ...Bowler.STATIC_FRAMES[0] };
+
+        this.smoothJoystickAngleRad = joystickRad;
+        this.joystickAngularVelRad = 0.0;
+    }
+
+    public update4PhaseEngine(deltaDeg: number, rawDeltaDeg: number, currentMappedAngle: number): void {
+        if (!this.hasTriggeredPhase2) {
+            this.phase1MaxAngleDeg = Math.max(this.phase1MaxAngleDeg, this.accumulatedJoystickAngleDeg);
+
+            if (rawDeltaDeg < -0.5) {
+                this.hasTriggeredPhase2 = true;
+                this.isPhase2CatchupActive = true;
+                this.currentBowlingPhase = 2;
+                
+                const stopAngle = Math.floor(this.phase1MaxAngleDeg);
+                const remainingAngle = Math.max(0.0, 180.0 - stopAngle);
+                const gapAngle = remainingAngle * 2.0;
+                
+                this.phase2TargetAngleDeg = stopAngle + gapAngle;
+                this.transformationFramesCount = gapAngle / 4.0;
+                this.transformationCurrentFrame = 0.0;
+                
+                const remainingPhysicalDegrees = Math.max(1.0, stopAngle);
+                const totalPhase2Frames = this.transformationFramesCount + remainingPhysicalDegrees;
+                this.phase2Multiplier = totalPhase2Frames / remainingPhysicalDegrees;
+
+                const startIdx = Math.min(Bowler.PRE_DELIVERY_JUMP.length - 1, Math.max(0, stopAngle));
+                const endIdx = Math.min(Bowler.PRE_DELIVERY_JUMP.length - 1, Math.max(0, Math.floor(this.phase2TargetAngleDeg)));
+                this.transformationStartPose = { ...Bowler.PRE_DELIVERY_JUMP[startIdx] };
+                this.transformationEndPose = { ...Bowler.PRE_DELIVERY_JUMP[endIdx] };
+            }
+        }
+
+        if (this.isPhase2CatchupActive) {
+            const step = Math.abs(deltaDeg) * this.phase2Multiplier;
+            this.transformationCurrentFrame += step;
+            this.accumulatedJoystickAngleDeg += step;
+
+            if (this.transformationCurrentFrame >= this.transformationFramesCount) {
+                this.isPhase2CatchupActive = false;
+                this.accumulatedJoystickAngleDeg = this.phase2TargetAngleDeg;
+                this.phase2Multiplier = 1.0;
+            }
+        } else {
+            this.accumulatedJoystickAngleDeg += Math.abs(deltaDeg) * this.phase2Multiplier;
+        }
+
+        const isKnobAtSixOClock = currentMappedAngle >= 350.0 && currentMappedAngle <= 360.0;
+        if (this.hasTriggeredPhase2 && this.currentBowlingPhase === 2) {
+            if (isKnobAtSixOClock || this.accumulatedJoystickAngleDeg >= 360.0) {
+                this.accumulatedJoystickAngleDeg = Math.max(360.0, this.accumulatedJoystickAngleDeg);
+                this.currentBowlingPhase = 3;
+            }
+        }
+
+        if (this.hasTriggeredPhase2 && this.currentBowlingPhase === 3 && this.accumulatedJoystickAngleDeg >= 450.0) {
+            this.currentBowlingPhase = 4;
+            this.maxObservedOmegaRad = 0.0;
+        }
+    }
+
+    public calculateReleaseVelocity(prevWristY: number): { vReleaseX: number; vReleaseY: number } {
+        const sign = this.joystickAngularVelRad >= 0 ? 1 : -1;
+        const peakOmega = Math.max(
+            Math.abs(this.joystickAngularVelRad),
+            this.maxObservedOmegaRad
+        );
+        const releaseOmega = peakOmega * sign;
+
+        const totalArmLen = this.FRONT_UPPER_ARM + this.FRONT_LOWER_ARM;
+        const minReach = Math.abs(this.FRONT_UPPER_ARM - this.FRONT_LOWER_ARM) + 5;
+        const armR = minReach + (totalArmLen - minReach - 1.0) * this.smoothJoystickRadiusRatio;
+        const theta = this.smoothJoystickAngleRad;
+
+        const vArmX = -armR * Math.sin(theta) * releaseOmega;
+        const dt = 1 / 60;
+        const releaseY = this.leftWrist.y;
+        const vWristY = (releaseY - prevWristY) / dt;
+        const polarVArmY = armR * Math.cos(theta) * releaseOmega;
+        const vArmY = Math.abs(releaseOmega) > 0.5
+            ? polarVArmY * 0.5 + vWristY * 0.5
+            : vWristY;
+
+        let vBodyX = -Math.abs(
+            this.lastRunupSpeedX > 0 ? this.lastRunupSpeedX : 800.0
+        );
+        vBodyX = -Math.abs(vBodyX * 1.5);
+
+        const vReleaseX = -Math.abs(vBodyX + vArmX);
+        const vReleaseY = vArmY;
+
+        return { vReleaseX, vReleaseY };
+    }
+
     public readonly DEFAULT_START_JUMP_X: number = 750.0;
     public readonly POST_RELEASE_DELAY_SEC: number = 0.10;
     public isCycleCompleted: boolean = false;
