@@ -1182,34 +1182,24 @@ export default class GameLoop {
             Math.max(0.0, bowler.accumulatedJoystickAngleDeg)
           );
 
-          // Frame 63 to 66: Top release arc par local prediction launch (Identical Trigger Condition as Bowler)
-          if (currentFrame >= JUMP_RELEASE_FRAME_MIN) {
+          // 🎯 DUAL-CIRCLE LINE-CIRCLE INTERSECTION RELEASE ENGINE (Green Release Zone Window)
+          if (currentFrame >= JUMP_RELEASE_FRAME_MIN && currentFrame <= JUMP_RELEASE_FRAME_MAX) {
             let releaseTriggered = false;
 
-            // 🚀 1. Track Peak Angular Velocity ONLY during Phase 4
-            const currentOmega = Math.abs(bowler.joystickAngularVelRad);
-            if (bowler.currentBowlingPhase === 4 || bowler.accumulatedJoystickAngleDeg >= 450.0) {
-              if (currentOmega > bowler.maxObservedOmegaRad) {
-                bowler.maxObservedOmegaRad = currentOmega;
-              }
+            const flickResult = this.renderer.joystick.checkLineCircleFlick(
+              this.renderer.joystick.prevRawMouseScreenX,
+              this.renderer.joystick.prevRawMouseScreenY,
+              this.renderer.joystick.lastRawMouseScreenX,
+              this.renderer.joystick.lastRawMouseScreenY,
+              this.renderer.joystick.baseRadius,
+              this.renderer.joystick.outerBufferRadius
+            );
+
+            if (flickResult.triggered) {
+              releaseTriggered = true;
             }
 
-            // 🚀 2. Check Significant Deceleration Trigger (High Swing Speed + Speed Drop in Top Arc)
-            if (
-              bowler.maxObservedOmegaRad >= DECEL_MIN_SWING_SPEED &&
-              currentOmega <=
-                bowler.maxObservedOmegaRad * (1.0 - DECEL_DROP_RATIO)
-            ) {
-              let normAngle = bowler.smoothJoystickAngleRad % (Math.PI * 2);
-              // Check condition: normAngle < 0
-              if (normAngle < 0) normAngle += Math.PI * 2;
-              // Check condition: normAngle >= 3.7 && normAngle <= 5.4
-              if (normAngle >= 3.7 && normAngle <= 5.4) {
-                releaseTriggered = true;
-              }
-            }
-
-            // 🚀 3. Max Frame Boundary (Frame 66 out of 71): Force release if reached without earlier deceleration
+            // Fallback: Max Frame Boundary (JUMP_RELEASE_FRAME_MAX) forces release if reached
             if (!releaseTriggered && currentFrame >= JUMP_RELEASE_FRAME_MAX) {
               releaseTriggered = true;
             }
@@ -1219,7 +1209,7 @@ export default class GameLoop {
               const releaseX = bowler.leftWrist.x;
               const releaseY = bowler.leftWrist.y;
 
-              const { vReleaseX, vReleaseY } = bowler.calculateReleaseVelocity(prevWristY);
+              const { vReleaseX, vReleaseY } = bowler.calculateReleaseVelocity(prevWristY, flickResult);
 
               this.ball.throwBallWithVelocity(
                 releaseX,
@@ -1782,28 +1772,26 @@ export default class GameLoop {
           const currWristY = bowler.leftWrist.y;
 
           let releaseTriggered = false;
+          let activeFlickResult: { triggered: boolean; releaseAngleRad: number; flickSpeed: number } | undefined = undefined;
 
-          // 🚀 1. Track Peak Angular Velocity ONLY during Phase 4 (After 450° / Phase 4 Entry)
-          const currentOmega = Math.abs(bowler.joystickAngularVelRad);
-          if (bowler.currentBowlingPhase === 4 || bowler.accumulatedJoystickAngleDeg >= 450.0) {
-            if (currentOmega > bowler.maxObservedOmegaRad) {
-              bowler.maxObservedOmegaRad = currentOmega;
-            }
-          }
+          // 🎯 DUAL-CIRCLE LINE-CIRCLE INTERSECTION RELEASE ENGINE (Green Release Zone Window)
+          if (currentJumpFrameIndex >= JUMP_RELEASE_FRAME_MIN && currentJumpFrameIndex <= JUMP_RELEASE_FRAME_MAX) {
+            const flickResult = this.renderer.joystick.checkLineCircleFlick(
+              this.renderer.joystick.prevRawMouseScreenX,
+              this.renderer.joystick.prevRawMouseScreenY,
+              this.renderer.joystick.lastRawMouseScreenX,
+              this.renderer.joystick.lastRawMouseScreenY,
+              this.renderer.joystick.baseRadius,
+              this.renderer.joystick.outerBufferRadius
+            );
 
-          // 🚀 2. Check Significant Deceleration Trigger (High Swing Speed + Speed Drop in Top Arc)
-          if (
-            bowler.maxObservedOmegaRad >= DECEL_MIN_SWING_SPEED &&
-            currentOmega <=
-              bowler.maxObservedOmegaRad * (1.0 - DECEL_DROP_RATIO)
-          ) {
-            // Verify arm is in the valid top release arc by checking if the frame is in the release window
-            if (currentJumpFrameIndex >= JUMP_RELEASE_FRAME_MIN && currentJumpFrameIndex <= JUMP_RELEASE_FRAME_MAX) {
+            if (flickResult.triggered) {
               releaseTriggered = true;
+              activeFlickResult = flickResult;
             }
           }
 
-          // 🚀 3. Max Frame Boundary (Frame 66 out of 71): Force release if reached without earlier deceleration
+          // Fallback: Max Frame Boundary (JUMP_RELEASE_FRAME_MAX) forces release if reached
           if (
             !releaseTriggered &&
             currentJumpFrameIndex >= JUMP_RELEASE_FRAME_MAX
@@ -1816,50 +1804,7 @@ export default class GameLoop {
             const releaseX = currWristX;
             const releaseY = currWristY;
 
-            // 📐 Peak Whip Angular Velocity for Full Release Speed (Preserves max flick effort)
-            const sign = bowler.joystickAngularVelRad >= 0 ? 1 : -1;
-            let peakOmega = Math.max(
-              Math.abs(bowler.joystickAngularVelRad),
-              bowler.maxObservedOmegaRad,
-            );
-
-            // 🏋️ Power-Law Curve (Option 1: Punchy x^0.75 Speed Boost for Fast Flicks)
-            // Normal 1:1 scaling up to ~2000 px/s (approx 8.5 rad/s)
-            const SOFT_CAP_THRESHOLD = 8.5; 
-            if (peakOmega > SOFT_CAP_THRESHOLD) {
-              const excessSpeed = peakOmega - SOFT_CAP_THRESHOLD;
-              // Power law x^0.75 for strong, punchy speed growth without flattening too early
-              peakOmega = SOFT_CAP_THRESHOLD + Math.pow(excessSpeed, 0.75) * 1.5;
-            }
-
-            const releaseOmega = peakOmega * sign;
-
-            const totalArmLen = bowler.FRONT_UPPER_ARM + bowler.FRONT_LOWER_ARM;
-            const minReach =
-              Math.abs(bowler.FRONT_UPPER_ARM - bowler.FRONT_LOWER_ARM) + 5;
-            const armR =
-              minReach +
-              (totalArmLen - minReach - 1.0) * bowler.smoothJoystickRadiusRatio;
-            const theta = bowler.smoothJoystickAngleRad;
-
-            // Exact 2D Circular Tangential Velocity Derivative with Peak Whip Power
-            const vArmX = -armR * Math.sin(theta) * releaseOmega;
-            const vArmY = armR * Math.cos(theta) * releaseOmega;
-
-            // 🏃 Forward Body Horizontal Velocity Component (True physical linear momentum from frame displacement)
-            // Fallback to lastRunupSpeedX if currentBodyVelocityX is near 0 for some reason
-            let vBodyX = Math.abs(bowler.currentBodyVelocityX) > 10 ? 
-                bowler.currentBodyVelocityX : 
-                -Math.abs(bowler.lastRunupSpeedX > 0 ? bowler.lastRunupSpeedX : 800.0);
-                
-            // Ensure vBodyX is negative (towards pitch)
-            vBodyX = -Math.abs(vBodyX);
-
-            // 🚀 Combined Natural Launch Velocity Vector (Guaranteed Forward -X Flight)
-            // vReleaseX = Linear Runup Momentum + Tangential Arm Momentum
-            const vReleaseX = (-Math.abs(vBodyX + vArmX)*1.2)
-            // vReleaseY = Tangential Arm Momentum (pure physics, no blending)
-            const vReleaseY = vArmY;
+            const { vReleaseX, vReleaseY } = bowler.calculateReleaseVelocity(prevWristY, activeFlickResult);
             
             const totalSpeed = Math.hypot(vReleaseX, vReleaseY);
             const launchAngleDeg =
@@ -1868,8 +1813,8 @@ export default class GameLoop {
             // Store Release Speed Debug Info
             bowler.lastReleaseVx = vReleaseX;
             bowler.lastReleaseVy = vReleaseY;
-            bowler.lastReleaseVBodyX = vBodyX;
-            bowler.lastReleaseVArmX = vArmX;
+            bowler.lastReleaseVBodyX = 0;
+            bowler.lastReleaseVArmX = 0;
             bowler.lastReleaseSpeed = totalSpeed;
             bowler.lastReleaseAngleDeg = launchAngleDeg;
 

@@ -474,35 +474,36 @@ export class Bowler {
         }
     }
 
-    public calculateReleaseVelocity(prevWristY: number): { vReleaseX: number; vReleaseY: number } {
-        const sign = this.joystickAngularVelRad >= 0 ? 1 : -1;
-        const peakOmega = Math.max(
+    public calculateReleaseVelocity(
+        prevWristY: number,
+        flickResult?: { triggered: boolean; releaseAngleRad: number; flickSpeed: number }
+    ): { vReleaseX: number; vReleaseY: number } {
+        let peakOmega = Math.max(
             Math.abs(this.joystickAngularVelRad),
             this.maxObservedOmegaRad
         );
-        const releaseOmega = peakOmega * sign;
+        const SOFT_CAP_THRESHOLD = 8.5;
+        if (peakOmega > SOFT_CAP_THRESHOLD) {
+            const excessSpeed = peakOmega - SOFT_CAP_THRESHOLD;
+            peakOmega = SOFT_CAP_THRESHOLD + Math.pow(excessSpeed, 0.75) * 1.5;
+        }
 
-        const totalArmLen = this.FRONT_UPPER_ARM + this.FRONT_LOWER_ARM;
-        const minReach = Math.abs(this.FRONT_UPPER_ARM - this.FRONT_LOWER_ARM) + 5;
-        const armR = minReach + (totalArmLen - minReach - 1.0) * this.smoothJoystickRadiusRatio;
-        const theta = this.smoothJoystickAngleRad;
+        let speed = Math.max(1800, peakOmega * 180.0 + 800.0);
+        if (flickResult && flickResult.flickSpeed > 0) {
+            speed = Math.max(speed, 1500 + flickResult.flickSpeed * 15.0);
+        }
+        speed = Math.min(3800, speed);
 
-        const vArmX = -armR * Math.sin(theta) * releaseOmega;
-        const dt = 1 / 60;
-        const releaseY = this.leftWrist.y;
-        const vWristY = (releaseY - prevWristY) / dt;
-        const polarVArmY = armR * Math.cos(theta) * releaseOmega;
-        const vArmY = Math.abs(releaseOmega) > 0.5
-            ? polarVArmY * 0.5 + vWristY * 0.5
-            : vWristY;
+        let launchAngleRad = this.smoothJoystickAngleRad;
+        if (flickResult && flickResult.releaseAngleRad !== 0) {
+            launchAngleRad = flickResult.releaseAngleRad;
+        }
 
-        let vBodyX = -Math.abs(
-            this.lastRunupSpeedX > 0 ? this.lastRunupSpeedX : 800.0
-        );
-        vBodyX = -Math.abs(vBodyX * 1.5);
+        let vReleaseX = Math.cos(launchAngleRad) * speed;
+        let vReleaseY = Math.sin(launchAngleRad) * speed;
 
-        const vReleaseX = -Math.abs(vBodyX + vArmX);
-        const vReleaseY = vArmY;
+        // Ensure vReleaseX always points towards pitch (-X)
+        vReleaseX = -Math.abs(vReleaseX);
 
         return { vReleaseX, vReleaseY };
     }

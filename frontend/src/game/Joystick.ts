@@ -5,6 +5,7 @@ export default class Joystick {
     public centerX: number = CANVAS_WIDTH - 220;
     public centerY: number = CANVAS_HEIGHT - 150;
     public baseRadius: number = 100;
+    public outerBufferRadius: number = 115; // 1.15 * baseRadius (Outer Release Circle)
     public knobRadius: number = 10;
 
     public isActive: boolean = false;
@@ -70,6 +71,7 @@ export default class Joystick {
         if (dist <= this.baseRadius * 1.6) {
             this.isPointerDown = true;
             this.isActive = true;
+            this.mouseTrailPoints = [{ x: screenX, y: screenY }];
             this.updateKnobPosition(screenX, screenY);
         }
     }
@@ -88,6 +90,15 @@ export default class Joystick {
 
     public lastRawMouseScreenX: number = 0;
     public lastRawMouseScreenY: number = 0;
+    public prevRawMouseScreenX: number = 0;
+    public prevRawMouseScreenY: number = 0;
+
+    // Last mouse position recorded while inside Inner Circle R1
+    public lastInsideInnerMouseX: number = 0;
+    public lastInsideInnerMouseY: number = 0;
+
+    // 🖤 Mouse Drag Black Trailing System
+    public mouseTrailPoints: Array<{ x: number; y: number }> = [];
 
     private processMove(clientX: number, clientY: number): void {
         const canvas = document.querySelector('canvas');
@@ -101,27 +112,92 @@ export default class Joystick {
         const screenX = (clientX - rect.left) * scaleX;
         const screenY = (clientY - rect.top) * scaleY;
 
+        const distFromCenter = Math.hypot(screenX - this.centerX, screenY - this.centerY);
+        if (distFromCenter <= this.baseRadius) {
+            this.lastInsideInnerMouseX = screenX;
+            this.lastInsideInnerMouseY = screenY;
+        }
+
+        this.prevRawMouseScreenX = this.lastRawMouseScreenX > 0 ? this.lastRawMouseScreenX : screenX;
+        this.prevRawMouseScreenY = this.lastRawMouseScreenY > 0 ? this.lastRawMouseScreenY : screenY;
         this.lastRawMouseScreenX = screenX;
         this.lastRawMouseScreenY = screenY;
+
+        if (this.isPointerDown) {
+            this.mouseTrailPoints.push({ x: screenX, y: screenY });
+            if (this.mouseTrailPoints.length > 25) {
+                this.mouseTrailPoints.shift();
+            }
+        }
 
         this.updateKnobPosition(screenX, screenY);
 
         if (this.onJoystickMove) {
             this.onJoystickMove(screenX, screenY);
         }
-        
+    }
+
+    private getCircleIntersection(
+        p1X: number, p1Y: number,
+        p2X: number, p2Y: number,
+        radius: number
+    ): { x: number; y: number } | null {
+        const dx = p2X - p1X;
+        const dy = p2Y - p1Y;
+        const lenSq = dx * dx + dy * dy;
+        if (lenSq < 0.0001) return null;
+
+        const fx = p1X - this.centerX;
+        const fy = p1Y - this.centerY;
+
+        const a = lenSq;
+        const b = 2 * (fx * dx + fy * dy);
+        const c = (fx * fx + fy * fy) - radius * radius;
+
+        const discriminant = b * b - 4 * a * c;
+        if (discriminant < 0) return null;
+
+        const t = (-b + Math.sqrt(discriminant)) / (2 * a);
+        return { x: p1X + t * dx, y: p1Y + t * dy };
+    }
+
+    public checkLineCircleFlick(
+        prevX: number, prevY: number,
+        currX: number, currY: number,
+        rInner: number, rOuter: number
+    ): { triggered: boolean; releaseAngleRad: number; flickSpeed: number } {
+        const distCurr = Math.hypot(currX - this.centerX, currY - this.centerY);
+
+        if (distCurr >= rOuter && this.lastInsideInnerMouseX > 0 && this.lastInsideInnerMouseY > 0) {
+            const innerX = this.lastInsideInnerMouseX;
+            const innerY = this.lastInsideInnerMouseY;
+
+            const flickDx = currX - innerX;
+            const flickDy = currY - innerY;
+
+            const flickAngleRad = Math.atan2(flickDy, flickDx);
+            const flickSpeed = Math.hypot(flickDx, flickDy);
+
+            // Reset recorded inner mouse position after release trigger
+            this.lastInsideInnerMouseX = 0;
+            this.lastInsideInnerMouseY = 0;
+
+            return { triggered: true, releaseAngleRad: flickAngleRad, flickSpeed };
+        }
+
+        return { triggered: false, releaseAngleRad: 0, flickSpeed: 0 };
     }
 
     private handlePointerUp(e: PointerEvent): void {
         this.isPointerDown = false;
         this.isActive = false;
-        // Sticky Joystick: Preserve knob position, distanceRatio, and angleRad on release!
+        this.mouseTrailPoints = [];
     }
 
     private handleMouseUp(e: MouseEvent): void {
         this.isPointerDown = false;
         this.isActive = false;
-        // Sticky Joystick: Preserve knob position, distanceRatio, and angleRad on release!
+        this.mouseTrailPoints = [];
     }
 
     public updateKnobPosition(screenX: number, screenY: number): void {
@@ -140,7 +216,7 @@ export default class Joystick {
     public draw(ctx: CanvasRenderingContext2D): void {
         ctx.save();
 
-        // Soft Transparent Outer Base Ring
+        // Soft Transparent Inner Base Ring (R1)
         ctx.beginPath();
         ctx.arc(this.centerX, this.centerY, this.baseRadius, 0, Math.PI * 2);
         ctx.fillStyle = "rgba(15, 23, 42, 0.22)"; // Soft transparent dark background
@@ -148,6 +224,15 @@ export default class Joystick {
         ctx.lineWidth = 2;
         ctx.strokeStyle = this.isActive ? "rgba(56, 189, 248, 0.65)" : "rgba(255, 255, 255, 0.22)";
         ctx.stroke();
+
+        // 🛡️ Outer Release Buffer Circle (R2 = 1.15 * baseRadius)
+        ctx.beginPath();
+        ctx.arc(this.centerX, this.centerY, this.outerBufferRadius, 0, Math.PI * 2);
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([6, 4]); // Bold Dashed Ring
+        ctx.strokeStyle = this.isActive ? "#f59e0b" : "rgba(245, 158, 11, 0.90)"; // Bold Dark Amber Gold
+        ctx.stroke();
+        ctx.setLineDash([]); // Reset line dash
 
         // 🎯 RELEASE ZONE Arc Sector Rendering (Calculated from JUMP_RELEASE_FRAME_MIN and MAX)
         const radius = this.baseRadius;
@@ -278,6 +363,36 @@ export default class Joystick {
         ctx.lineWidth = 1.5;
         ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
         ctx.stroke();
+
+        // 🖤 BLACK MOUSE TRAILING RIBBON AND DOTS
+        if (this.mouseTrailPoints.length > 1) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(this.mouseTrailPoints[0].x, this.mouseTrailPoints[0].y);
+            for (let i = 1; i < this.mouseTrailPoints.length; i++) {
+                ctx.lineTo(this.mouseTrailPoints[i].x, this.mouseTrailPoints[i].y);
+            }
+            ctx.strokeStyle = "rgba(15, 23, 42, 0.85)";
+            ctx.lineWidth = 3.5;
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            ctx.stroke();
+
+            // Render trailing dots along mouse drag path
+            for (let i = 0; i < this.mouseTrailPoints.length; i++) {
+                const pt = this.mouseTrailPoints[i];
+                const progress = (i + 1) / this.mouseTrailPoints.length;
+                const dotRadius = 2.5 + progress * 3.5;
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, dotRadius, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(0, 0, 0, ${0.3 + progress * 0.7})`;
+                ctx.fill();
+                ctx.strokeStyle = `rgba(255, 255, 255, ${0.4 * progress})`;
+                ctx.lineWidth = 1.0;
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
 
         // Label Text above joystick
         ctx.font = "bold 12px system-ui, sans-serif";
