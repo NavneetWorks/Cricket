@@ -122,8 +122,8 @@ export default class GameLoop {
     this.isOnlineMode = isOnline;
     const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
     this.fielders = [
-      new Fielder(1, BOWLER_WICKET_X, groundY-50, "F1 (HOLD F)"),
-      new Fielder(2, BOUNDARY_DISTANCE-500, groundY, "F2 (HOLD J)")
+      new Fielder(1, BOWLER_WICKET_X, groundY, "F1 (HOLD F)"),
+      new Fielder(2, BOUNDARY_DISTANCE-900, groundY, "F2 (HOLD J)")
     ];
     this.renderer = new Renderer(ctx, bat, input, this.ball);
     this.renderer.fielders = this.fielders;
@@ -879,7 +879,7 @@ export default class GameLoop {
         const currentSpeed = Math.hypot(this.ball.vel.x, this.ball.vel.y);
 
         const isCatchingTarget = fielder.state === "CATCHING";
-        const isBeatenBySpeed = !isCatchingTarget && currentSpeed > 3800;
+        const isBeatenBySpeed = !isCatchingTarget && currentSpeed > 2000;
   
         if (isBeatenBySpeed) {
           // Beaten by extreme speed: ball passes through at full speed, fielder starts chasing
@@ -910,11 +910,11 @@ export default class GameLoop {
               const totalTimeWindow = flightTimeSec + throwTimeEstimateSec;
 
               let runsScored = 0;
-              if (totalTimeWindow < 1.8) {
+              if (totalTimeWindow < 1.5) {
                   runsScored = 0; // Dot Ball
-              } else if (totalTimeWindow < 3.4) {
+              } else if (totalTimeWindow < 2.2) {
                   runsScored = 1;
-              } else if (totalTimeWindow < 5.0) {
+              } else if (totalTimeWindow < 3.4) {
                   runsScored = 2;
               } else {
                   runsScored = 3;

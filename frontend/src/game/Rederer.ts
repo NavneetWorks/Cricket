@@ -312,10 +312,11 @@ export default class Renderer{
             this.ctx.restore();
         }
 
-        // 🏏 Render Clean Minimalist Ground-Integrated Scorecard (No Dark Box)
+        // 🏏 Render Clean Minimalist Ground-Integrated Scorecard (Bottom Center)
         this.ctx.save();
         const groundY = CANVAS_HEIGHT - GROUND_HEIGHT; // 725px
-        const scoreX = 40;
+        const hudWidth = 400;
+        const scoreX = (CANVAS_WIDTH - hudWidth) / 2; // Centered at bottom ground
         const scoreY = groundY + 15;
 
         // 1. Batter Name & Score (Clean Text Overlaid Directly on Ground with Drop Shadows)
