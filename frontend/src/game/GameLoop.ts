@@ -29,6 +29,7 @@ import {
   BAT_INTERP_BUFFER_TICKS,
   BAT_MAX_EXTRAPOLATION_TICKS,
   BOWLER_START_X,
+  BOUNDARY_DISTANCE,
 } from "./constants";
 
 // Ek remote bat snapshot: batter ke client par kya pose tha, kis tick par
@@ -120,8 +121,8 @@ export default class GameLoop {
     this.isOnlineMode = isOnline;
     const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
     this.fielders = [
-      new Fielder(1, WICKET_X + 300, groundY, "F1 (HOLD F)"),
-      new Fielder(2, BOWLER_WICKET_X + 50, groundY, "F2 (HOLD J)")
+      new Fielder(1, BOWLER_WICKET_X, groundY-50, "F1 (HOLD F)"),
+      new Fielder(2, BOUNDARY_DISTANCE-500, groundY, "F2 (HOLD J)")
     ];
     this.renderer = new Renderer(ctx, bat, input, this.ball);
     this.renderer.fielders = this.fielders;
@@ -734,6 +735,7 @@ export default class GameLoop {
   }
 
   private startBowlerDelivery(): void {
+    this.resetPerBallState();
     const bowler = this.renderer.bowler;
     bowler.resetToIdle();
     bowler.currentHipPosition.x = BOWLER_WICKET_X+150;
@@ -800,24 +802,103 @@ export default class GameLoop {
     if (this.renderer && this.renderer.bowler) {
       this.renderer.bowler.pendingVisualThrow = null;
       this.renderer.bowler.releaseDelayTimer = 0;
+      this.renderer.fieldingMessage = null;
+    }
+    
+    if (this.fielders) {
+      for (const fielder of this.fielders) {
+        fielder.resetToInitialPosition();
+      }
     }
   }
   // ⌨️ Fielder Positioning Movement Handler
   private updateFielderPositions(dt: number): void {
-    const isF1Hold = this.keysPressed.has("f") || this.keysPressed.has("F");
-    const isF2Hold = this.keysPressed.has("j") || this.keysPressed.has("J");
+    // Allow manual F1/F2 positioning ONLY before bowler runup begins
+    const bowler = this.renderer?.bowler;
+    const isPositioningAllowed = bowler ? (!bowler.isGatheringArmActive && !bowler.isExecutingJump && !this.ball.isActive) : !this.ball.isActive;
 
-    const isLeft = this.keysPressed.has("a") || this.keysPressed.has("A") || this.keysPressed.has("ArrowLeft");
-    const isRight = this.keysPressed.has("d") || this.keysPressed.has("D") || this.keysPressed.has("ArrowRight");
+    if (isPositioningAllowed) {
+        const isF1Hold = this.keysPressed.has("f") || this.keysPressed.has("F");
+        const isF2Hold = this.keysPressed.has("j") || this.keysPressed.has("J");
 
-    if (isF1Hold && this.fielders[0]) {
-      if (isLeft) this.fielders[0].moveLeft(dt);
-      if (isRight) this.fielders[0].moveRight(dt);
+        const isLeft = this.keysPressed.has("a") || this.keysPressed.has("A") || this.keysPressed.has("ArrowLeft");
+        const isRight = this.keysPressed.has("d") || this.keysPressed.has("D") || this.keysPressed.has("ArrowRight");
+
+        if (isF1Hold && this.fielders[0]) {
+          if (isLeft) this.fielders[0].moveLeft(dt);
+          if (isRight) this.fielders[0].moveRight(dt);
+        }
+
+        if (isF2Hold && this.fielders[1]) {
+          if (isLeft) this.fielders[1].moveLeft(dt);
+          if (isRight) this.fielders[1].moveRight(dt);
+        }
     }
 
-    if (isF2Hold && this.fielders[1]) {
-      if (isLeft) this.fielders[1].moveLeft(dt);
-      if (isRight) this.fielders[1].moveRight(dt);
+    // Only update AI and check catching IF the ball has actually been hit by the batter
+    if (this.ball && this.ball.hasBeenHit) {
+        for (const fielder of this.fielders) {
+            // We will pass 1550 as stumps X for now
+            fielder.updateAI(dt, {x: this.ball.pos.x, y: this.ball.pos.y}, BOWLER_WICKET_X);
+        }
+        
+        // Check Continuous Collision Detection
+        this.checkFielderBallInteractions();
+    }
+  }
+
+  private checkFielderBallInteractions() {
+    if (!this.ball || !this.ball.isActive) return;
+
+    const prevPos = { x: this.ball.prevPos.x, y: this.ball.prevPos.y };
+    const currPos = { x: this.ball.pos.x, y: this.ball.pos.y };
+
+    for (const fielder of this.fielders) {
+      if (fielder.intersectsLine(prevPos, currPos)) {
+        const currentSpeed = Math.hypot(this.ball.vel.x, this.ball.vel.y);
+
+        const isCatchingTarget = fielder.state === "CATCHING";
+        const isBeatenBySpeed = !isCatchingTarget && currentSpeed > 1200;
+  
+        if (isBeatenBySpeed) {
+          // Beaten by extreme speed: ball passes through at full speed, fielder starts chasing
+          fielder.state = "CHASING";
+          console.log(`💨 Fielder F${fielder.id} beaten by speed (${currentSpeed.toFixed(0)} px/s)`);
+        } else {
+          // Clean Catch / Stop!
+          this.ball.vel.x = 0;
+          this.ball.vel.y = 0;
+          this.ball.isActive = false; // Mark ball as dead
+
+          // Determine Message & State
+          if (this.ball.bounceCount === 0) {
+              fielder.state = "CATCHING";
+              console.log(`🧤 CATCH OUT! Fielder F${fielder.id} caught the ball on full!`);
+              if (this.renderer) {
+                  this.renderer.fieldingMessage = "CATCH OUT!";
+                  this.renderer.fieldingMessageTimer = 3.0; // 3 seconds
+              }
+          } else {
+              fielder.state = "GROUND_STOP";
+              console.log(`⚾ BALL FIELDED! Fielder F${fielder.id} fielded the ball after ${this.ball.bounceCount} bounce(s).`);
+              if (this.renderer) {
+                  this.renderer.fieldingMessage = "BALL FIELDED!";
+                  this.renderer.fieldingMessageTimer = 3.0; // 3 seconds
+              }
+          }
+
+          // Reset ALL other fielders to IDLE since ball is dead
+          for (const otherFielder of this.fielders) {
+              if (otherFielder.id !== fielder.id) {
+                  otherFielder.state = "IDLE";
+                  otherFielder.targetPos = null;
+              }
+          }
+
+          // Stop checking other fielders since ball is dead
+          break;
+        }
+      }
     }
   }
 
@@ -901,9 +982,73 @@ export default class GameLoop {
       finalVy: currVy,
     };
   }
+  private predictFirstBouncePoint(
+    initialX: number,
+    initialY: number,
+    initialVx: number,
+    initialVy: number,
+  ): { dropX: number; dropY: number; timeToDrop: number } {
+    let currX = initialX;
+    let currY = initialY;
+    let currVx = initialVx;
+    let currVy = initialVy;
+
+    const targetY = CANVAS_HEIGHT - GROUND_HEIGHT - (this.ball ? this.ball.radius : 0.27);
+    let totalTime = 0;
+    const subDt = 1 / 600; // 600Hz simulation resolution
+    const maxSteps = 6000; // max 10 seconds simulation
+
+    for (let step = 0; step < maxSteps; step++) {
+      const stepPrevY = currY;
+
+      const speed = Math.hypot(currVx, currVy);
+      const dragForceX = -AIR_DRAG_COEFF * speed * currVx;
+      const dragForceY = -AIR_DRAG_COEFF * speed * currVy;
+
+      currVx += dragForceX * subDt;
+      currVy += (GRAVITY + dragForceY) * subDt;
+
+      const nextX = currX + currVx * subDt;
+      const nextY = currY + currVy * subDt;
+
+      // Ground impact check
+      if (stepPrevY < targetY && nextY >= targetY) {
+        const f = Math.min(
+          1.0,
+          Math.max(
+            0.0,
+            (targetY - stepPrevY) / Math.max(0.001, nextY - stepPrevY),
+          ),
+        );
+        const dropX = currX + f * (nextX - currX);
+        totalTime += subDt * f;
+        return { dropX, dropY: targetY, timeToDrop: totalTime };
+      }
+
+      currX = nextX;
+      currY = nextY;
+      totalTime += subDt;
+
+      if (currY >= targetY && step > 0) {
+        return { dropX: currX, dropY: targetY, timeToDrop: totalTime };
+      }
+    }
+
+    return { dropX: currX, dropY: targetY, timeToDrop: totalTime };
+  }
+
   private update(dt: number) {
     // ⏱️ Global 60Hz Network Tick Timer (Runs for all Modes)
     this.networkTimer += dt;
+
+    if (this.renderer.fieldingMessageTimer > 0) {
+        this.renderer.fieldingMessageTimer -= dt;
+        if (this.renderer.fieldingMessageTimer <= 0) {
+            this.renderer.fieldingMessageTimer = 0;
+            this.renderer.fieldingMessage = null;
+        }
+    }
+
     let isTickAdvanced = false;
     // Check condition: this.networkTimer >= this.NETWORK_INT...
     if (this.networkTimer >= this.NETWORK_INTERVAL) {
@@ -1413,6 +1558,31 @@ export default class GameLoop {
       }
 
       const batHitResult = this.bat.checkHit(this.ball, dt);
+      
+      // 🏃 Trigger Fielders on Bat Hit: Predict drop point & evaluate catch possibility
+      if (batHitResult.hit) {
+        this.ball.bounceCount = 0; // 🎯 Reset bounce count so only post-bat-hit ground bounces are tracked!
+        const { dropX, dropY, timeToDrop } = this.predictFirstBouncePoint(
+          this.ball.pos.x,
+          this.ball.pos.y,
+          this.ball.vel.x,
+          this.ball.vel.y
+        );
+
+        for (const fielder of this.fielders) {
+          const dist = Math.abs(dropX - fielder.pos.x);
+          const timeToReach = dist / fielder.runSpeed;
+
+          // If fielder can reach landing spot before or at the moment ball drops (with 0.15s reaction buffer)
+          if (timeToReach <= timeToDrop + 0.15) {
+            fielder.state = "CATCHING";
+            fielder.targetPos = { x: dropX, y: dropY };
+          } else {
+            fielder.state = "CHASING";
+            fielder.targetPos = { x: this.ball.pos.x, y: this.ball.pos.y };
+          }
+        }
+      }
 
       // Check game state condition
       if (

@@ -15,6 +15,7 @@ export default class Ball {
     public isStuck = false; // 1-frame dwell state jab bat se chipki ho
     public isHeldInHand = false; // Flag jab ball bowler ke haath me pakdi ho
     public hasBeenHit = false; // Flag to prevent multiple re-collision hits per delivery
+    public bounceCount = 0; // Tracks the number of bounces on the ground
     public rotation = 0; // Ball ke spin ke liye
 
     // Change THIS value to test the visual slowdown. (e.g., 0.90 for 10% slower)
@@ -33,6 +34,7 @@ export default class Ball {
         this.isStuck = false;
         this.isHeldInHand = false;
         this.hasBeenHit = false;
+        this.bounceCount = 0; // Reset bounces on new throw
         this.timeDilationFactor = this.baseTimeDilation; // Apply default custom delay
         this.vel.x = vx;
         this.vel.y = vy;
@@ -49,6 +51,7 @@ export default class Ball {
         this.isStuck = false;
         this.isHeldInHand = false;
         this.hasBeenHit = false;
+        this.bounceCount = 0; // Reset bounces on new throw
         this.timeDilationFactor = this.baseTimeDilation; // Apply default custom delay
         
         // Math lagakar angle ko velocity (X aur Y) mein convert karna
@@ -158,6 +161,8 @@ export default class Ball {
 
             // Continuous Collision Check against Ground Surface (targetY = groundY - radius)
             if (stepPrevY < targetY && nextY >= targetY) {
+                this.bounceCount++; // Ball hits the ground!
+
                 // Exact Fractional Sub-step Intersection Point
                 const f = Math.min(1.0, Math.max(0.0, (targetY - stepPrevY) / Math.max(0.001, nextY - stepPrevY)));
 

@@ -39,6 +39,9 @@ export default class Renderer{
 
     public cameraX: number = 0;
 
+    public fieldingMessage: string | null = null;
+    public fieldingMessageTimer: number = 0;
+
     public useImageGround: boolean = true;
     private groundImage: HTMLImageElement;
 
@@ -268,6 +271,27 @@ export default class Renderer{
                 this.ctx.fillText(relText, relBadgeX + relBadgeW / 2, relBadgeY + relBadgeH / 2);
                 this.ctx.restore();
             }
+        }
+        // 🏏 Render Fielding Results
+        if (this.fieldingMessage && this.fieldingMessageTimer > 0) {
+            this.ctx.save();
+            this.ctx.font = "900 48px Inter, Arial, sans-serif";
+            this.ctx.textAlign = "center";
+            this.ctx.textBaseline = "middle";
+
+            // Outline / Drop Shadow effect
+            this.ctx.lineWidth = 6;
+            this.ctx.strokeStyle = "rgba(0, 0, 0, 0.85)";
+            this.ctx.strokeText(this.fieldingMessage, CANVAS_WIDTH / 2, 200);
+
+            // Fill text with colors based on catch vs stop
+            if (this.fieldingMessage.includes("CATCH")) {
+                this.ctx.fillStyle = "#facc15"; // Yellow for catches
+            } else {
+                this.ctx.fillStyle = "#38bdf8"; // Light blue for fielded balls
+            }
+            this.ctx.fillText(this.fieldingMessage, CANVAS_WIDTH / 2, 200);
+            this.ctx.restore();
         }
 
         this.drawMiniScreen(alpha);
