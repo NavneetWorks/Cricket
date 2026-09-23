@@ -104,6 +104,7 @@ export default class GameLoop {
 
   private batPoseQueue: BatSnapshot[] = []; // time-sorted snapshots (naye end me)
   private batInterpTick: number = 0; // playhead (float tick-space me)
+  private shotHitTimestamp: number = 0; // Timestamp when bat hits ball for run calculation
   private readonly FIXED_DT: number = 1 / 60; // Physics tick = 16.67ms
   private readonly MAX_PHYSICS_STEPS: number = 5; // Spiral-of-death guard: slow machine par accumulator kabhi grow nahi karega
 
@@ -836,12 +837,32 @@ export default class GameLoop {
     }
 
     // Only update AI and check catching IF the ball has actually been hit by the batter
-    if (this.ball && this.ball.hasBeenHit) {
+    if (this.ball && this.ball.hasBeenHit && this.ball.isActive) {
         for (const fielder of this.fielders) {
             // We will pass 1550 as stumps X for now
             fielder.updateAI(dt, {x: this.ball.pos.x, y: this.ball.pos.y}, BOWLER_WICKET_X);
         }
         
+        // 💥 Boundary Check (4s & 6s)
+        const boundaryX = BOUNDARY_DISTANCE; // 5400px boundary distance
+        if (this.ball.pos.x >= boundaryX) {
+            this.ball.isActive = false;
+            this.ball.vel.x = 0;
+            this.ball.vel.y = 0;
+
+            const isSix = this.ball.bounceCount === 0;
+            const boundaryRuns = isSix ? 6 : 4;
+
+            if (this.renderer) {
+                this.renderer.recordBallOutcome(isSix ? "6" : "4");
+                this.renderer.batterRuns += boundaryRuns;
+                this.renderer.fieldingMessage = isSix ? "SIX! 💥 (+6 Runs)" : "FOUR! 🏏 (+4 Runs)";
+                this.renderer.fieldingMessageTimer = 3.5;
+            }
+            console.log(`💥 Boundary hit! ${boundaryRuns} runs scored.`);
+            return;
+        }
+
         // Check Continuous Collision Detection
         this.checkFielderBallInteractions();
     }
@@ -858,7 +879,7 @@ export default class GameLoop {
         const currentSpeed = Math.hypot(this.ball.vel.x, this.ball.vel.y);
 
         const isCatchingTarget = fielder.state === "CATCHING";
-        const isBeatenBySpeed = !isCatchingTarget && currentSpeed > 1200;
+        const isBeatenBySpeed = !isCatchingTarget && currentSpeed > 3800;
   
         if (isBeatenBySpeed) {
           // Beaten by extreme speed: ball passes through at full speed, fielder starts chasing
@@ -875,16 +896,38 @@ export default class GameLoop {
               fielder.state = "CATCHING";
               console.log(`🧤 CATCH OUT! Fielder F${fielder.id} caught the ball on full!`);
               if (this.renderer) {
-                  this.renderer.fieldingMessage = "CATCH OUT!";
-                  this.renderer.fieldingMessageTimer = 3.0; // 3 seconds
+                  this.renderer.recordBallOutcome("W");
+                  this.renderer.resetBatterStats(); // Reset score & balls on OUT
+                  this.renderer.fieldingMessage = "CATCH OUT! (OUT - Score Reset)";
+                  this.renderer.fieldingMessageTimer = 3.5;
               }
           } else {
               fielder.state = "GROUND_STOP";
-              console.log(`⚾ BALL FIELDED! Fielder F${fielder.id} fielded the ball after ${this.ball.bounceCount} bounce(s).`);
-              if (this.renderer) {
-                  this.renderer.fieldingMessage = "BALL FIELDED!";
-                  this.renderer.fieldingMessageTimer = 3.0; // 3 seconds
+              
+              // ⏱️ Physical Time Window Calculation for 0, 1, 2, 3 Runs
+              const flightTimeSec = this.shotHitTimestamp > 0 ? (Date.now() - this.shotHitTimestamp) / 1000 : 1.2;
+              const throwTimeEstimateSec = Math.abs(fielder.pos.x - BOWLER_WICKET_X) / 2500;
+              const totalTimeWindow = flightTimeSec + throwTimeEstimateSec;
+
+              let runsScored = 0;
+              if (totalTimeWindow < 1.8) {
+                  runsScored = 0; // Dot Ball
+              } else if (totalTimeWindow < 3.4) {
+                  runsScored = 1;
+              } else if (totalTimeWindow < 5.0) {
+                  runsScored = 2;
+              } else {
+                  runsScored = 3;
               }
+
+              if (this.renderer) {
+                  this.renderer.recordBallOutcome(runsScored === 0 ? "•" : runsScored.toString());
+                  this.renderer.batterRuns += runsScored;
+                  const runText = runsScored === 0 ? "DOT BALL! (0 Runs)" : `${runsScored} RUN${runsScored > 1 ? 'S' : ''}!`;
+                  this.renderer.fieldingMessage = `${runText} (${totalTimeWindow.toFixed(1)}s time window)`;
+                  this.renderer.fieldingMessageTimer = 3.5;
+              }
+              console.log(`⚾ BALL FIELDED! Runs: ${runsScored} (Time window: ${totalTimeWindow.toFixed(2)}s)`);
           }
 
           // Reset ALL other fielders to IDLE since ball is dead
@@ -1561,6 +1604,7 @@ export default class GameLoop {
       
       // 🏃 Trigger Fielders on Bat Hit: Predict drop point & evaluate catch possibility
       if (batHitResult.hit) {
+        this.shotHitTimestamp = Date.now();
         this.ball.bounceCount = 0; // 🎯 Reset bounce count so only post-bat-hit ground bounces are tracked!
         const { dropX, dropY, timeToDrop } = this.predictFirstBouncePoint(
           this.ball.pos.x,
@@ -1614,6 +1658,12 @@ export default class GameLoop {
         batHitResult.hit,
         batHitResult.hitSubStep,
       );
+      if (this.renderer.wicket.isOut && this.renderer.fieldingMessage !== "BOWLED OUT! (OUT - Score Reset)") {
+        this.renderer.recordBallOutcome("W");
+        this.renderer.resetBatterStats();
+        this.renderer.fieldingMessage = "BOWLED OUT! (OUT - Score Reset)";
+        this.renderer.fieldingMessageTimer = 3.5;
+      }
     }
     // Check condition: (this.renderer.gameMode as any
     else if ((this.renderer.gameMode as any) === "NEW_BOWLER") {

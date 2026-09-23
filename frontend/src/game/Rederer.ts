@@ -42,6 +42,24 @@ export default class Renderer{
     public fieldingMessage: string | null = null;
     public fieldingMessageTimer: number = 0;
 
+    public batterRuns: number = 0;
+    public batterBalls: number = 0;
+    public last6Balls: string[] = [];
+
+    public recordBallOutcome(outcome: string) {
+        this.batterBalls++;
+        this.last6Balls.push(outcome);
+        if (this.last6Balls.length > 6) {
+            this.last6Balls.shift();
+        }
+    }
+
+    public resetBatterStats() {
+        this.batterRuns = 0;
+        this.batterBalls = 0;
+        this.last6Balls = [];
+    }
+
     public useImageGround: boolean = true;
     private groundImage: HTMLImageElement;
 
@@ -293,6 +311,99 @@ export default class Renderer{
             this.ctx.fillText(this.fieldingMessage, CANVAS_WIDTH / 2, 200);
             this.ctx.restore();
         }
+
+        // 🏏 Render Clean Minimalist Ground-Integrated Scorecard (No Dark Box)
+        this.ctx.save();
+        const groundY = CANVAS_HEIGHT - GROUND_HEIGHT; // 725px
+        const scoreX = 40;
+        const scoreY = groundY + 15;
+
+        // 1. Batter Name & Score (Clean Text Overlaid Directly on Ground with Drop Shadows)
+        this.ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
+        this.ctx.shadowBlur = 4;
+        this.ctx.shadowOffsetX = 1;
+        this.ctx.shadowOffsetY = 2;
+
+        this.ctx.font = "900 12px Inter, Arial, sans-serif";
+        this.ctx.fillStyle = "#facc15"; // Warm Gold Label
+        this.ctx.textAlign = "left";
+        this.ctx.textBaseline = "top";
+        this.ctx.fillText("BATTER", scoreX, scoreY + 4);
+
+        // Big Runs & Balls Text
+        this.ctx.font = "900 32px Inter, Arial, sans-serif";
+        this.ctx.fillStyle = "#ffffff";
+        this.ctx.textBaseline = "alphabetic";
+        this.ctx.fillText(`${this.batterRuns}`, scoreX, scoreY + 54);
+
+        const runsWidth = this.ctx.measureText(`${this.batterRuns}`).width;
+        this.ctx.font = "bold 18px Inter, Arial, sans-serif";
+        this.ctx.fillStyle = "#38bdf8"; // Vibrant Cyan
+        this.ctx.fillText(`(${this.batterBalls}b)`, scoreX + runsWidth + 8, scoreY + 54);
+
+        // Vertical Divider Line (Subtle Translucent White)
+        const sepX = scoreX + 175;
+        this.ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+        this.ctx.lineWidth = 1.5;
+        this.ctx.beginPath();
+        this.ctx.moveTo(sepX, scoreY + 6);
+        this.ctx.lineTo(sepX, scoreY + 56);
+        this.ctx.stroke();
+
+        // 2. THIS OVER Section (Floating Color-Coded Pills Directly on Ground)
+        const overX = sepX + 20;
+        this.ctx.font = "900 12px Inter, Arial, sans-serif";
+        this.ctx.fillStyle = "#facc15"; // Warm Gold Label
+        this.ctx.textAlign = "left";
+        this.ctx.textBaseline = "top";
+        this.ctx.fillText("THIS OVER", overX, scoreY + 4);
+
+        const pillRadius = 14;
+        const pillSpacing = 35;
+        const pillCenterY = scoreY + 44;
+
+        for (let i = 0; i < 6; i++) {
+            const px = overX + i * pillSpacing + pillRadius;
+            const outcome = this.last6Balls[i];
+
+            this.ctx.beginPath();
+            this.ctx.arc(px, pillCenterY, pillRadius, 0, Math.PI * 2);
+
+            if (!outcome) {
+                // Empty slot (Translucent circle on ground)
+                this.ctx.shadowBlur = 0;
+                this.ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+                this.ctx.fill();
+                this.ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+                this.ctx.lineWidth = 1.5;
+                this.ctx.stroke();
+            } else {
+                let pillColor = "#475569"; // Dot ball (dark slate)
+                if (outcome === "4") pillColor = "#16a34a"; // Vibrant Green for 4
+                else if (outcome === "6") pillColor = "#9333ea"; // Deep Purple for 6
+                else if (outcome === "W") pillColor = "#dc2626"; // Crimson Red for Wicket
+                else if (["1", "2", "3"].includes(outcome)) pillColor = "#0284c7"; // Cyan Blue for runs
+
+                this.ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+                this.ctx.shadowBlur = 6;
+                this.ctx.shadowOffsetY = 2;
+                this.ctx.fillStyle = pillColor;
+                this.ctx.fill();
+
+                this.ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+                this.ctx.lineWidth = 1;
+                this.ctx.stroke();
+
+                this.ctx.shadowBlur = 0;
+                this.ctx.font = "900 13px Inter, Arial, sans-serif";
+                this.ctx.fillStyle = "#ffffff";
+                this.ctx.textAlign = "center";
+                this.ctx.textBaseline = "middle";
+                this.ctx.fillText(outcome, px, pillCenterY + 0.5);
+            }
+        }
+
+        this.ctx.restore();
 
         this.drawMiniScreen(alpha);
     }
