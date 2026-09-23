@@ -1,5 +1,6 @@
 import Bat from "../entities/Bat";
 import Ball from "../entities/Ball";
+import Fielder from "../entities/Fielder";
 import {
   Bowler,
   DECEL_MIN_SWING_SPEED,
@@ -18,6 +19,7 @@ import {
   FRICTION_GROUND,
   AIR_DRAG_COEFF,
   BOWLER_WICKET_X,
+  WICKET_X,
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
   GROUND_HEIGHT,
@@ -76,7 +78,8 @@ export default class GameLoop {
   // 🛡️ DEDUP GUARD: last received HIT_RESULT packet tick — same tick ka duplicate packet
   // ignore karne ke liye (reliable channel duplicates nahi bhejta, par defensive safety).
   private lastHitResultTick: number = -1;
-
+  public fielders: Fielder[] = [];
+  public keysPressed: Set<string> = new Set();
 
   private ticksSinceLocalPredictedHit: number = 0;
 
@@ -115,7 +118,19 @@ export default class GameLoop {
     this.renderer = new Renderer(ctx, bat, input, this.ball);
     this.input = input;
     this.isOnlineMode = isOnline;
+    const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
+    this.fielders = [
+      new Fielder(1, WICKET_X + 300, groundY, "F1 (HOLD F)"),
+      new Fielder(2, BOWLER_WICKET_X + 50, groundY, "F2 (HOLD J)")
+    ];
+    this.renderer = new Renderer(ctx, bat, input, this.ball);
+    this.renderer.fielders = this.fielders;
+    this.renderer.keysPressed = this.keysPressed;
+
+    window.addEventListener("keydown", (e) => this.keysPressed.add(e.key));
+    window.addEventListener("keyup", (e) => this.keysPressed.delete(e.key));
   }
+  
   public start() {
     this.lastFrameTime = performance.now();
 
@@ -398,6 +413,7 @@ export default class GameLoop {
         screenY,
       ) => {
             const bowler = this.renderer.bowler;
+            if (screenX <= 0 && screenY <= 0) return;
             // Check condition: tick <= bowler.lastReceivedJoystickTick
             if (tick <= bowler.lastReceivedJoystickTick) return;
             bowler.lastReceivedJoystickTick = tick;
@@ -786,7 +802,24 @@ export default class GameLoop {
       this.renderer.bowler.releaseDelayTimer = 0;
     }
   }
+  // ⌨️ Fielder Positioning Movement Handler
+  private updateFielderPositions(dt: number): void {
+    const isF1Hold = this.keysPressed.has("f") || this.keysPressed.has("F");
+    const isF2Hold = this.keysPressed.has("j") || this.keysPressed.has("J");
 
+    const isLeft = this.keysPressed.has("a") || this.keysPressed.has("A") || this.keysPressed.has("ArrowLeft");
+    const isRight = this.keysPressed.has("d") || this.keysPressed.has("D") || this.keysPressed.has("ArrowRight");
+
+    if (isF1Hold && this.fielders[0]) {
+      if (isLeft) this.fielders[0].moveLeft(dt);
+      if (isRight) this.fielders[0].moveRight(dt);
+    }
+
+    if (isF2Hold && this.fielders[1]) {
+      if (isLeft) this.fielders[1].moveLeft(dt);
+      if (isRight) this.fielders[1].moveRight(dt);
+    }
+  }
 
   private getOneWayTicks(): number {
     const rttMs =
@@ -827,6 +860,8 @@ export default class GameLoop {
 
         const nextX = currX + currVx * subDt;
         const nextY = currY + currVy * subDt;
+
+        
 
         // Continuous Collision Check against ground (exact fractional intersection, same as Ball.ts)
         if (stepPrevY < targetY && nextY >= targetY) {
@@ -881,10 +916,17 @@ export default class GameLoop {
 
     this.updateRemoteBatPose(dt);
 
+
     // Check condition: this.renderer.gameMode === "BATTING"
     if (this.renderer.gameMode === "BATTING") {
+
+        if (!this.isOnlineMode) {
+          this.updateFielderPositions(dt);
+      }
       const currentCommand = this.input.getHistory().peek();
       // Check if the game is running in multiplayer online mode
+
+
       if (!this.isOnlineMode && currentCommand === null) {
         console.log("No mouse history available to update bat.");
         return;
@@ -894,7 +936,7 @@ export default class GameLoop {
       // 🏃 Bowler & Ball Attachment / Release logic in BATTING Mode
         const bowler = this.renderer.bowler;
 
-
+      
         // =========================================================
         // 🏏 EVENT TIMERS & NETWORK QUEUE PROCESSING
         // =========================================================
@@ -952,7 +994,16 @@ export default class GameLoop {
             // Sirf ek packet nikalenge (no while loop)
             const latestSnap = bowler.joystickQueue.dequeue();
             
-            if (latestSnap) {
+            if (latestSnap && latestSnap.screenX > 0 && latestSnap.screenY > 0) {
+                this.renderer.joystick.prevRawMouseScreenX = this.renderer.joystick.lastRawMouseScreenX > 0 
+                    ? this.renderer.joystick.lastRawMouseScreenX 
+                    : latestSnap.screenX;
+                this.renderer.joystick.prevRawMouseScreenY = this.renderer.joystick.lastRawMouseScreenY > 0 
+                    ? this.renderer.joystick.lastRawMouseScreenY 
+                    : latestSnap.screenY;
+                this.renderer.joystick.lastRawMouseScreenX = latestSnap.screenX;
+                this.renderer.joystick.lastRawMouseScreenY = latestSnap.screenY;
+
                 this.renderer.joystick.updateKnobPosition(latestSnap.screenX, latestSnap.screenY);
                 bowler.targetNetworkJoystickAngleRad = this.renderer.joystick.angleRad;
                 bowler.targetNetworkJoystickRadiusRatio = this.renderer.joystick.distanceRatio;
@@ -2208,4 +2259,6 @@ export default class GameLoop {
     this.renderer.useImageGround = !this.renderer.useImageGround;
     console.log("Image Ground toggled:", this.renderer.useImageGround);
   }
+
+  
 }

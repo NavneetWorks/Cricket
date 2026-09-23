@@ -5,7 +5,7 @@ export default class Joystick {
     public centerX: number = CANVAS_WIDTH - 220;
     public centerY: number = CANVAS_HEIGHT - 150;
     public baseRadius: number = 100;
-    public outerBufferRadius: number = 115; // 1.15 * baseRadius (Outer Release Circle)
+    public outerBufferRadius: number = 105; // 1.15 * baseRadius (Outer Release Circle)
     public knobRadius: number = 10;
 
     public isActive: boolean = false;
@@ -204,6 +204,13 @@ export default class Joystick {
         const dx = screenX - this.centerX;
         const dy = screenY - this.centerY;
         const dist = Math.hypot(dx, dy);
+
+        // Record last position inside inner circle for both local drag & remote UDP stream
+        if (dist <= this.baseRadius) {
+            this.lastInsideInnerMouseX = screenX;
+            this.lastInsideInnerMouseY = screenY;
+        }
+
         this.angleRad = Math.atan2(dy, dx);
 
         const clampedDist = Math.min(dist, this.baseRadius);

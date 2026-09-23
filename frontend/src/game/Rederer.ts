@@ -5,6 +5,7 @@ import Wicket from "../entities/Wicket";
 import BowlingArea from "../entities/BowlingArea";
 import Input from "./Input";
 import Joystick from "./Joystick";
+import Fielder from "../entities/Fielder";
 import { SoundManager } from "../audio/SoundManager";
 import {
     CANVAS_WIDTH,
@@ -29,6 +30,8 @@ export default class Renderer{
     public wicket: Wicket;
     public bowlingArea: BowlingArea;
     public joystick: Joystick;
+    public fielders: Fielder[] = [];
+    public keysPressed: Set<string> = new Set();
     
     public gameMode: 'BATTING' | 'BOWLING' | 'NEW_BOWLER' | 'DEBUG_13_FRAMES' | 'ANIMATION_PLAY' = 'BATTING';
     public debugSelectedFrames: number[] = []; // Empty = all, or 1-based indices e.g. [3, 6, 7]
@@ -151,6 +154,10 @@ export default class Renderer{
 
         this.drawBallTrail();
         this.ball.draw(this.ctx, alpha);
+
+        if (this.fielders && this.fielders.length > 0) {
+            this.drawFielders(this.fielders, this.keysPressed);
+        }
 
         this.ctx.restore(); // Restore context for fixed HUD / UI overlays
 
@@ -367,6 +374,13 @@ export default class Renderer{
     private drawSky(){
         this.ctx.fillStyle = GAME_COLORS.SKY;
         this.ctx.fillRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
+    }
+    public drawFielders(fielders: Fielder[], keysPressed: Set<string>): void {
+        const isF1Hold = keysPressed.has("f") || keysPressed.has("F");
+        const isF2Hold = keysPressed.has("j") || keysPressed.has("J");
+
+        if (fielders[0]) fielders[0].draw(this.ctx, isF1Hold);
+        if (fielders[1]) fielders[1].draw(this.ctx, isF2Hold);
     }
     // Simple hash function to generate static noise based on coordinates
     private getStaticNoise(x: number, y: number): number {
@@ -703,6 +717,34 @@ export default class Renderer{
             this.ctx.strokeStyle = "#ffffff";
             this.ctx.lineWidth = 0.8;
             this.ctx.stroke();
+        }
+
+        // 7. MINI FIELDERS RENDERING (F1 & F2 on Mini Screen Radar)
+        if (this.fielders && this.fielders.length > 0) {
+            for (const fielder of this.fielders) {
+                const miniFielderX = boxX + (fielder.pos.x - minWorldX) * scaleX;
+                const miniFielderY = miniGroundY - (groundY - fielder.pos.y) * scaleY;
+                const isFHold = fielder.id === 1 
+                    ? (this.keysPressed.has("f") || this.keysPressed.has("F")) 
+                    : (this.keysPressed.has("j") || this.keysPressed.has("J"));
+
+                // Draw Mini Fielder Marker Dot
+                this.ctx.fillStyle = isFHold ? "#38bdf8" : "#0284c7";
+                this.ctx.beginPath();
+                this.ctx.arc(miniFielderX, miniFielderY - 3, 3.5, 0, Math.PI * 2);
+                this.ctx.fill();
+
+                this.ctx.strokeStyle = "#ffffff";
+                this.ctx.lineWidth = 1;
+                this.ctx.stroke();
+
+                // Draw F1 / F2 Text Label above marker
+                this.ctx.font = "bold 9px Inter, Arial, sans-serif";
+                this.ctx.fillStyle = isFHold ? "#38bdf8" : "#e2e8f0";
+                this.ctx.textAlign = "center";
+                this.ctx.textBaseline = "bottom";
+                this.ctx.fillText(`F${fielder.id}`, miniFielderX, miniFielderY - 8);
+            }
         }
 
         this.ctx.restore();

@@ -105,7 +105,7 @@ export default class Bat {
     public visualHistory: any[] = [];
 
     private readonly BAT_MASS: number = 1.0;
-    private SPRING_STIFFNESS: number = 250.0;
+    private SPRING_STIFFNESS: number = 300.0;
     private DAMPING: number = 25.0;
     public swingMomentumRatio: number = 0.0;
     private lastMouseAngleRad: number | null = null;
@@ -175,9 +175,6 @@ export default class Bat {
 
 
     private readonly NECT_TO_HIP_LENGTH = 3.4*PLAYER_LENGTH_FACTOR;
-
-  
-
 
         
     private readonly MAX_HIP_POSITION : Vec2 = { x: BATSMAN_STANCE_X + 100, y: CANVAS_HEIGHT - GROUND_HEIGHT-this.FULL_LEG_LENGTH };
