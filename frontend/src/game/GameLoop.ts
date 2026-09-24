@@ -122,7 +122,7 @@ export default class GameLoop {
     this.isOnlineMode = isOnline;
     const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
     this.fielders = [
-      new Fielder(1, BOWLER_WICKET_X, groundY, "F1 (HOLD F)"),
+      new Fielder(1, BOWLER_WICKET_X+400, groundY, "F1 (HOLD F)"),
       new Fielder(2, BOUNDARY_DISTANCE-900, groundY, "F2 (HOLD J)")
     ];
     this.renderer = new Renderer(ctx, bat, input, this.ball);

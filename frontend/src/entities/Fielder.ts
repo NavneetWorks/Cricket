@@ -11,10 +11,10 @@ export default class Fielder {
     public pos: Vec2;
     public initialPos: Vec2;
     public width: number = 60;
-    public height: number = 200;
+    public height: number = 100;
     public state: FielderState = "IDLE";
     public label: string;
-    public runSpeed: number = 600; // px/s fielding run speed
+    public runSpeed: number = 300; // px/s fielding run speed
     public targetPos: Vec2 | null = null;
 
     constructor(id: number, initialX: number, initialY: number, label: string) {

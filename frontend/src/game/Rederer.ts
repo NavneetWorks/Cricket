@@ -173,7 +173,7 @@ export default class Renderer{
             this.ctx.restore();
         }
 
-        this.drawBallTrail();
+       // this.drawBallTrail();
         this.ball.draw(this.ctx, alpha);
 
         if (this.fielders && this.fielders.length > 0) {
