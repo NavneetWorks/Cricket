@@ -666,9 +666,20 @@ export default class Bat {
         const BACK_MAX = this.BACK_UPPER_ARM + this.BACK_LOWER_ARM;
         const comOffsetFromTop = this.TOTAL_BAT_LENGTH * BAT_CENTER_OF_MASS_RATIO;
         
-        // 1. Mouse Target Clamping (Safe Zone)
-        const rawMouseX = this.mouse.x + this.GRIP_OFFSET_FROM_CURSOR;
-        const rawMouseY = this.mouse.y + this.stanceOffsetY;
+        // 1. Mouse Target with Angular Arc Offset (Replacing flat X-axis offset)
+        const dxRaw = this.mouse.x - shoulderMid.x;
+        const dyRaw = (this.mouse.y + this.stanceOffsetY) - shoulderMid.y;
+        const distRaw = Math.hypot(dxRaw, dyRaw);
+        const baseMouseAngle = Math.atan2(dyRaw, dxRaw);
+
+        // Angular Offset around shoulder pivot (~6.0 degrees offset in radians)
+        const ANGULAR_OFFSET_RAD = -(10 * Math.PI) / 180; // 0.1745 rad
+
+        const targetMouseAngle = baseMouseAngle + ANGULAR_OFFSET_RAD;
+
+        // Compute polar offset position around shoulder
+        const rawMouseX = shoulderMid.x + distRaw * Math.cos(targetMouseAngle);
+        const rawMouseY = shoulderMid.y + distRaw * Math.sin(targetMouseAngle);
 
         // 🟢 60 FPS LOCKED DELTA-TIME DISTANCE SMOOTHING (Multi-Frame Average Catchup)
         if (!(this as any).laggingTarget) {

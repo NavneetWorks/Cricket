@@ -368,6 +368,7 @@ function GameCanvas({ isOnline = false,onBackToHome }: GameCanvasProps) {
                 ref={canvasRef}
                 width={CANVAS_WIDTH}
                 height={CANVAS_HEIGHT}
+                style={{ cursor: "none" }}
             />
         </div>
     );

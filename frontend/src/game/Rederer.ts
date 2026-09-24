@@ -406,7 +406,37 @@ export default class Renderer{
 
         this.ctx.restore();
 
+        // 🎯 Render Custom Virtual Cursor
+        this.drawCustomCursor();
+
         this.drawMiniScreen(alpha);
+    }
+
+    private drawCustomCursor() {
+        if (!this.input) return;
+        const cx = this.input.mouseX;
+        const cy = this.input.mouseY;
+
+        this.ctx.save();
+        // Glowing Outer Ring
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, 9, 0, Math.PI * 2);
+        this.ctx.fillStyle = "rgba(56, 189, 248, 0.25)";
+        this.ctx.fill();
+
+        // Crisp Ring
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, 5.5, 0, Math.PI * 2);
+        this.ctx.strokeStyle = "#38bdf8";
+        this.ctx.lineWidth = 1.8;
+        this.ctx.stroke();
+
+        // Center White Dot
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, 2, 0, Math.PI * 2);
+        this.ctx.fillStyle = "#ffffff";
+        this.ctx.fill();
+        this.ctx.restore();
     }
 
     private drawDebug13Frames() {
