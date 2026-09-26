@@ -122,8 +122,8 @@ export default class GameLoop {
     this.isOnlineMode = isOnline;
     const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
     this.fielders = [
-      new Fielder(1, BOWLER_WICKET_X+400, groundY, "F1 (HOLD F)"),
-      new Fielder(2, BOUNDARY_DISTANCE-900, groundY, "F2 (HOLD J)")
+      new Fielder(1, BOWLER_WICKET_X + 400, groundY, 1250, "F1 (HOLD F)"),  // Deep background (z = 150)
+      new Fielder(2, BOUNDARY_DISTANCE - 900, groundY, 1550, "F2 (HOLD J)")  // Pitch baseline (z = 0)
     ];
     this.renderer = new Renderer(ctx, bat, input, this.ball);
     this.renderer.fielders = this.fielders;
@@ -838,9 +838,10 @@ export default class GameLoop {
 
     // Only update AI and check catching IF the ball has actually been hit by the batter
     if (this.ball && this.ball.hasBeenHit && this.ball.isActive) {
+        const ballZ = (this.ball as any).z || 0;
         for (const fielder of this.fielders) {
-            // We will pass 1550 as stumps X for now
-            fielder.updateAI(dt, {x: this.ball.pos.x, y: this.ball.pos.y}, BOWLER_WICKET_X);
+            // Pass ballZ depth for 3D AI pathfinding
+            fielder.updateAI(dt, {x: this.ball.pos.x, y: this.ball.pos.y}, ballZ, BOWLER_WICKET_X);
         }
         
         // 💥 Boundary Check (4s & 6s)
@@ -873,13 +874,14 @@ export default class GameLoop {
 
     const prevPos = { x: this.ball.prevPos.x, y: this.ball.prevPos.y };
     const currPos = { x: this.ball.pos.x, y: this.ball.pos.y };
+    const ballZ = (this.ball as any).z || 0;
 
     for (const fielder of this.fielders) {
-      if (fielder.intersectsLine(prevPos, currPos)) {
+      if (fielder.intersectsLine(prevPos, currPos, ballZ)) {
         const currentSpeed = Math.hypot(this.ball.vel.x, this.ball.vel.y);
 
         const isCatchingTarget = fielder.state === "CATCHING";
-        const isBeatenBySpeed = !isCatchingTarget && currentSpeed > 2000;
+        const isBeatenBySpeed = !isCatchingTarget && currentSpeed > 3500;
   
         if (isBeatenBySpeed) {
           // Beaten by extreme speed: ball passes through at full speed, fielder starts chasing
@@ -1613,17 +1615,25 @@ export default class GameLoop {
           this.ball.vel.y
         );
 
-        for (const fielder of this.fielders) {
-          const dist = Math.abs(dropX - fielder.pos.x);
-          const timeToReach = dist / fielder.runSpeed;
+        const ballZ = (this.ball as any).z || 0;
+        const ballVelZ = (this.ball as any).velZ || 0;
+        const dropZ = Math.max(0, ballZ + (ballVelZ * timeToDrop));
 
-          // If fielder can reach landing spot before or at the moment ball drops (with 0.15s reaction buffer)
+        for (const fielder of this.fielders) {
+          const dx = dropX - fielder.pos.x;
+          const dz = dropZ - fielder.z;
+          const dist3D = Math.hypot(dx, dz);
+          const timeToReach = dist3D / fielder.runSpeed;
+
+          // If fielder can reach 3D landing spot before or at the moment ball drops (with 0.15s reaction buffer)
           if (timeToReach <= timeToDrop + 0.15) {
             fielder.state = "CATCHING";
             fielder.targetPos = { x: dropX, y: dropY };
+            fielder.targetZ = dropZ;
           } else {
             fielder.state = "CHASING";
             fielder.targetPos = { x: this.ball.pos.x, y: this.ball.pos.y };
+            fielder.targetZ = Math.max(0, ballZ);
           }
         }
       }
@@ -2465,10 +2475,8 @@ export default class GameLoop {
     this.renderer.gameMode = mode;
     this.input.gameMode = mode;
     // Reset virtual cursor position to canvas center on mode switch
-    if (this.canvas) {
-        this.input.mouseX = this.canvas.width / 2;
-        this.input.mouseY = this.canvas.height / 2;
-    }
+    this.input.mouseX = CANVAS_WIDTH / 2;
+    this.input.mouseY = CANVAS_HEIGHT / 2;
     // Check if the game is running in multiplayer online mode
     if (mode === "BATTING" && !this.isOnlineMode) {
       this.startBowlerDelivery();
