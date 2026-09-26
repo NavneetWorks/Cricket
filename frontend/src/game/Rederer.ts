@@ -115,6 +115,10 @@ export default class Renderer{
             return;
         }
 
+        if (this.input) {
+            this.input.update(1 / 60);
+        }
+
         this.updateCamera();
 
         this.drawSky();
@@ -677,7 +681,24 @@ export default class Renderer{
         this.bat.draw(this.ctx);
     }
     private drawDebug(){
-        /* DEBUG OVERLAYS - DISABLED FOR NOW
+        if (this.input) {
+            this.ctx.save();
+            const hudX = 20;
+            const hudY = CANVAS_HEIGHT - 60;
+
+            // Dark semi-transparent HUD background
+            this.ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
+            this.ctx.fillRect(hudX, hudY, 180, 36);
+            this.ctx.strokeStyle = "#fbbf24"; // Amber border
+            this.ctx.lineWidth = 1.5;
+            this.ctx.strokeRect(hudX, hudY, 180, 36);
+
+            // Metrics text
+            this.ctx.font = "bold 15px monospace";
+            this.ctx.fillStyle = "#facc15"; // Bright yellow
+            this.ctx.fillText(`CURRENT DPI: ${this.input.currentDPI.toFixed(2)}`, hudX + 12, hudY + 23);
+            this.ctx.restore();
+        }
         this.ctx.font = "14px monospace";
         this.ctx.fillStyle = "#ffffff";
         this.ctx.fillText(`Mouse X: ${this.input.mouseX}, Mouse Y: ${this.input.mouseY}`, 10, 22);
@@ -708,7 +729,6 @@ export default class Renderer{
             this.ctx.fillText(`impactGain: ${debugInfo.impactGain.toFixed(4)} | thicknessGain: ${debugInfo.thicknessGain.toFixed(4)}`, boxX + 10, boxY + 44);
             this.ctx.fillText(`impactSpeed: ${debugInfo.impactSpeed.toFixed(1)} px/s | Zone: ${regionLabel}`, boxX + 10, boxY + 63);
         }
-        */
 
         // DRAW BOLD RED "OUT" DEBUG OVERLAY IF WICKET IS HIT
         if (this.wicket && this.wicket.isOut) {

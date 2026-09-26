@@ -21,6 +21,11 @@ export default class Input {
 
     private swingMomentum: number = 0;
     private prevMoveAngle: number | null = null;
+    public currentDPI: number = 0.40;
+    private lastTime: number | null = null;
+    private lastMoveTime: number = performance.now();
+    private swingDirection: number = 0; // 0 = idle/unset, 1 = RIGHT, -1 = LEFT
+    private prevBatAngle: number | null = null;
 
     private history = new CricketQueue<MouseSample>(this.MAX_HISTORY);
 
@@ -64,31 +69,54 @@ export default class Input {
             const batLiftHeight = Math.max(0, shoulderYBaseline - this.mouseY);
             const storedPE = Math.min(1.0, batLiftHeight / 220);
 
-            // 2. Driven Pendulum Momentum State (Hand Force maintains high 0.70 DPI as long as mouse moves fast)
-            if (moveDist > 1.2) { // Active fast mouse movement (Powered Swing)
-                if (moveY > 0.5 && storedPE > 0) {
-                    // Downswing Gravity Boost (PE -> KE Conversion)
-                    this.swingMomentum = Math.min(1.0, this.swingMomentum + 0.25);
-                } else {
-                    // Follow-Through / Active Swing: Hand Force maintains momentum!
-                    this.swingMomentum = Math.min(1.0, this.swingMomentum + 0.10);
-                }
-            } else if (moveDist < 0.5) {
-                // Deceleration Phase: Mouse slow / stopped -> Momentum decays back to heavy rest
-                this.swingMomentum = Math.max(0, this.swingMomentum - 0.15);
-            }
-
-            // 3. Dynamic DPI (Range: 0.30 Heavy Rest -> 0.50 Base -> 0.70 Fast Active Swing for Batting, Static 0.60 for Bowling)
-            let activeDPI = 0.60;
+            // 2. Uncapped Time-Based Kinetic DPI Momentum Engine
+            let activeDPI = 0.40;
             if (this.gameMode === 'BATTING') {
-                let dynamicDPI = 0.30; // Rest / Heavy Minimum DPI
-                if (moveDist > 0.5) {
-                    dynamicDPI = 0.50 + (this.swingMomentum * 0.20); // 0.50 -> 0.70
+                const MIN_DPI = 0.20;
+
+                const now = performance.now();
+                const dt = Math.min(0.05, (now - (this.lastTime ?? now)) / 1000);
+                this.lastTime = now;
+                const dt60 = dt * 60;
+
+                const mouseSpeed = Math.hypot(moveX, moveY);
+                if (mouseSpeed > 0.3) {
+                    this.lastMoveTime = now; // Record timestamp of active movement
+
+                    // 1. Integer Swing Direction State Machine (-1 = LEFT, 1 = RIGHT, 0 = UNSET)
+                    const currentDir = (moveX > 0.3) ? 1 : ((moveX < -0.3) ? -1 : 0);
+                    if (currentDir !== 0) {
+                        // Direction flip check (e.g. -1 -> 1 or 1 -> -1)
+                        if (this.swingDirection !== 0 && this.swingDirection !== currentDir) {
+                            this.currentDPI = 0.40; // Direct reset to 0.40 on horizontal direction flip!
+                        }
+                        this.swingDirection = currentDir;
+                    }
+
+                    // 2. Track Shoulder-to-Handle Angle Delta (Upward vs Downward)
+                    const currentBatAngle = Math.atan2(this.mouseY - 450, this.mouseX - 300) * (180 / Math.PI);
+                    const isUpward = (this.prevBatAngle !== null && currentBatAngle < this.prevBatAngle);
+                    this.prevBatAngle = currentBatAngle;
+
+                    // --- ACTIVE SWING: DPI ONLY INCREASES (no upper limit cap, 4x gain rate) ---
+                    const speedFactor = Math.min(2.5, mouseSpeed * 0.06);
+                    const rateIncr = (0.032 + storedPE * 0.060) * speedFactor * dt60;
+                    this.currentDPI += rateIncr;
+
+                    // 3. Smooth Damping (30 deg -> 0 deg) ONLY for Upward Movement
+                    if (isUpward && currentBatAngle >= 0 && currentBatAngle <= 30) {
+                        const dampFactor = currentBatAngle / 30.0; // 1.0 at 30 deg -> 0.0 at 0 deg
+                        const targetDamped = MIN_DPI + (this.currentDPI - MIN_DPI) * dampFactor;
+                        this.currentDPI = Math.min(this.currentDPI, targetDamped);
+                    }
                 }
-                activeDPI = this.isMouseDown ? 1.0 : dynamicDPI;
+
+                // Enforce minimum floor (0.20)
+                this.currentDPI = Math.max(MIN_DPI, this.currentDPI);
+                activeDPI = this.currentDPI;
             } else {
-                // Static 0.60 DPI for Bowling mode
-                activeDPI = 0.60;
+                activeDPI = 0.60; // Static 0.60 DPI for Bowling mode
+                this.currentDPI = activeDPI;
             }
 
             // Apply calculated dynamic DPI to mouse displacement
@@ -162,6 +190,28 @@ export default class Input {
 
     public isKeyPressed(codeOrKey: string): boolean {
         return this.pressedKeys.has(codeOrKey) || this.pressedKeys.has(codeOrKey.toLowerCase());
+    }
+
+    public update(dtSeconds: number = 1 / 60) {
+        if (this.gameMode !== 'BATTING') return;
+
+        const MIN_DPI = 0.20;
+        const STANCE_DPI = 0.40;
+        const dt60 = dtSeconds * 60;
+
+        const now = performance.now();
+        const idleTime = (now - this.lastMoveTime) / 1000;
+
+        // Only decay if hand has truly stopped moving for > 120ms (0.12s)
+        if (idleTime > 0.120) {
+            this.swingDirection = 0; // Reset direction state on idle
+            if (this.currentDPI > STANCE_DPI) {
+                // Ultra-gentle decay back to STANCE_DPI (0.40) over ~1.6 seconds (2x slower decay)
+                this.currentDPI = STANCE_DPI + (this.currentDPI - STANCE_DPI) * Math.pow(0.985, dt60);
+            }
+        }
+
+        this.currentDPI = Math.max(MIN_DPI, this.currentDPI);
     }
 
     getHistory(): CricketQueue<MouseSample> {

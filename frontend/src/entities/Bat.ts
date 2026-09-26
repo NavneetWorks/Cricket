@@ -862,6 +862,30 @@ export default class Bat {
         const MAX_WRIST_ANGLE = Math.PI * 0.15;   // approx 27 degrees
         currentAngle = Math.max(MIN_WRIST_ANGLE, Math.min(MAX_WRIST_ANGLE, currentAngle));
 
+        // 🟢 DYNAMIC BAT COM SPEED DAMPING FOR ANATOMICAL WRIST BOUNDARY (75 DEGREE INTERIOR LIMIT)
+        // Measure interior wrist angle formed between Arm Vector (Shoulder -> Handle) and Bat Vector (Handle -> COM)
+        const armVecX = this.handleActual.x - shoulderMid.x;
+        const armVecY = this.handleActual.y - shoulderMid.y;
+        const batVecX = this.comActual.x - this.handleActual.x;
+        const batVecY = this.comActual.y - this.handleActual.y;
+        const armLen = Math.hypot(armVecX, armVecY);
+        const batLen = Math.hypot(batVecX, batVecY);
+
+        if (armLen > 0.01 && batLen > 0.01) {
+            // Dot product to find interior angle
+            const dot = (armVecX * batVecX + armVecY * batVecY) / (armLen * batLen);
+            const clampedDot = Math.max(-1.0, Math.min(1.0, dot));
+            const currentWristAngleRad = Math.acos(clampedDot);
+            const MIN_INTERIOR_WRIST_ANGLE_RAD = (75 * Math.PI) / 180; // 75 deg minimum interior boundary
+
+            if (currentWristAngleRad < MIN_INTERIOR_WRIST_ANGLE_RAD) {
+                // Scale down comVelocity dynamically so Bat COM speed never outpaces handle angle boundary
+                const speedDampFactor = Math.max(0.1, currentWristAngleRad / MIN_INTERIOR_WRIST_ANGLE_RAD);
+                this.comVelocity.x *= speedDampFactor;
+                this.comVelocity.y *= speedDampFactor;
+            }
+        }
+
         // 2. Set desired handle position using the angle (Locks the angle if not moving UP)
         let desiredHandleX = this.comActual.x + Math.cos(currentAngle) * comOffsetFromTop;
         let desiredHandleY = this.comActual.y + Math.sin(currentAngle) * comOffsetFromTop;
