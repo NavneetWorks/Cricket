@@ -3,6 +3,7 @@ import Input from "../game/Input";
 import { SoundManager } from "../audio/SoundManager";
 import outerArcJson from "../config/outer_handle_arc.json";
 import innerArcJson from "../config/inner_handle_arc.json";
+import outerMouseArcJson from "../config/outer_mouse_arc.json";
 import BowlingArea from "./BowlingArea";
 import {
     CANVAS_WIDTH,
@@ -307,6 +308,10 @@ export default class Bat {
 
     public getBatAngle(): number {
         return this.batAngle;
+    }
+
+    public getComTarget(): Vec2 {
+        return this.comTarget;
     }
 
     // Dynamic Swing Arc Accumulator (Long Swing = Massive Acceleration & Velocity)
@@ -746,23 +751,7 @@ export default class Bat {
         const effectiveMouseX = lt.x;
         const effectiveMouseY = lt.y;
         
-        const dxMouse = effectiveMouseX - shoulderMid.x;
-        const dyMouse = effectiveMouseY - shoulderMid.y;
-        const mouseDist = Math.hypot(dxMouse, dyMouse);
-        
-        const maxSafeRadius = Math.max(
-            FRONT_MAX + comOffsetFromTop - (this.HANDLE_LENGTH * 0.5), 
-            BACK_MAX + comOffsetFromTop
-        );
-        
-        if (mouseDist > maxSafeRadius) {
-            this.comTarget = {
-                x: shoulderMid.x + (dxMouse / mouseDist) * maxSafeRadius,
-                y: shoulderMid.y + (dyMouse / mouseDist) * maxSafeRadius
-            };
-        } else {
-            this.comTarget = { x: effectiveMouseX, y: effectiveMouseY };
-        }
+        this.comTarget = { x: effectiveMouseX, y: effectiveMouseY };
 
         if (!this.prevComTarget) {
             this.prevComTarget = { x: this.comTarget.x, y: this.comTarget.y };
@@ -947,6 +936,28 @@ export default class Bat {
                 } else if (hDist < minRadius) {
                     this.handleActual.x = shoulderMid.x + (hdx / hDist) * minRadius;
                     this.handleActual.y = shoulderMid.y + (hdy / hDist) * minRadius;
+                }
+            }
+
+            // C. Arc Constraint on Bat COM (Center of Mass)
+            let cdx = this.comActual.x - shoulderMid.x;
+            let cdy = this.comActual.y - shoulderMid.y;
+            let cDist = Math.hypot(cdx, cdy);
+            if (cDist > 0.01) {
+                let cAngleDeg = (Math.atan2(cdy, cdx) * 180) / Math.PI;
+                let maxComRadius = this.getInterpolatedRadius(outerMouseArcJson, cAngleDeg, 200) * OUTER_ARC_SCALE;
+                if (cDist > maxComRadius) {
+                    this.comActual.x = shoulderMid.x + (cdx / cDist) * maxComRadius;
+                    this.comActual.y = shoulderMid.y + (cdy / cDist) * maxComRadius;
+
+                    // Cancel outward radial velocity past boundary wall
+                    const normX = cdx / cDist;
+                    const normY = cdy / cDist;
+                    const radialVel = this.comVelocity.x * normX + this.comVelocity.y * normY;
+                    if (radialVel > 0) {
+                        this.comVelocity.x -= radialVel * normX;
+                        this.comVelocity.y -= radialVel * normY;
+                    }
                 }
             }
         }
@@ -2643,6 +2654,19 @@ export default class Bat {
             else ctx.lineTo(px, py);
         }
         ctx.strokeStyle = "rgba(255, 100, 100, 0.3)";
+        ctx.stroke();
+
+        // Debug draw gold mouse outer boundary arc
+        ctx.beginPath();
+        for (let a = -30; a <= 180; a += 5) {
+            let mouseMaxRadius = this.getInterpolatedRadius(outerMouseArcJson, a, 200) * OUTER_ARC_SCALE;
+            let px = shoulderMid.x + Math.cos(a * Math.PI / 180) * mouseMaxRadius;
+            let py = shoulderMid.y + Math.sin(a * Math.PI / 180) * mouseMaxRadius;
+            if (a === -30) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+        }
+        ctx.strokeStyle = "rgba(251, 191, 36, 0.7)"; // Bright Gold Arc
+        ctx.lineWidth = 1.5;
         ctx.stroke();
     }
 }
