@@ -122,8 +122,8 @@ export default class GameLoop {
     this.isOnlineMode = isOnline;
     const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
     this.fielders = [
-      new Fielder(1, BOWLER_WICKET_X + 400, groundY, 1250, "F1 (HOLD F)"),  // Deep background (z = 150)
-      new Fielder(2, BOUNDARY_DISTANCE - 900, groundY, 1550, "F2 (HOLD J)")  // Pitch baseline (z = 0)
+      new Fielder(1, BOWLER_WICKET_X, groundY, 1850, "F1 (HOLD F)"),  // Deep background (z = 150)
+      new Fielder(2, BOUNDARY_DISTANCE - 1300, groundY, 2150, "F2 (HOLD J)")  // Pitch baseline (z = 0)
     ];
     this.renderer = new Renderer(ctx, bat, input, this.ball);
     this.renderer.fielders = this.fielders;
@@ -839,9 +839,19 @@ export default class GameLoop {
     // Only update AI and check catching IF the ball has actually been hit by the batter
     if (this.ball && this.ball.hasBeenHit && this.ball.isActive) {
         const ballZ = (this.ball as any).z || 0;
+        const ballVelZ = (this.ball as any).velZ || 0;
+        const friction = FRICTION_GROUND || 0.99;
         for (const fielder of this.fielders) {
-            // Pass ballZ depth for 3D AI pathfinding
-            fielder.updateAI(dt, {x: this.ball.pos.x, y: this.ball.pos.y}, ballZ, BOWLER_WICKET_X);
+            // Pass real ball velocity, depth, and ground friction for dynamic predictive interception
+            fielder.updateAI(
+                dt,
+                { x: this.ball.pos.x, y: this.ball.pos.y },
+                { x: this.ball.vel.x, y: this.ball.vel.y },
+                ballZ,
+                ballVelZ,
+                friction,
+                BOWLER_WICKET_X
+            );
         }
         
         // 💥 Boundary Check (4s & 6s)

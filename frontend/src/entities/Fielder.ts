@@ -13,10 +13,10 @@ export default class Fielder {
     public initialPos: Vec2;
     public initialZ: number = 0;
     public width: number = 60;
-    public height: number = 100;
+    public height: number = 200;
     public state: FielderState = "IDLE";
     public label: string;
-    public runSpeed: number = 1200; // px/s fielding run speed
+    public runSpeed: number = 1600; // px/s fielding run speed
     public targetPos: Vec2 | null = null;
     public targetZ: number = 0;
 
@@ -61,9 +61,40 @@ export default class Fielder {
         this.targetPos = null;
     }
 
-    public updateAI(dt: number, ballPos: Vec2, ballZ: number = 0, stumpsX: number = WICKET_X): void {
+    /**
+     * Per-Frame 1D X-Axis Closing-Speed Intersection Algorithm:
+     * Calculates the exact horizontal meeting point (X_intersect) each frame based on
+     * relative closing speed between ball velocity and fielder run speed.
+     */
+    public updateAI(
+        dt: number,
+        ballPos: Vec2,
+        ballVel: Vec2 = { x: 0, y: 0 },
+        ballZ: number = 0,
+        ballVelZ: number = 0,
+        friction: number = 0.99,
+        stumpsX: number = WICKET_X
+    ): void {
         if (this.state === "CHASING") {
-            this.targetPos = ballPos;
+            const ballX = ballPos.x;
+            const fielderX = this.pos.x;
+            const dist = Math.abs(fielderX - ballX);
+            let targetX = ballX;
+
+            if (dist > 5 && Math.abs(ballVel.x) > 10) {
+                // Determine closing speed based on relative movement direction
+                const isMovingTowardFielder = (ballX < fielderX && ballVel.x > 0) || (ballX > fielderX && ballVel.x < 0);
+                const closingSpeed = isMovingTowardFielder 
+                    ? (this.runSpeed + Math.abs(ballVel.x)) 
+                    : (this.runSpeed - Math.abs(ballVel.x));
+
+                if (closingSpeed > 20) {
+                    const timeToMeet = dist / closingSpeed;
+                    targetX = ballX + (ballVel.x * timeToMeet);
+                }
+            }
+
+            this.targetPos = { x: targetX, y: ballPos.y };
             this.targetZ = Math.max(0, ballZ);
         }
 
@@ -76,11 +107,8 @@ export default class Fielder {
                 const dirX = dx / dist3D;
                 const dirZ = dz / dist3D;
 
-                // Move in 3D world space at constant runSpeed
                 this.pos.x += dirX * this.runSpeed * dt;
                 this.z += dirZ * this.runSpeed * dt;
-
-                // Enforce Z >= 0 boundary constraint
                 this.z = Math.max(0, this.z);
             }
         }
