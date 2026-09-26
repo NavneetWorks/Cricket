@@ -418,24 +418,42 @@ export default class Renderer{
         const cy = this.input.mouseY;
 
         this.ctx.save();
-        // Glowing Outer Ring
+
+        // 1. Glowing Outer Gold Aura
         this.ctx.beginPath();
-        this.ctx.arc(cx, cy, 9, 0, Math.PI * 2);
-        this.ctx.fillStyle = "rgba(56, 189, 248, 0.25)";
+        this.ctx.arc(cx, cy, 11, 0, Math.PI * 2);
+        this.ctx.fillStyle = "rgba(251, 191, 36, 0.25)";
         this.ctx.fill();
 
-        // Crisp Ring
+        // 2. Crisp Metallic Gold Ring
         this.ctx.beginPath();
-        this.ctx.arc(cx, cy, 5.5, 0, Math.PI * 2);
-        this.ctx.strokeStyle = "#38bdf8";
-        this.ctx.lineWidth = 1.8;
+        this.ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+        this.ctx.strokeStyle = "#fbbf24"; // Bright Amber Gold
+        this.ctx.lineWidth = 2.0;
+        this.ctx.shadowColor = "#f59e0b";
+        this.ctx.shadowBlur = 8;
         this.ctx.stroke();
 
-        // Center White Dot
+        // 3. Tactical Reticle Ticks (Top, Bottom, Left, Right)
+        this.ctx.strokeStyle = "#fef08a";
+        this.ctx.lineWidth = 1.5;
+        this.ctx.shadowBlur = 0;
+        
+        // Top & Bottom ticks
         this.ctx.beginPath();
-        this.ctx.arc(cx, cy, 2, 0, Math.PI * 2);
+        this.ctx.moveTo(cx, cy - 10); this.ctx.lineTo(cx, cy - 6);
+        this.ctx.moveTo(cx, cy + 6);  this.ctx.lineTo(cx, cy + 10);
+        // Left & Right ticks
+        this.ctx.moveTo(cx - 10, cy); this.ctx.lineTo(cx - 6, cy);
+        this.ctx.moveTo(cx + 6, cy);  this.ctx.lineTo(cx + 10, cy);
+        this.ctx.stroke();
+
+        // 4. Center Bright White Core
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
         this.ctx.fillStyle = "#ffffff";
         this.ctx.fill();
+
         this.ctx.restore();
     }
 
