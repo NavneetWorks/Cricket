@@ -23,15 +23,7 @@ export default class Joystick {
     }
 
     constructor() {
-        // Event listeners for global mouse/touch pointer dragging
-        window.addEventListener("pointerdown", (e: PointerEvent) => this.handlePointerDown(e));
-        window.addEventListener("pointermove", (e: PointerEvent) => this.handlePointerMove(e));
-        window.addEventListener("pointerup", (e: PointerEvent) => this.handlePointerUp(e));
-        window.addEventListener("pointercancel", (e: PointerEvent) => this.handlePointerUp(e));
-
-        window.addEventListener("mousedown", (e: MouseEvent) => this.handleMouseDown(e));
-        window.addEventListener("mousemove", (e: MouseEvent) => this.handleMouseMove(e));
-        window.addEventListener("mouseup", (e: MouseEvent) => this.handleMouseUp(e));
+        // Driven purely by custom virtual cursor via Input & GameLoop
     }
 
     // public updatePosition(canvasWidth: number, canvasHeight: number): void {
@@ -188,16 +180,47 @@ export default class Joystick {
         return { triggered: false, releaseAngleRad: 0, flickSpeed: 0 };
     }
 
-    private handlePointerUp(e: PointerEvent): void {
+    private handlePointerUp(e?: PointerEvent): void {
         this.isPointerDown = false;
         this.isActive = false;
         this.mouseTrailPoints = [];
     }
 
-    private handleMouseUp(e: MouseEvent): void {
-        this.isPointerDown = false;
-        this.isActive = false;
-        this.mouseTrailPoints = [];
+    public updateFromVirtualCursor(screenX: number, screenY: number, isMouseDown: boolean): void {
+        const dist = Math.hypot(screenX - this.centerX, screenY - this.centerY);
+
+        if (isMouseDown) {
+            if (!this.isPointerDown) {
+                if (dist <= this.baseRadius * 1.6) {
+                    this.isPointerDown = true;
+                    this.isActive = true;
+                    this.mouseTrailPoints = [{ x: screenX, y: screenY }];
+                    this.updateKnobPosition(screenX, screenY);
+                }
+            } else {
+                if (dist <= this.baseRadius) {
+                    this.lastInsideInnerMouseX = screenX;
+                    this.lastInsideInnerMouseY = screenY;
+                }
+                this.prevRawMouseScreenX = this.lastRawMouseScreenX > 0 ? this.lastRawMouseScreenX : screenX;
+                this.prevRawMouseScreenY = this.lastRawMouseScreenY > 0 ? this.lastRawMouseScreenY : screenY;
+                this.lastRawMouseScreenX = screenX;
+                this.lastRawMouseScreenY = screenY;
+
+                this.mouseTrailPoints.push({ x: screenX, y: screenY });
+                if (this.mouseTrailPoints.length > 25) {
+                    this.mouseTrailPoints.shift();
+                }
+                this.updateKnobPosition(screenX, screenY);
+                if (this.onJoystickMove) {
+                    this.onJoystickMove(screenX, screenY);
+                }
+            }
+        } else {
+            if (this.isPointerDown) {
+                this.handlePointerUp();
+            }
+        }
     }
 
     public updateKnobPosition(screenX: number, screenY: number): void {

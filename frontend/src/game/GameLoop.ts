@@ -1668,6 +1668,13 @@ export default class GameLoop {
     // Check condition: (this.renderer.gameMode as any
     else if ((this.renderer.gameMode as any) === "NEW_BOWLER") {
       const bowler = this.renderer.bowler;
+      if (this.renderer.joystick) {
+        this.renderer.joystick.updateFromVirtualCursor(
+          this.input.mouseX,
+          this.input.mouseY,
+          this.input.isMouseDown
+        );
+      }
 
     //   if (
     //     isTickAdvanced &&
@@ -2360,6 +2367,13 @@ export default class GameLoop {
     } else {
       // BOWLING MODE: Update bowling area, ball & wicket
         this.renderer.bowlingArea.releaseDelaySeconds = this.isOnlineMode && this.network ? (this.network.getRTT() / 2) / 1000 : 0;
+      if (this.renderer.joystick) {
+          this.renderer.joystick.updateFromVirtualCursor(
+              this.input.mouseX,
+              this.input.mouseY,
+              this.input.isMouseDown
+          );
+      }
       this.renderer.bowlingArea.update(
         dt,
         this.input.mouseX,
@@ -2449,6 +2463,12 @@ export default class GameLoop {
       | "ANIMATION_PLAY",
   ) {
     this.renderer.gameMode = mode;
+    this.input.gameMode = mode;
+    // Reset virtual cursor position to canvas center on mode switch
+    if (this.canvas) {
+        this.input.mouseX = this.canvas.width / 2;
+        this.input.mouseY = this.canvas.height / 2;
+    }
     // Check if the game is running in multiplayer online mode
     if (mode === "BATTING" && !this.isOnlineMode) {
       this.startBowlerDelivery();

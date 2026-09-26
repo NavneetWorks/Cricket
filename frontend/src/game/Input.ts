@@ -14,6 +14,7 @@ export default class Input {
     public pressedKeys: Set<string> = new Set();
     private readonly MAX_HISTORY = 1000;
     public dpiScale: number = 0.60; // 60% Base Dynamic DPI
+    public gameMode: 'BATTING' | 'BOWLING' | 'NEW_BOWLER' | 'DEBUG_13_FRAMES' | 'ANIMATION_PLAY' = 'BATTING';
 
     private prevRawX: number | null = null;
     private prevRawY: number | null = null;
@@ -77,16 +78,18 @@ export default class Input {
                 this.swingMomentum = Math.max(0, this.swingMomentum - 0.15);
             }
 
-            // 3. Dynamic DPI (Range: 0.30 Heavy Rest -> 0.50 Base -> 0.70 Fast Active Swing)
-            let dynamicDPI = 0.30; // Rest / Heavy Minimum DPI
-            
-            if (moveDist > 0.5) {
-                // Base 0.50 + Momentum scaling up to 0.70
-                dynamicDPI = 0.50 + (this.swingMomentum * 0.20); // 0.50 -> 0.70
+            // 3. Dynamic DPI (Range: 0.30 Heavy Rest -> 0.50 Base -> 0.70 Fast Active Swing for Batting, Static 0.60 for Bowling)
+            let activeDPI = 0.60;
+            if (this.gameMode === 'BATTING') {
+                let dynamicDPI = 0.30; // Rest / Heavy Minimum DPI
+                if (moveDist > 0.5) {
+                    dynamicDPI = 0.50 + (this.swingMomentum * 0.20); // 0.50 -> 0.70
+                }
+                activeDPI = this.isMouseDown ? 1.0 : dynamicDPI;
+            } else {
+                // Static 0.60 DPI for Bowling mode
+                activeDPI = 0.60;
             }
-
-            // Left-Click Hold = 100% Unlocked Power Mode
-            const activeDPI = this.isMouseDown ? 1.0 : dynamicDPI;
 
             // Apply calculated dynamic DPI to mouse displacement
             this.mouseX += moveX * activeDPI;
@@ -103,10 +106,24 @@ export default class Input {
             });
         };
 
+        const dispatchVirtualClick = () => {
+            const rect = canvas.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) return;
+
+            const clientX = rect.left + (this.mouseX * (rect.width / canvas.width));
+            const clientY = rect.top + (this.mouseY * (rect.height / canvas.height));
+
+            const target = document.elementFromPoint(clientX, clientY);
+            if (target && target !== canvas && target instanceof HTMLElement) {
+                target.click();
+            }
+        };
+
         window.addEventListener("pointerdown", (e: PointerEvent) => {
             if (e.button === 0) {
                 this.isMouseDown = true;
                 this.isMouseActive = true;
+                dispatchVirtualClick();
             }
         });
         window.addEventListener("pointerup", (e: PointerEvent) => {
