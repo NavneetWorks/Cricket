@@ -21,6 +21,12 @@ export default class Input {
 
     private swingMomentum: number = 0;
     private prevMoveAngle: number | null = null;
+    public userSensitivity: number = 50; // User sensitivity setting range 0 to 100 (Default: 50)
+
+    public get baseStanceDPI(): number {
+        return 0.10 + (Math.max(0, Math.min(100, this.userSensitivity)) / 100) * 0.60;
+    }
+
     public currentDPI: number = 0.40;
     private lastTime: number | null = null;
     private lastMoveTime: number = performance.now();
@@ -88,7 +94,7 @@ export default class Input {
                     if (currentDir !== 0) {
                         // Direction flip check (e.g. -1 -> 1 or 1 -> -1)
                         if (this.swingDirection !== 0 && this.swingDirection !== currentDir) {
-                            this.currentDPI = 0.40; // Direct reset to 0.40 on horizontal direction flip!
+                            this.currentDPI = this.baseStanceDPI; // Direct reset to user sensitivity stance baseline on direction flip!
                         }
                         this.swingDirection = currentDir;
                     }
@@ -196,7 +202,7 @@ export default class Input {
         if (this.gameMode !== 'BATTING') return;
 
         const MIN_DPI = 0.20;
-        const STANCE_DPI = 0.40;
+        const stanceDPI = this.baseStanceDPI;
         const dt60 = dtSeconds * 60;
 
         const now = performance.now();
@@ -205,9 +211,9 @@ export default class Input {
         // Only decay if hand has truly stopped moving for > 120ms (0.12s)
         if (idleTime > 0.120) {
             this.swingDirection = 0; // Reset direction state on idle
-            if (this.currentDPI > STANCE_DPI) {
-                // Ultra-gentle decay back to STANCE_DPI (0.40) over ~1.6 seconds (2x slower decay)
-                this.currentDPI = STANCE_DPI + (this.currentDPI - STANCE_DPI) * Math.pow(0.985, dt60);
+            if (this.currentDPI > stanceDPI) {
+                // Ultra-gentle decay back to user sensitivity stance baseline over ~1.6 seconds
+                this.currentDPI = stanceDPI + (this.currentDPI - stanceDPI) * Math.pow(0.985, dt60);
             }
         }
 

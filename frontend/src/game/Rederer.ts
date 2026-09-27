@@ -684,19 +684,20 @@ export default class Renderer{
         if (this.input) {
             this.ctx.save();
             const hudX = 20;
-            const hudY = CANVAS_HEIGHT - 60;
+            const hudY = CANVAS_HEIGHT - 70;
 
             // Dark semi-transparent HUD background
-            this.ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
-            this.ctx.fillRect(hudX, hudY, 180, 36);
+            this.ctx.fillStyle = "rgba(0, 0, 0, 0.80)";
+            this.ctx.fillRect(hudX, hudY, 200, 52);
             this.ctx.strokeStyle = "#fbbf24"; // Amber border
             this.ctx.lineWidth = 1.5;
-            this.ctx.strokeRect(hudX, hudY, 180, 36);
+            this.ctx.strokeRect(hudX, hudY, 200, 52);
 
             // Metrics text
-            this.ctx.font = "bold 15px monospace";
+            this.ctx.font = "bold 13px monospace";
             this.ctx.fillStyle = "#facc15"; // Bright yellow
-            this.ctx.fillText(`CURRENT DPI: ${this.input.currentDPI.toFixed(2)}`, hudX + 12, hudY + 23);
+            this.ctx.fillText(`CURRENT DPI: ${this.input.currentDPI.toFixed(2)}`, hudX + 10, hudY + 20);
+            this.ctx.fillText(`SENSITIVITY: ${this.input.userSensitivity} / 100`, hudX + 10, hudY + 40);
             this.ctx.restore();
         }
         this.ctx.font = "14px monospace";

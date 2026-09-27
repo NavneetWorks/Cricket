@@ -19,6 +19,12 @@ function GameCanvas({ isOnline = false,onBackToHome }: GameCanvasProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const gameLoopRef = useRef<GameLoop | null>(null);
     const [gameMode, setGameMode] = useState<'BATTING' | 'BOWLING' | 'NEW_BOWLER' | 'DEBUG_13_FRAMES' | 'ANIMATION_PLAY'>('BATTING');
+    
+    const [sensitivity, setSensitivity] = useState<number>(() => {
+        const saved = localStorage.getItem("cricket_sensitivity");
+        return saved ? parseInt(saved, 10) : 50;
+    });
+    const [showSettings, setShowSettings] = useState<boolean>(false);
 
     useEffect(() => {
 
@@ -31,6 +37,7 @@ function GameCanvas({ isOnline = false,onBackToHome }: GameCanvasProps) {
         if (!ctx) return;
 
         const input = new Input(canvas);
+        input.userSensitivity = sensitivity;
 
         const bat = new Bat();
 
@@ -40,6 +47,21 @@ function GameCanvas({ isOnline = false,onBackToHome }: GameCanvasProps) {
         gameLoop.start();
 
     }, []);
+
+    useEffect(() => {
+        if (gameLoopRef.current && (gameLoopRef.current as any).input) {
+            (gameLoopRef.current as any).input.userSensitivity = sensitivity;
+        }
+    }, [sensitivity]);
+
+    const handleSensitivityChange = (val: number) => {
+        const clamped = Math.max(0, Math.min(100, val));
+        setSensitivity(clamped);
+        localStorage.setItem("cricket_sensitivity", clamped.toString());
+        if (gameLoopRef.current && (gameLoopRef.current as any).input) {
+            (gameLoopRef.current as any).input.userSensitivity = clamped;
+        }
+    };
 
     const [debugFilterText, setDebugFilterText] = useState<string>("3, 6, 7");
     const [debugSource, setDebugSource] = useState<'RUNUP' | 'JUMP'>('RUNUP');
@@ -205,6 +227,100 @@ function GameCanvas({ isOnline = false,onBackToHome }: GameCanvasProps) {
                     >
                         🐛 13 FRAMES DEBUG
                     </button>
+
+                    <button
+                        onClick={() => setShowSettings(!showSettings)}
+                        style={{
+                            padding: "8px 16px",
+                            backgroundColor: showSettings ? "#eab308" : "rgba(15, 23, 42, 0.85)",
+                            color: showSettings ? "#000000" : "#facc15",
+                            border: "1.5px solid #facc15",
+                            borderRadius: "6px",
+                            cursor: "pointer",
+                            fontWeight: "bold",
+                            fontSize: "13px",
+                            boxShadow: showSettings ? "0 0 12px rgba(234, 179, 8, 0.5)" : "none",
+                            transition: "all 0.2s ease"
+                        }}
+                    >
+                        ⚙️ SETTINGS ({sensitivity})
+                    </button>
+                </div>
+            )}
+
+            {/* ⚙️ BATTING SENSITIVITY SETTINGS MODAL */}
+            {showSettings && (
+                <div style={{
+                    position: "absolute",
+                    top: "65px",
+                    right: "20px",
+                    width: "320px",
+                    backgroundColor: "rgba(15, 23, 42, 0.95)",
+                    backdropFilter: "blur(12px)",
+                    border: "1.5px solid rgba(234, 179, 8, 0.5)",
+                    borderRadius: "12px",
+                    padding: "20px",
+                    boxShadow: "0 16px 36px rgba(0, 0, 0, 0.6)",
+                    zIndex: 100,
+                    color: "#ffffff"
+                }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                        <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: "#facc15" }}>⚙️ BATTING SETTINGS</h3>
+                        <button
+                            onClick={() => setShowSettings(false)}
+                            style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "18px" }}
+                        >
+                            ✕
+                        </button>
+                    </div>
+
+                    <div style={{ marginBottom: "20px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                            <label style={{ fontSize: "14px", fontWeight: "600", color: "#f8fafc" }}>Bat Sensitivity</label>
+                            <span style={{ fontSize: "14px", fontWeight: "700", color: "#facc15" }}>{sensitivity} / 100</span>
+                        </div>
+                        <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={sensitivity}
+                            onChange={(e) => handleSensitivityChange(parseInt(e.target.value, 10))}
+                            style={{
+                                width: "100%",
+                                height: "6px",
+                                accentColor: "#facc15",
+                                cursor: "pointer"
+                            }}
+                        />
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "#64748b", marginTop: "4px" }}>
+                            <span>0 (Slow)</span>
+                            <span>50 (Default)</span>
+                            <span>100 (Max)</span>
+                        </div>
+                    </div>
+
+                    {/* Quick Presets */}
+                    <div style={{ display: "flex", gap: "8px", justifyContent: "space-between" }}>
+                        {[25, 50, 75, 100].map((preset) => (
+                            <button
+                                key={preset}
+                                onClick={() => handleSensitivityChange(preset)}
+                                style={{
+                                    flex: 1,
+                                    padding: "6px 0",
+                                    backgroundColor: sensitivity === preset ? "#facc15" : "rgba(255, 255, 255, 0.05)",
+                                    color: sensitivity === preset ? "#000000" : "#94a3b8",
+                                    border: `1px solid ${sensitivity === preset ? "#facc15" : "rgba(255, 255, 255, 0.1)"}`,
+                                    borderRadius: "6px",
+                                    fontSize: "12px",
+                                    fontWeight: "bold",
+                                    cursor: "pointer"
+                                }}
+                            >
+                                {preset}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             )}
 
