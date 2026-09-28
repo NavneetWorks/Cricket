@@ -843,7 +843,7 @@ export default class Bat {
         }
 
         // 🟢 EXACT MIRROR SYMMETRICAL UN-BEND: Reverse tilt with identical instant feel on backward movement
-        let horizontalTiltSpeed = targetVelocityX * HORIZONTAL_TILT_SPEED_SCALE * 0.7;
+        let horizontalTiltSpeed = targetVelocityX * HORIZONTAL_TILT_SPEED_SCALE * 1;
         
         // Clamp tilt speed so it doesn't spin wildly on very fast mouse flicks
         const maxTiltSpeed = 10.0;
@@ -894,7 +894,6 @@ export default class Bat {
         this.handleActual.y = desiredHandleY;
 
         const frontHandPosition = 0.8;
-        const frontWristDistFromTop = this.HANDLE_LENGTH * frontHandPosition;
 
         for (let i = 0; i < 5; i++) {
             // A. Rigid Body Projection (Handle and COM must be `comOffsetFromTop` apart)

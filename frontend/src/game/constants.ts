@@ -7,11 +7,11 @@ export const GAME_COLORS = {
     BALL: "#B22222",
 };
 export const PITCH_WIDTH = 180;
-export const QUEUE_SIZE = 3;
+export const QUEUE_SIZE = 6;
 export const NORMAL_DIRECTION_ASSIST = 50; // 0 to 100 scale. E.g. 10 = bends 10% towards Normal
 
-export const GLOBAL_RESTITUTION_SCALE = .8;
-export const REGION1 = 1;
+export const GLOBAL_RESTITUTION_SCALE = 1.5;
+export const REGION1 = 5;
 export const REGION2 = REGION1;
 export const REGION3 = REGION1;
 export const REGION4 = REGION1;
@@ -25,9 +25,9 @@ export const REGION11 = REGION1;
 export const REGION12 = REGION1;
 export const REGION13 = REGION1;
 export const REGION14 = REGION1;
-export const REGION15 = 6;
-export const REGION16 = 8; // Start Sweet Spot
-export const REGION17 = 10;
+export const REGION15 = 10;
+export const REGION16 = 12; 
+export const REGION17 = 12;
 export const REGION18 = 12;
 export const REGION19 = 14;
 export const REGION20 = 15;

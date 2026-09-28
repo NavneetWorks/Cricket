@@ -742,8 +742,8 @@ export default class GameLoop {
     bowler.currentHipPosition.x = BOWLER_WICKET_X+150;
     bowler.startRunning();
 
-    const minSpeed = 3000;
-    const maxSpeed = 3500;
+    const minSpeed = 2000;
+    const maxSpeed = 2400;
     this.currentDeliverySpeed =
       minSpeed + Math.random() * (maxSpeed - minSpeed);
 
@@ -753,7 +753,7 @@ export default class GameLoop {
     this.currentAnimationSpeed = minAnimSpeed + speedRatio * (maxAnimSpeed - minAnimSpeed);
 
     const minAngle = 8;
-    const maxAngle = 25;
+    const maxAngle = 15;
     
     // Slow ball (ratio 0) -> More offset (lofted). Fast ball (ratio 1) -> Less offset (flat).
     const calculatedAngleOffset = maxAngle - speedRatio * (maxAngle - minAngle);
