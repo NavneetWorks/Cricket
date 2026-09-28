@@ -78,7 +78,7 @@ export default class Input {
             // 2. Uncapped Time-Based Kinetic DPI Momentum Engine
             let activeDPI = 0.40;
             if (this.gameMode === 'BATTING') {
-                const MIN_DPI = 0.20;
+                const MIN_DPI = 0.10;
 
                 const now = performance.now();
                 const dt = Math.min(0.05, (now - (this.lastTime ?? now)) / 1000);
@@ -104,9 +104,9 @@ export default class Input {
                     const isUpward = (this.prevBatAngle !== null && currentBatAngle < this.prevBatAngle);
                     this.prevBatAngle = currentBatAngle;
 
-                    // --- ACTIVE SWING: DPI ONLY INCREASES (no upper limit cap, 4x gain rate) ---
+                    // --- ACTIVE SWING: DPI ONLY INCREASES (reduced gain rate by 3x) ---
                     const speedFactor = Math.min(2.5, mouseSpeed * 0.06);
-                    const rateIncr = (0.032 + storedPE * 0.060) * speedFactor * dt60;
+                    const rateIncr = ((0.032 + storedPE * 0.060) / 3.0) * speedFactor * dt60;
                     this.currentDPI += rateIncr;
 
                     // 3. Smooth Damping (30 deg -> 0 deg) ONLY for Upward Movement
@@ -117,7 +117,7 @@ export default class Input {
                     }
                 }
 
-                // Enforce minimum floor (0.20)
+                // Enforce minimum floor (0.10)
                 this.currentDPI = Math.max(MIN_DPI, this.currentDPI);
                 activeDPI = this.currentDPI;
             } else {
@@ -201,7 +201,7 @@ export default class Input {
     public update(dtSeconds: number = 1 / 60) {
         if (this.gameMode !== 'BATTING') return;
 
-        const MIN_DPI = 0.20;
+        const MIN_DPI = 0.10;
         const stanceDPI = this.baseStanceDPI;
         const dt60 = dtSeconds * 60;
 
