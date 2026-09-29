@@ -743,7 +743,7 @@ export default class GameLoop {
     bowler.startRunning();
 
     const minSpeed = 2000;
-    const maxSpeed = 2400;
+    const maxSpeed = 3400;
     this.currentDeliverySpeed =
       minSpeed + Math.random() * (maxSpeed - minSpeed);
 
