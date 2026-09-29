@@ -7,6 +7,7 @@ import Input from "./Input";
 import Joystick from "./Joystick";
 import Fielder from "../entities/Fielder";
 import { SoundManager } from "../audio/SoundManager";
+import { GroundRenderer } from "./GroundRenderer";
 import {
     CANVAS_WIDTH,
     CANVAS_HEIGHT,
@@ -60,8 +61,9 @@ export default class Renderer{
         this.last6Balls = [];
     }
 
-    public useImageGround: boolean = true;
+    public useImageGround: boolean = false;
     private groundImage: HTMLImageElement;
+    private groundRenderer: GroundRenderer;
 
     constructor(ctx:CanvasRenderingContext2D,bat:Bat,input:Input,ball: Ball){
         this.ctx = ctx;
@@ -72,6 +74,7 @@ export default class Renderer{
         this.wicket = new Wicket(this.bat);
         this.bowlingArea = new BowlingArea();
         this.joystick = new Joystick();
+        this.groundRenderer = new GroundRenderer();
         
         this.groundImage = new Image();
         this.groundImage.src = '/assets/cricket_ground_layers_cropped.png';
@@ -578,72 +581,21 @@ export default class Renderer{
         return ((t ^ (t >>> 16)) >>> 0) / 4294967296; // Returns 0.0 to 1.0
     }
     private drawGround() {
-        const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
+        if (this.useImageGround && this.groundImage.complete && this.groundImage.naturalWidth !== 0) {
+            const groundY = CANVAS_HEIGHT - GROUND_HEIGHT;
+            const imgWidth = this.groundImage.naturalWidth;
+            const imgHeight = this.groundImage.naturalHeight;
+            const scaledHeight = GROUND_HEIGHT;
+            const scaledWidth = (imgWidth / imgHeight) * scaledHeight;
 
-        // 1. BASE SOLID GROUND FILL
-        this.ctx.fillStyle = GAME_COLORS.GROUND; // "#3CB043"
-        this.ctx.fillRect(0, groundY, CANVAS_WIDTH, GROUND_HEIGHT);
-
-        // 2. ALTERNATING LAWN MOWER STRIPES (Every 100px in world space)
-        const stripeWidth = 100;
-        const minWorldX = -500;
-        const maxWorldX = 4000;
-
-        for (let wx = minWorldX; wx <= maxWorldX; wx += stripeWidth) {
-            const screenX = wx - this.cameraX;
-            if (screenX + stripeWidth < 0 || screenX > CANVAS_WIDTH) continue;
-
-            const stripeIndex = Math.floor((wx - minWorldX) / stripeWidth);
-            if (stripeIndex % 2 === 0) {
-                this.ctx.fillStyle = "rgba(0, 0, 0, 0.08)"; // Darker green stripe overlay
-                this.ctx.fillRect(screenX, groundY, stripeWidth, GROUND_HEIGHT);
+            const startX = -((this.cameraX % scaledWidth) + scaledWidth) % scaledWidth;
+            for (let x = startX - scaledWidth; x < CANVAS_WIDTH + scaledWidth; x += scaledWidth) {
+                this.ctx.drawImage(this.groundImage, x, groundY, scaledWidth, scaledHeight);
             }
+        } else {
+            // Render fast offscreen-cached procedural realistic ground
+            this.groundRenderer.render(this.ctx, this.cameraX, CANVAS_WIDTH, CANVAS_HEIGHT);
         }
-
-        // 3. DENSE PROCEDURAL GRASS SPIKES ALONG TOP GROUND EDGE
-        this.ctx.strokeStyle = "#1b5220";
-        this.ctx.lineWidth = 1.2;
-
-        const bladeSpacing = 16; // Grass tuft every 16px
-        for (let wx = minWorldX; wx <= maxWorldX; wx += bladeSpacing) {
-            const screenX = wx - this.cameraX;
-            if (screenX < -20 || screenX > CANVAS_WIDTH + 20) continue;
-
-            // Deterministic height pseudo-noise using world position wx
-            const noise = this.getStaticNoise(wx, 42);
-            const bladeH = 6 + noise * 10; // 6px to 16px height spikes
-            const tilt = (this.getStaticNoise(wx, 99) - 0.5) * 6; // Slight left/right tilt
-
-            // Draw grass tuft (3 blades per tuft)
-            this.ctx.beginPath();
-            // Center blade
-            this.ctx.moveTo(screenX, groundY);
-            this.ctx.lineTo(screenX + tilt, groundY - bladeH);
-            // Left blade
-            this.ctx.moveTo(screenX - 3, groundY);
-            this.ctx.lineTo(screenX - 3 + tilt - 3, groundY - bladeH * 0.75);
-            // Right blade
-            this.ctx.moveTo(screenX + 3, groundY);
-            this.ctx.lineTo(screenX + 3 + tilt + 3, groundY - bladeH * 0.85);
-            this.ctx.stroke();
-        }
-
-        // 4. RUN-UP DISTANCE CHALK MARKERS & CREASE LINES
-        const chalkMarkerPositions = [150, 700, 1000, 1300, 1600, 1900, 2200, 2500];
-
-        this.ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
-        this.ctx.lineWidth = 2.0;
-
-        chalkMarkerPositions.forEach(wx => {
-            const screenX = wx - this.cameraX;
-            if (screenX >= -50 && screenX <= CANVAS_WIDTH + 50) {
-                // Vertical chalk line
-                this.ctx.beginPath();
-                this.ctx.moveTo(screenX, groundY);
-                this.ctx.lineTo(screenX, groundY + 25);
-                this.ctx.stroke();
-            }
-        });
     }
 
     // private drawGround(){
