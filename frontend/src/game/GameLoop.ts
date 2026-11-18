@@ -61,6 +61,7 @@ export default class GameLoop {
   private hasSentReleasePacket: boolean = false;
   private hitPacketCooldownTimer: number = 0; // ⏱️ Cooldown timer (400ms) to prevent duplicate consecutive frame HIT_RESULT packets
   private offlineResetTimer: number = 0; // ⏱️ Auto-reset timer (1.5s) for offline batting mode deliveries
+  private isBallOutcomeRecorded: boolean = false;
 
   private physicsAccumulator: number = 0;
   private renderAlpha: number = 0; // 0..1 — pichle physics step se kitna aage render karna hai
@@ -795,6 +796,7 @@ export default class GameLoop {
     this.reconcileOffsetY = 0;
     // 🎯 RACE-FIX: local-flight tick counter bhi naye ball par zero karo
     this.ticksSinceLocalPredictedHit = 0;
+    this.isBallOutcomeRecorded = false;
     // Check condition: this.ball
     if (this.ball) {
       this.ball.hasBeenHit = false;
@@ -865,6 +867,7 @@ export default class GameLoop {
             const boundaryRuns = isSix ? 6 : 4;
 
             if (this.renderer) {
+                this.isBallOutcomeRecorded = true;
                 this.renderer.recordBallOutcome(isSix ? "6" : "4");
                 this.renderer.batterRuns += boundaryRuns;
                 this.renderer.fieldingMessage = isSix ? "SIX! 💥 (+6 Runs)" : "FOUR! 🏏 (+4 Runs)";
@@ -908,6 +911,7 @@ export default class GameLoop {
               fielder.state = "CATCHING";
               console.log(`🧤 CATCH OUT! Fielder F${fielder.id} caught the ball on full!`);
               if (this.renderer) {
+                  this.isBallOutcomeRecorded = true;
                   this.renderer.recordBallOutcome("W");
                   this.renderer.resetBatterStats(); // Reset score & balls on OUT
                   this.renderer.fieldingMessage = "CATCH OUT! (OUT - Score Reset)";
@@ -933,6 +937,7 @@ export default class GameLoop {
               }
 
               if (this.renderer) {
+                  this.isBallOutcomeRecorded = true;
                   this.renderer.recordBallOutcome(runsScored === 0 ? "•" : runsScored.toString());
                   this.renderer.batterRuns += runsScored;
                   const runText = runsScored === 0 ? "DOT BALL! (0 Runs)" : `${runsScored} RUN${runsScored > 1 ? 'S' : ''}!`;
@@ -1679,10 +1684,31 @@ export default class GameLoop {
         batHitResult.hitSubStep,
       );
       if (this.renderer.wicket.isOut && this.renderer.fieldingMessage !== "BOWLED OUT! (OUT - Score Reset)") {
+        this.isBallOutcomeRecorded = true;
         this.renderer.recordBallOutcome("W");
         this.renderer.resetBatterStats();
         this.renderer.fieldingMessage = "BOWLED OUT! (OUT - Score Reset)";
         this.renderer.fieldingMessageTimer = 3.5;
+      }
+
+      // 🔴 Dot Ball Check: Ball passed batsman-end wicket along X without hitting bat or wicket
+      const wicketX = this.renderer.wicket ? this.renderer.wicket.FIXED_X : WICKET_X;
+      if (
+        !this.isBallOutcomeRecorded &&
+        this.ball.isActive &&
+        !this.ball.isHeldInHand &&
+        !this.ball.hasBeenHit &&
+        !this.renderer.wicket.isOut &&
+        this.ball.pos.x < wicketX
+      ) {
+        this.isBallOutcomeRecorded = true;
+        this.renderer.recordBallOutcome("•");
+        this.renderer.fieldingMessage = "DOT BALL! (0 Runs)";
+        this.renderer.fieldingMessageTimer = 3.5;
+      }
+
+      if (this.ball.isActive && this.ball.pos.x < -100) {
+        this.ball.isActive = false;
       }
     }
     // Check condition: (this.renderer.gameMode as any
